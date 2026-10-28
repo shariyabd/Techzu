@@ -73,6 +73,8 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 - *Blade/Livewire.* Simpler, but the requirement asked for a modern SPA-feel UI.
 - *A standalone SPA consuming the API.* Doubles the auth surface (token storage in the browser) and the deployment pipeline.
 
+**Starter-kit dependencies (amended 2026-10-29).** The kit brings `inertia-laravel`, `laravel/fortify` (session auth: login, registration, password reset, 2FA), `laravel/wayfinder` (typed route helpers for TypeScript) and `laravel/tinker`. These are accepted as part of this decision rather than fighting the kit. API tokens (TD-003) are issued separately and don't go through Fortify's two-factor flow. This is documented as a known limitation.
+
 **Trade-offs.** It's a JS build step plus a second language in the repo. Frontend tests are limited to type-checking and linting. Behavior is tested at the HTTP/Inertia level (`assertInertia`), because all the rules live on the server.
 
 ---
@@ -291,10 +293,14 @@ Each index exists to serve a named query:
 ---
 
 ### TD-022 — Ticket numbers generated from a per-year counter row
-**Status:** Accepted
+**Status:** Accepted (amended 2026-10-29: the upsert replaces `INSERT IGNORE` + `FOR UPDATE`, which deadlocks)
 
 **Decision.**
-- `ticket_sequences(year PK, last_number)`. Inside the ticket-creation transaction: `INSERT IGNORE` the year's row, `SELECT … FOR UPDATE`, increment it, and format the result as `TKT-{YYYY}-{%06d}`.
+- `ticket_sequences(year PK, last_number)`. Inside the ticket-creation transaction:
+  1. `INSERT … VALUES (:year, 1) ON DUPLICATE KEY UPDATE last_number = last_number + 1`
+  2. `SELECT last_number … FOR UPDATE`. This reads our own write and doesn't wait, because we already hold the lock.
+  3. Format the result as `TKT-{YYYY}-{%06d}`.
+- **Why not `INSERT IGNORE` then `SELECT … FOR UPDATE`.** The original design deadlocks. An `INSERT` that hits a duplicate key takes a *shared* lock on the existing row. Two concurrent creations both hold it, then both try to upgrade to an *exclusive* lock, and InnoDB kills one with error 1213. The upsert takes the exclusive lock immediately, so no upgrade is needed.
 - The prefix comes from config.
 - Padding is a minimum width, so ticket 1,000,000 becomes `TKT-2026-1000000` without breaking anything.
 - `tickets.number` is unique as a final guard.
@@ -620,6 +626,7 @@ GitHub Actions runs: `composer install` → `pint --test` → `phpstan analyse` 
 - *Computing escalations on read.* Can't send notifications or create history at the right moment.
 
 **Trade-offs.**
+- Delivery is **at most once**. Each escalation is committed before its event is dispatched, so a process crash between the two loses that notification rather than ever sending a duplicate. The activity log and the ticket's `escalation_level` remain correct, and the dashboard still shows the breach.
 - Up to 1 minute of latency in detecting a breach. That's acceptable for SLAs measured in hours.
 - The scan touches only indexed active rows, so cost stays flat as closed tickets accumulate.
 
@@ -828,10 +835,11 @@ UPDATE tickets
 
 **Decision.**
 - Queues:
-  - `default`: auto-assign, finalize steps
+  - `default`: auto-assign
   - `notifications`
-  - `imports`: CSV chunks, so a large import never delays notifications
+  - `imports`: prepare, chunk and finalize jobs, so a large import never delays notifications
 - Jobs declare `tries=3`, `backoff=[10, 60, 300]`, and `failed()` logging.
+- **Exception (amended 2026-10-29): import chunk jobs use `tries=1`.** A chunk commits row by row, so a retry would re-process rows that were already committed. Duplicates are prevented by `external_reference`, but rows without a reference would be duplicated. A failed chunk is recorded on the import instead, and the admin re-uploads the remaining rows.
 - Import chunks are `Batchable`.
 - `AutoAssignTicket` is `ShouldBeUnique` per ticket.
 
@@ -960,6 +968,7 @@ The result is cached in `Cache::remember('dashboard:'.$scope, 60)`.
   - `AgentNotEligible` (422)
   - `TicketClosed` (422)
   - `ImportHeaderInvalid` (422)
+  - `CannotChangeOwnRole` (422): an admin can't change their own role
 - `bootstrap/app.php` renders them in one place:
   - The API gets JSON `{message, code}`.
   - The web gets `back()->with('error', …)`, and Inertia shows a toast.

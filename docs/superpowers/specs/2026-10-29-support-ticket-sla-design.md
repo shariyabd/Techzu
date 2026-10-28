@@ -152,10 +152,11 @@ Package table: `log_name, description, subject_type/id, causer_type/id, event, p
 
 ```
 DB::transaction:
-  INSERT IGNORE INTO ticket_sequences (year, last_number) VALUES (:y, 0)
-  SELECT last_number FROM ticket_sequences WHERE year = :y FOR UPDATE
-  UPDATE ticket_sequences SET last_number = last_number + 1 WHERE year = :y
+  INSERT INTO ticket_sequences (year, last_number) VALUES (:y, 1)
+    ON DUPLICATE KEY UPDATE last_number = last_number + 1        -- exclusive lock immediately
+  SELECT last_number FROM ticket_sequences WHERE year = :y FOR UPDATE   -- reads own write, no wait
   return sprintf('%s-%d-%06d', prefix, y, n)   // padding is a minimum width; grows beyond 6 digits
+-- Not INSERT IGNORE + FOR UPDATE: the shared→exclusive lock upgrade deadlocks under concurrency (TD-022).
 ```
 - The prefix comes from `config('tickets.number_prefix')`; the year is taken in the business timezone.
 - Runs inside the `CreateTicket` transaction, so a rollback also rolls back the counter. A gap only appears if a commit fails, which is acceptable.
