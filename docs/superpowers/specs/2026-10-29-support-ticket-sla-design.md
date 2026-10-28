@@ -24,7 +24,12 @@ Out of scope (YAGNI): multi-tenant setups, per-team calendars, SLA for first res
 
 ## 2. Roles & permission matrix (TD-010, TD-011)
 
-Roles are stored as a `role` column backed by a PHP enum: `admin`, `agent`, `customer`. Every rule is enforced by Policies on the server; the UI only hides controls as a convenience.
+Roles and capabilities use **spatie/laravel-permission**:
+- roles `admin`, `agent`, `customer`
+- permissions named `<resource>.<action>[.<scope>]`, seeded by `RolesAndPermissionsSeeder`
+- both referenced through the `Role` and `Permission` enums
+
+**Policies** combine those capabilities with ownership and are the only entry point for authorization checks (TD-010). Every rule is enforced on the server; the UI only hides controls as a convenience.
 
 | Action | Customer | Agent | Admin |
 |---|---|---|---|
@@ -54,7 +59,7 @@ app/
     Tickets/          TicketNumberGenerator, TicketFilter
     Assignment/       AgentSelector
     Dashboard/        DashboardStats
-  Enums/              Role, TicketStatus, TicketPriority, SlaState, ActivityType, ImportStatus
+  Enums/              Role, Permission, TicketStatus, TicketPriority, SlaState, ActivityType, ImportStatus
   Events/             TicketCreated, TicketAssigned, TicketReplied, TicketStatusChanged,
                       TicketResolved, TicketPriorityChanged, TicketSlaApproaching, TicketSlaBreached
   Listeners/          RecordTicketActivity (sync), SendTicket*Notification (queued notifications)
@@ -84,8 +89,8 @@ resources/js/pages/<feature>/..., resources/js/components/<feature>/...
 See `docs/ERD.md` (Mermaid, written in T01).
 
 ### users
-`id, name, email (unique), password, role (string 16), is_available (bool, default true), last_assigned_at (nullable ts), remember_token, timestamps`
-Index: `(role, is_available)`.
+`id, name, email (unique), password, is_available (bool, default true), last_assigned_at (nullable ts), remember_token, timestamps`
+Index: `(is_available)`. Roles and permissions live in the spatie/permission tables (`roles`, `permissions`, `model_has_roles`, `model_has_permissions`, `role_has_permissions`).
 
 ### categories
 `id, name, slug (unique), is_active (bool), timestamps`.
@@ -128,8 +133,8 @@ Indexes: `(status, sla_due_at)`, `(status, sla_warning_at)`, `(assigned_agent_id
 ### attachments
 `id, ticket_id FK cascade, reply_id FK nullable cascade, uploaded_by FK users, disk varchar, path varchar (UUID filename), original_name, mime_type, size_bytes int unsigned, is_internal bool, created_at`. Indexes `(ticket_id, is_internal)`, `(reply_id)`.
 
-### ticket_activities
-`id, ticket_id FK cascade, actor_id FK users nullable (null = system), type varchar(32) (ActivityType), properties json, created_at`. Index `(ticket_id, created_at)`. Append-only (no `updated_at`).
+### activity_log (spatie/laravel-activitylog)
+Package table: `log_name, description, subject_type/id, causer_type/id, event, properties json, batch_uuid, timestamps`. We add the index `(subject_type, subject_id, created_at)`. Entries are written only from listeners and are never updated (TD-026).
 
 ### holidays
 `id, date (unique), name, timestamps`.
@@ -296,14 +301,14 @@ These come from about 3 grouped aggregate queries using conditional `SUM(CASE…
 
 ## 15. Activity history (TD-026)
 
-The `RecordTicketActivity` listener runs synchronously after commit, on every domain event. `ActivityType` values:
+The `RecordTicketActivity` listener runs synchronously after commit, on every domain event. It writes through spatie/laravel-activitylog with `activity('ticket')->performedOn($ticket)->causedBy($actor)->event($type)->withProperties(...)->log(...)`. The `LogsActivity` trait is **not** used on Ticket. `ActivityType` values (stored in `event`):
 - `created`, `assigned`, `claimed`, `unassigned`
 - `status_changed`, `priority_changed`, `category_changed`, `updated`
 - `replied`, `internal_note`
 - `sla_paused`, `sla_resumed`, `sla_approaching`, `escalated`
 - `imported`
 
-`properties` holds `{from, to, agent_id, ...}`. The ticket timeline renders human-readable lines through `ActivityType::describe()`. Customers never see `internal_note` activities.
+`properties` holds `{from, to, agent_id, ...}`. The ticket timeline renders human-readable lines through `ActivityType::describe()`. A null causer means the system did it. Customers never see `internal_note` activities (`Ticket::activitiesVisibleTo($user)`).
 
 ## 16. Error handling (TD-110)
 
@@ -319,7 +324,7 @@ The `RecordTicketActivity` listener runs synchronously after commit, on every do
 
 - Server-side Policies on every route, registered through model-policy auto-discovery. Policy coverage is enforced by the matrix test.
 - Throttling: `throttle:api` (60/min) on the API, a stricter limit on login and token creation, and uploads limited to 20/min.
-- Mass assignment: explicit `$fillable`. `role`, `assigned_agent_id` and the SLA columns are never fillable from requests.
+- Mass assignment: explicit `$fillable`. Roles are assigned only by admin Actions (`syncRoles`). `assigned_agent_id` and the SLA columns are never fillable from requests.
 - Files: private disk, MIME sniffing through `File::types`, random filenames, no execution path.
 - Internal-note leakage is guarded in three layers: query scope, Resource, and notification listener. Each layer has a dedicated test.
 - Sanctum tokens get abilities by role. `HandleInertiaRequests` shares only the user's id, name, role and their own permission booleans.

@@ -9,7 +9,7 @@ Read before writing any code. Sources of truth:
 If these disagree, **stop and report**. Don't improvise.
 
 ## Stack
-Laravel 12 · PHP 8.3 · MySQL 8 · Inertia 2 + Vue 3 (`<script setup lang="ts">`) · Tailwind + shadcn-vue · Sanctum · Pest 3 · Larastan level 6 · Pint.
+Laravel 12 · PHP 8.3 · MySQL 8 · Inertia 2 + Vue 3 (`<script setup lang="ts">`) · Tailwind + shadcn-vue · Sanctum · spatie/laravel-permission · spatie/laravel-activitylog · Pest 3 · Larastan level 6 · Pint.
 
 ## Architecture rules (TD-001)
 1. **Controllers are thin.** Their only steps are `authorize` → FormRequest → one Action or Service → Inertia response or API Resource. No queries beyond route-model binding, and no business logic.
@@ -20,13 +20,14 @@ Laravel 12 · PHP 8.3 · MySQL 8 · Inertia 2 + Vue 3 (`<script setup lang="ts">
 4. **Web and API share** the same FormRequests, Actions and Policies. API responses always go through `Http/Resources/V1`.
 5. **Status changes** go only through `ChangeTicketStatus`, validated by `TicketStatus::allowedTransitions()` (TD-040).
 6. **SLA columns** (`sla_*`, `escalation_level`) are written only by `SlaCalculator` and the escalation scan.
-7. **Side effects belong in listeners** (activity log, notifications, auto-assign), never inline in Actions (TD-070). Events implement `ShouldDispatchAfterCommit`.
+7. **Side effects belong in listeners** (activity log, notifications, auto-assign), never inline in Actions (TD-070). The activity log is written only by `RecordTicketActivity` through `activity('ticket')->...->event(ActivityType::X->value)`. Don't add the `LogsActivity` trait to `Ticket` (TD-026). Events implement `ShouldDispatchAfterCommit`.
 8. **Configuration**: use `config()`, and keep `env()` inside `config/*.php` only. Never hard-code SLA minutes, business hours, file limits or the ticket prefix (TD-130).
 
 ## Security rules (TD-120)
+- **Authorization entry point is always a Policy** (TD-010). Policies combine `$user->can(Permission::X->value)` with ownership. Never call `hasRole()` or `hasPermissionTo()` in controllers, Actions or Vue props. Refer to roles and permissions through the `Role` and `Permission` enums, never as string literals. New permissions go in `RolesAndPermissionsSeeder`.
 - Every route is authorized through a Policy. When you add a route, add its rows to the authorization matrix test.
 - Customers never receive internal replies or internal attachments, in any form: queries, Resources, Inertia props, notifications or activity entries.
-- Use explicit `$fillable` only. Never `$guarded = []`. Never fill `role`, `assigned_agent_id`, `number`, `sla_*` or `escalation_level` from request data.
+- Use explicit `$fillable` only. Never `$guarded = []`. Never assign roles from request data (only admin Actions call `syncRoles`). Never fill `assigned_agent_id`, `number`, `sla_*` or `escalation_level` from request data.
 - No `v-html`. No raw SQL that takes user input without bindings. Sort and filter columns come from a whitelist.
 - Files are stored on the private disk only and downloaded through a policy-checked controller.
 - When a customer may not view a ticket, the response is 404, not 403 (TD-012).

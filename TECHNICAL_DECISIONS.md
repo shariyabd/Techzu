@@ -138,23 +138,44 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 
 ## Authorization & security model
 
-### TD-010 — Role column backed by a PHP enum, plus Laravel Policies (no permissions package)
-**Status:** Accepted
+### TD-010 — spatie/laravel-permission for roles and capabilities, combined with Laravel Policies for ownership rules
+**Status:** Accepted (amended 2026-10-29: originally "role enum column, no package"; changed after review)
 
-**Decision.**
-- `users.role` is a string column cast to the `App\Enums\Role` enum (`Admin`, `Agent`, `Customer`).
-- All authorization decisions live in Policies: `TicketPolicy`, `TicketReplyPolicy`, `AttachmentPolicy`, plus admin policies for categories, holidays, users and imports.
-- The enum has helpers such as `isStaff()`.
+**Decision.** Authorization has two layers, each with one job:
+1. **spatie/laravel-permission: *what kind of thing* a user may do.**
+   - Roles: `admin`, `agent`, `customer`. Role names are referenced through the `App\Enums\Role` enum, never as string literals.
+   - Capabilities are named `<resource>.<action>[.<scope>]` and referenced through `App\Enums\Permission`:
+     - tickets: `tickets.create`, `tickets.create.on_behalf`, `tickets.view.any`, `tickets.view.own`, `tickets.reply`, `tickets.notes.internal`, `tickets.claim`, `tickets.update.any`, `tickets.update.assigned`, `tickets.update.own`, `tickets.assign.any`, `tickets.handoff.own`
+     - admin areas: `dashboard.view`, `imports.manage`, `users.manage`, `categories.manage`, `holidays.manage`
+   - The role → permission mapping is defined in one place, `RolesAndPermissionsSeeder` (idempotent; it runs in deploys and in tests).
+2. **Policies: *on which record*.**
+   - `TicketPolicy`, `TicketReplyPolicy`, `AttachmentPolicy` and the admin policies combine a capability with ownership or relationship facts. For example:
+     ```php
+     public function changeStatus(User $user, Ticket $ticket): bool
+     {
+         return $user->can(Permission::TicketsUpdateAny->value)
+             || ($user->can(Permission::TicketsUpdateAssigned->value)
+                 && $ticket->assigned_agent_id === $user->id);
+     }
+     ```
+   - Controllers and routes check only Policies (`authorize`, `can:` middleware). They never call `hasRole()` directly, so no rule bypasses the Policies.
 
 **Why.**
-- The PRD defines three fixed roles, and the rules depend on **ownership and relationships** (own ticket, assigned to me, is internal). Static permission lists can't express those; Policies can.
-- Every check reads like the business rule, for example `TicketPolicy::changeStatus(User $u, Ticket $t)`.
+- A standard, widely recognized package handles role and permission storage, caching and assignment, so we don't hand-roll it.
+- Capabilities can be adjusted per role without redeploying, for example letting agents import CSVs.
+- Ownership rules (own ticket, assigned to me, not internal) remain expressible. No permission package can model these on its own, which is why Policies remain the decision point.
+- Sanctum token abilities can mirror the permission names (TD-003).
 
 **Alternatives rejected.**
-- *spatie/laravel-permission.* Valuable when admins define custom roles and permissions at runtime. Nothing here needs that, and we'd still need Policies for the ownership rules. It would be two authorization systems where one suffices.
+- *Role enum column plus Policies only.* Fewer moving parts and was the original choice, but permissions would be hard-coded per role, with no runtime flexibility, and we'd re-implement what the package gives us for free.
+- *Permissions-only checks without Policies.* Can't express ownership, and checks would scatter across controllers.
 - *Gates in a service provider.* Policies group the rules per model and are auto-discovered.
 
-**Trade-offs.** Adding a new role, or letting admins edit permissions at runtime, would require code changes. That's acceptable for the PRD's scope and easy to migrate later, because all checks already go through `can()`.
+**Trade-offs.**
+- Two concepts to understand (permission and policy). Mitigated by the strict rule that the Policy is always the entry point.
+- Permission checks rely on the package's cache. Tests must seed `RolesAndPermissionsSeeder` and reset the cache (`PermissionRegistrar::forgetCachedPermissions()`), which happens in a shared Pest `beforeEach`.
+- Finding agents means joining through `model_has_roles` (indexed by the package). Eligible-agent queries go through a single `User::scopeAvailableAgents()` scope.
+- If an admin edits permissions at runtime, they can weaken the matrix. The seeded mapping is the documented baseline, and the matrix test runs against it.
 
 ---
 
@@ -206,10 +227,10 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 |---|---|
 | Server-side authorization | Every route goes through a Policy (`authorize()` / `can` middleware). The matrix test fails when a route is missing coverage. |
 | Internal-note leakage | Three independent layers, each tested: the query scope excludes internal replies for customers, the Resource omits them, and the notification listeners never notify customers about internal notes. |
-| Mass assignment | Explicit `$fillable`. `role`, `assigned_agent_id`, SLA columns, `escalation_level` and `number` are never fillable from requests. They're set only by Actions. |
+| Mass assignment | Explicit `$fillable`. Roles and permissions are assigned only through admin Actions (`syncRoles`); `assigned_agent_id`, SLA columns, `escalation_level` and `number` are never fillable from requests. They're set only by Actions. |
 | File uploads | Validated MIME type and extension (`File::types`), size limits, random UUID filenames, private disk, streamed downloads with `nosniff` and `Content-Disposition: attachment`. No public URLs (TD-061). |
 | Rate limiting | `throttle:api` (60/min), stricter limits on login and token issuance, and an upload throttle. |
-| Tokens | Sanctum tokens have abilities derived from the role, and `/auth/tokens/current` can revoke them. |
+| Tokens | Sanctum tokens have abilities mirroring the user's permission names (TD-010), and `/auth/tokens/current` can revoke them. |
 | Inertia props | Only explicitly selected fields are shared. Never whole models with hidden columns. |
 | Search input | Parameter binding everywhere. FULLTEXT boolean-mode operators in the input are sanitized. Sort columns come from a whitelist. |
 | CSRF / XSS | Laravel CSRF for the web. Vue escapes output by default, and `v-html` is forbidden by the guardrails. |
@@ -221,7 +242,7 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 ### TD-020 — Enums stored as `varchar`, cast to PHP backed enums
 **Status:** Accepted
 
-**Decision.** `status`, `priority`, `role` and `type` are `varchar(16|32)` columns cast to backed PHP enums.
+**Decision.** `status` and `priority` are `varchar(16|32)` columns cast to backed PHP enums. Role names, permission names and activity event types aren't columns we own (they're stored by the spatie packages), but they too are referenced only through backed enums (`Role`, `Permission`, `ActivityType`), never as string literals.
 
 **Why.**
 - Adding a value (for example a new status) is a code change, not an `ALTER TABLE` that rewrites a large tickets table.
@@ -255,9 +276,9 @@ Each index exists to serve a named query:
 | `tickets FULLTEXT(subject, description)` | keyword search |
 | `tickets(external_reference)` unique | CSV de-duplication |
 | `ticket_replies(ticket_id, is_internal, created_at)` | conversation timeline with internal notes filtered out |
-| `ticket_activities(ticket_id, created_at)` | activity timeline |
+| `activity_log(subject_type, subject_id, created_at)` | ticket activity timeline (added on top of the package's defaults) |
 | `attachments(ticket_id, is_internal)` | attachment list with visibility |
-| `users(role, is_available)` | finding eligible agents |
+| `users(is_available)` + package's `model_has_roles(role_id, model_id, model_type)` | finding eligible agents |
 | `agent_category(category_id, user_id)` | agents per category |
 | `notifications(notifiable_type, notifiable_id, read_at)` | unread count (framework default plus `read_at`) |
 
@@ -344,7 +365,7 @@ Each index exists to serve a named query:
 
 **Decision.**
 - Every relationship is a foreign key constraint.
-- Deleting a ticket cascades to its child rows (replies, attachments, activities). Deleting a user or category with tickets is restricted. A deleted agent's assignment is set to null.
+- Deleting a ticket cascades to its child rows (replies, attachments). Activity log rows are polymorphic (TD-026), so they're cleaned by retention, not by a foreign key. Deleting a user or category with tickets is restricted. A deleted agent's assignment is set to null.
 - No soft deletes.
 
 **Why.**
@@ -358,25 +379,44 @@ Each index exists to serve a named query:
 
 ---
 
-### TD-026 — Custom append-only `ticket_activities` table written by event listeners
-**Status:** Accepted
+### TD-026 — spatie/laravel-activitylog for audit history, written explicitly from domain-event listeners
+**Status:** Accepted (amended 2026-10-29: originally a custom `ticket_activities` table; changed after review)
 
 **Decision.**
-- Domain events → the `RecordTicketActivity` listener → `ticket_activities(ticket_id, actor_id nullable, type, properties json, created_at)`.
-- `ActivityType::describe()` renders lines such as "Priority changed from Medium to High".
-- A null `actor_id` means the system did it (scheduler, auto-assign).
+- Domain events go to the `RecordTicketActivity` listener, which calls the package's explicit logging API:
+  ```php
+  activity('ticket')
+      ->performedOn($ticket)
+      ->causedBy($actor)            // null = system (scheduler, auto-assign)
+      ->event(ActivityType::Claimed->value)
+      ->withProperties(['from' => null, 'to' => ['id' => $agent->id, 'name' => $agent->name]])
+      ->log(ActivityType::Claimed->describe($properties));
+  ```
+- Log name: `ticket`. `event` holds an `App\Enums\ActivityType` value:
+  - `created`, `assigned`, `claimed`, `unassigned`
+  - `status_changed`, `priority_changed`, `category_changed`, `updated`
+  - `replied`, `internal_note`
+  - `sla_paused`, `sla_resumed`, `sla_approaching`, `escalated`
+  - `imported`
+- **The `LogsActivity` trait is not used on `Ticket`.** Automatic model diffs would also log internal bookkeeping writes (SLA recalculation, escalation level, assignment timestamps) as noise, and they don't capture business intent ("claim" vs "admin assignment").
+- `Ticket::activities()` is a `morphMany` to `Spatie\Activitylog\Models\Activity`. The timeline query uses `->where('log_name','ticket')->latest()`, with `causer:id,name` eager-loaded.
+- Customers never see `internal_note` entries: `Ticket::activitiesVisibleTo($user)` excludes that event for non-staff.
+- Migration adds an index `activity_log(subject_type, subject_id, created_at)` for the timeline query.
 
 **Why.**
-- The PRD asks for a business-level timeline ("claimed", "escalated", "SLA paused"), not column diffs.
-- Driving it from domain events means every Action produces history automatically, and the Actions don't have to remember to log.
-- The table is append-only, with no updates.
+- A standard, well-known package for storage, the causer/subject relations, and retention (`activitylog:clean`). We don't maintain our own table, model or cleanup command.
+- Explicit logging from listeners keeps the business-level timeline the PRD asks for. Every Action produces history automatically through its events.
+- The same log can be reused for non-ticket auditing (user role changes, category edits) at no extra cost.
 
 **Alternatives rejected.**
-- *spatie/laravel-activitylog.* It's centered on model attribute changes. Business events like "claimed" or "escalated" don't map to a single model diff, and we would end up writing custom events anyway.
-- *Model observers.* They fire on every `save()` (including internal bookkeeping) and lack business intent ("was this a claim or an admin assignment?").
-- *Event sourcing.* Rebuilding state from events is far beyond what's required.
+- *A custom `ticket_activities` table.* Gives real foreign keys, but re-implements what the package already provides. This was the original choice.
+- *The package's `LogsActivity` trait on models.* Noisy, and has no business intent (see above).
+- *Model observers.* Same problem.
+- *Event sourcing.* Far beyond what's required.
 
-**Trade-offs.** The listener runs **synchronously** after commit, so the history is present as soon as the request returns. If the activity insert fails after the main transaction has committed, the action has succeeded but its history entry is missing. We accept this rare inconsistency instead of coupling the audit write into every transaction. Errors are logged loudly.
+**Trade-offs.**
+- `activity_log` is polymorphic, so there's no foreign key to `tickets` and no cascading delete. Tickets aren't deleted in normal operation (TD-025), so this is acceptable. The retention policy is `activitylog:clean` (configurable days, off by default).
+- The listener runs **synchronously** after commit, so the history is present as soon as the request returns. If the activity insert fails after the main transaction has committed, the action has succeeded but its history entry is missing. We accept this rare inconsistency instead of coupling the audit write into every transaction. Errors are logged loudly.
 
 ---
 
