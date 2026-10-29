@@ -1,2 +1,4 @@
 # Local execution prompts (never committed)
 /prompts/
+# Temporary MySQL data dirs, if one is ever unavoidable (CLAUDE.md)
+/storage/test-mysql/

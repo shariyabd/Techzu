@@ -122,6 +122,13 @@ Implements: TD-031, TD-050
 - All browser work uses the **Playwright MCP** server (`.mcp.json`), running locally. It drives its own browser profile, not the user's.
 - Browser checks run against the worktree's own server (`php artisan serve --port=80NN`) and seeded demo accounts, never against production or remote URLs. Screenshots go to the scratchpad and are never committed.
 
+## Databases and background servers (strict)
+1. **Use the existing MySQL server** (`127.0.0.1:3306`, credentials in `.env` only) with its dedicated databases: `techzu` (dev), `techzu_testing` (tests) and the per-worktree `techzu_wt_txx` / `techzu_wt_txx_testing`. **Don't start a separate `mysqld`.** If MySQL isn't reachable or access is denied, stop and ask the owner.
+2. If a temporary server is truly unavoidable, its data directory and logs go **inside the project** under `./storage/test-mysql/` (gitignored). Never put them in the scratchpad, `/tmp/claude-*` or `/tmp`.
+3. Stop any server you start as soon as you're done (`mysqladmin shutdown` or kill its PID), and confirm it's stopped. Never delete a server's folder while it is still running.
+4. The same applies to every background process you start (`php artisan serve`, `queue:work`, `npm run dev`, Playwright browsers): stop it before you finish.
+5. **Before finishing any task**, run `pgrep -af mysqld` (and check any other server you started) and report every server you started that is still running.
+
 ## Feature documentation (TD-140)
 - `docs/features/` holds the living explanation of the business logic, written for a reader who hasn't read the code. Each task's **documenter** subagent writes or updates its feature doc from `_TEMPLATE.md`, and the spec reviewer checks it against the code before the task is reported.
 - Every rule names the `path/File.php::method()` that implements it and the test that proves it. Document only what exists in the code.
