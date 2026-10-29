@@ -55,7 +55,7 @@ final class TicketImportController extends Controller
     public function show(Request $request, TicketImport $import): Response
     {
         return Inertia::render('admin/imports/Show', [
-            'ticketImport' => fn (): array => TicketImportResource::make($import->load('user:id,name'))->resolve($request),
+            'ticketImport' => fn (): mixed => TicketImportResource::make($import->load('user:id,name'))->toResponse($request)->getData(true)['data'],
             'importErrors' => fn (): AnonymousResourceCollection => TicketImportErrorResource::collection($this->imports->errors($import, 25)),
         ]);
     }
