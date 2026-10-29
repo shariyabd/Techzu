@@ -99,10 +99,12 @@ For each task (`superpowers:subagent-driven-development`). Five subagent roles: 
    git worktree add .worktrees/Txx -b task/Txx-<slug> main
    ```
    Each worktree needs its own `.env` (copied from `.env.example`, then `php artisan key:generate`: the key is blank in `.env.example`, so every HTTP test fails without it) with `DB_DATABASE=techzu_wt_txx` and `APP_URL=http://127.0.0.1:80NN`, where `NN` is the task number (T06 → 8006). `phpunit.xml` values take precedence over `.env`, so tests must be run with the database on the command line: `DB_DATABASE=techzu_wt_txx_testing ./vendor/bin/pest --parallel`. That keeps parallel worktrees from sharing a database or a port.
-2. **Implementer subagent:** given its task file, CLAUDE.md, the spec and this contract.
-   - Runs the subtasks in the order of the task's mini-waves.
+2. **Implementer subagents, one per parallel subtask.** The controller works through the task's mini-waves in order. For each mini-wave it dispatches **one implementer per subtask in that wave**, all at once: 1, 2, 4 or however many the task's mini-wave table lists. There's no fixed cap; see "Parallel implementers" below. Each implementer gets its task file, its subtask number, CLAUDE.md, the spec and this contract, and:
+   - Implements **only its own subtask**, touching only that subtask's files from the mini-wave table.
    - Works test-first (red → green → refactor), writing only the tests that CLAUDE.md §Testing allows.
-   - Commits per subtask on the task branch, in Conventional Commits format with `Refs: Txx.n` and `Implements: TD-...` trailers (CLAUDE.md §Commits). No plan number in the subject, no co-author trailer.
+   - Runs **only its own test files, as one process** (no `--parallel`), on **its own test database**, `techzu_wt_txx_testing_<subtask>`. For example, T06.2 uses `DB_DATABASE=techzu_wt_t06_testing_2 ./vendor/bin/pest tests/Feature/…`. The controller creates these databases when the wave starts and drops them after it.
+   - **Doesn't commit** when other implementers share the wave: two commits in one worktree race on git's index. It reports its finished file list. The controller then commits each subtask in order, staging exactly that subtask's files, in Conventional Commits format with `Refs: Txx.n` and `Implements: TD-...` trailers (CLAUDE.md §Commits). No plan number in the subject, no co-author trailer. A lone implementer in a one-subtask wave may commit itself.
+   - **After every mini-wave** the controller runs the full gate once (`pest --parallel` on `techzu_wt_txx_testing`), before the next wave starts. A failure goes back to the implementer whose subtask caused it.
 3. **Spec reviewer subagent:** has **not** seen the implementation reasoning. Checks every acceptance criterion and every "Produces" interface against this contract, and reports PASS or a list of gaps.
 4. **Code-quality reviewer subagent:** checks against CLAUDE.md (architecture, security, database, style rules), naming consistency, and missing tests for risky logic. It also flags **redundant tests**: framework behavior, duplicates across layers, trivial getters. And it flags **any comment in code**: only tag-only PHPDoc type docblocks are allowed (CLAUDE.md §Code style). Reports PASS or a list of findings.
 5. **Fix loop:** the implementer fixes the findings as `git commit --fixup <sha>`, and the reviewers re-check only those findings.
@@ -152,7 +154,11 @@ For each task (`superpowers:subagent-driven-development`). Five subagent roles: 
 
 Visual overview of this workflow: [docs/workflow.html](../workflow.html).
 
-**Parallelism limit:** at most 4 implementers run concurrently. Subtasks inside a task may run in parallel *only* where the task file's mini-wave table says so, and only by separate subagents in the same worktree working on disjoint files.
+**Parallel implementers (no fixed cap).**
+- **Within a task**, the mini-wave table decides how many implementers run at once: one per subtask in the current wave. More would have nothing of their own to work on. Subtasks run in parallel only where the table says so, by separate subagents in the same worktree, working on disjoint files.
+- **Across the machine**, about **8 implementers at once** in total, across all sessions. That matches the owner's 8 CPU cores and single MySQL server: each implementer's test run is one process, so 8 run without overloading. If starting a wave would exceed that while other sessions are busy, the controller starts part of the wave first and the rest as slots free up. Correctness doesn't depend on that ordering.
+- **Only the controller** uses `pest --parallel`, once per mini-wave, so the heavy run never overlaps with implementers in the same session.
+- **Reviewers** run after the last mini-wave, on the whole branch, as before.
 
 **Escalation rule:** if an implementer finds that the contract (§3) is wrong or incomplete, they **stop and report**. The controller amends this README in a separate commit (`docs(plans): amend contract for ...`), and only then does work continue.
 

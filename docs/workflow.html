@@ -169,11 +169,11 @@
       </div>
     </div>
     <div class="lane">
-      <div class="who agent">Implementer agent</div>
+      <div class="who agent">Implementer agents</div>
       <div class="steps">
-        <div class="step agent"><div class="n">2</div><h3>Subtasks by mini-wave</h3><p>For each subtask: failing test → code → green. Only tests for rules, criteria, security or real failure modes.</p></div>
+        <div class="step agent"><div class="n">2</div><h3>One per parallel subtask</h3><p>Each mini-wave runs all its subtasks at once, one implementer each. There's no fixed cap; the plan's table decides. Each works test-first, on its own files and its own test database.</p></div>
         <span class="to">→</span>
-        <div class="step agent"><div class="n">2</div><h3>Commit per subtask</h3><p><code>feat(assignment): …</code><br><code>Refs: T06.1</code></p></div>
+        <div class="step ctrl"><div class="n">2</div><h3>Controller commits + gates</h3><p>One commit per subtask (<code>feat(assignment): …</code>, <code>Refs: T06.1</code>), then the full gate before the next wave.</p></div>
       </div>
     </div>
     <div class="lane">

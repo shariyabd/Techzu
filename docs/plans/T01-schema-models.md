@@ -162,7 +162,7 @@ Mini-waves:
 - **C** = 1.4 ∥ 1.7
 - **D** = 1.5 ∥ 1.6
 
-Each parallel implementer runs only its own test files before committing. The full gate runs after each wave.
+Parallel implementers follow README §2 step 2: each runs only its own test files, single-process, on its own test database; the controller commits each subtask and runs the full gate after each wave.
 
 ---
 ## Subtask 1.1 — Enums + domain exceptions
