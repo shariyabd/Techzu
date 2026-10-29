@@ -201,7 +201,62 @@ Every action is allowed or refused by a rule that combines what the user's role 
 - Guests receive all of them as "no".
 
 ## Ticket lifecycle (T05)
-_Pending._
+Ticket lifecycle covers creating a ticket, editing it, moving it through its statuses, changing its priority, recording what happened on a timeline, and listing tickets. The same rules apply on the web pages and in the API.
+
+**Creating a ticket**
+- Customers, agents and admins can create tickets. A ticket needs a subject (up to 255 characters), a description (up to 20,000 characters), a priority and an active category.
+- A customer always creates a ticket for themselves. Staff (agents and admins) always create a ticket on behalf of a customer and must give that customer's email address; they cannot create a ticket without naming a customer, and the email must belong to an existing customer account. A customer who sends a customer email is refused, so a customer cannot open tickets in someone else's name.
+- The ticket records both who it is for (the customer) and who opened it.
+- A new ticket always starts as Open and unassigned. It gets its human-readable number, and its SLA starts at once: the start time is the moment of creation, and the due and warning times come from the priority.
+- Up to 5 files can be attached at creation, each up to 10 MB (10240 KB). Allowed types are pdf, png, jpg, jpeg, gif, txt, csv, doc, docx, xls, xlsx and zip. These limits are configurable.
+- Files are stored on a private disk under a random name, grouped by ticket, and keep their original name, type and size on record. They are never publicly reachable. Attachments added at creation are not internal.
+- Creation is all or nothing. The ticket, its number and its attachment records are saved in one transaction. If anything fails, nothing is kept, the number is given back, and any files already written are deleted.
+- Once the ticket is saved, a "ticket created" event is announced; the timeline entry is written from that event.
+
+**Editing a ticket**
+- Subject and description can be edited by staff who manage the ticket (an admin, or the agent it is assigned to). A customer can edit their own ticket only while it is Open.
+- The category can be changed only by staff who manage the ticket, and only to an active category. A customer who sends a category is refused.
+- Only fields that really changed are saved. If nothing changed, nothing is saved and nothing is recorded.
+- Status, priority, assignee and SLA fields cannot be changed through editing.
+- Editing does not touch the SLA.
+
+**Status changes**
+- Allowed moves: Open to In Progress, Waiting for Customer or Resolved; In Progress to Waiting for Customer or Resolved; Waiting for Customer to In Progress or Resolved; Resolved to Closed or In Progress (reopening). Closed is final. Any other move is refused with a clear error and nothing changes.
+- Staff who manage the ticket can make any allowed move. A customer can act only on their own Resolved ticket, and only to close it or reopen it.
+- Moving to Waiting for Customer pauses the SLA at that moment. Leaving Waiting for Customer, to any status, resumes it: the business time that was left on the due and warning times at the moment of the pause is counted forward from the moment of resuming. If the escalation level is now too high for the new times, it is lowered, never raised.
+- Moving to Resolved records the resolved time. Moving to Closed records the closed time. Reopening (Resolved to In Progress) clears the resolved time.
+- A ticket that is Resolved or Closed no longer counts as running against its SLA.
+- Concurrent changes to the same ticket are serialized, and each change is checked against the latest status.
+- A resolved announcement is made in addition to the status change when a ticket becomes Resolved.
+
+**Priority changes**
+- Only staff who manage the ticket can change priority; customers never can.
+- The due and warning times are recalculated for the new priority, counted from the ticket's original SLA start, not from the moment of the change.
+- A pause in progress is kept. If the new deadline is later than the old one, the escalation level may be lowered (for example from breached back to approaching); it is never raised by a priority change.
+- Choosing the priority the ticket already has changes nothing and records nothing.
+
+**Activity timeline**
+- Every ticket has a timeline, newest first. Entries are written only in response to events, never directly by the actions.
+- Recorded: ticket created (or imported), fields updated, category changed (with old and new names), assigned, claimed, status changed, priority changed (with the new due time), SLA paused, SLA resumed (with the new due and warning times), replied, internal note added, SLA approaching and escalated (SLA breached).
+- Each entry has a plain-language description such as "Status changed from Open to In Progress", a type and some details.
+- The actor shown is the user who did it. Entries that the system produces on its own (SLA approaching, escalated) have no actor.
+- A subject edit records the old and new subject; a description edit records only that the description changed, not its text.
+- Customers never see internal-note entries. Every other entry is visible to the customer who owns the ticket.
+- If writing a timeline entry fails, the failure is reported but the change itself is not undone.
+- The ticket page shows the latest 100 entries. The API serves the timeline in pages, 20 by default and at most 100 per page.
+
+**Ticket lists**
+- There are two lists. Active shows Open, In Progress and Waiting for Customer tickets (the default). Resolved shows Resolved and Closed tickets.
+- Newest tickets come first.
+- Staff see all tickets. A customer sees only the tickets they are the customer on.
+- Pages hold 20 tickets by default; a request can ask for 1 to 100 per page, and anything above 100 is rejected.
+- Each row shows number, subject, status, priority, category, customer, assigned agent, SLA state and due time, escalation level and a reply count. For customers the reply count excludes internal replies.
+- The SLA state of a ticket is one of: Within SLA, Approaching breach, Breached, Paused (waiting for the customer) or Stopped (resolved or closed).
+
+**Viewing a ticket**
+- The ticket page shows the details, the conversation, the attachments, the timeline, and the actions the viewer may take (edit, change status, change priority, claim, assign, reply, internal note). The allowed status choices offered are only the moves that are both legal and permitted for that viewer.
+- Customers receive only public replies and public attachments, both on the ticket and on each reply. Internal replies and internal attachments are left out of what they receive.
+- A customer who asks for a ticket that is not theirs, or tries any action on it, gets "not found" rather than "forbidden", so they cannot learn whether it exists. A customer who can see a ticket but is not allowed an action on it (for example changing its priority) gets "forbidden".
 
 ## Assignment (T06)
 _Pending._
