@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 
 class AppServiceProvider extends ServiceProvider
@@ -49,6 +50,10 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('api', fn (Request $request): Limit => Limit::perMinute(60)->by(self::throttleKey($request)));
 
         RateLimiter::for('uploads', fn (Request $request): Limit => Limit::perMinute(20)->by(self::throttleKey($request)));
+
+        RateLimiter::for('api-tokens', fn (Request $request): Limit => Limit::perMinute(5)->by(
+            Str::transliterate(Str::lower($request->string('email')->toString()).'|'.$request->ip()),
+        ));
     }
 
     private static function throttleKey(Request $request): string
