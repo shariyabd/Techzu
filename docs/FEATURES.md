@@ -27,7 +27,7 @@ Authentication is plain email-and-password sign-in with a server-side session. T
 - The email must be unique.
 - The password rule depends on the environment. In production it needs at least 12 characters with upper and lower case letters, numbers and symbols, and it must not appear in known data breaches. Outside production the default minimum of 8 characters applies.
 - The new account is signed in straight away and sent to the home page.
-- Registration does not assign a role. Roles and permissions are granted separately, so a new account has no permissions until that happens.
+- Self-registration gives the new account the customer role.
 
 **What is not included**
 - No two-factor authentication, passkeys, email verification, password reset, password confirmation step or account settings pages.
@@ -41,7 +41,66 @@ Authentication is plain email-and-password sign-in with a server-side session. T
 - A client holding a token can fetch the details of the user the token belongs to.
 
 ## Data model (T01)
-_Pending._
+The data model is the shared vocabulary every other feature builds on.
+
+**Records and how they relate**
+- Users are customers, agents or admins. Agents have an availability flag and a set of categories they handle.
+- Every ticket belongs to one category and one customer, records who created it (the customer or a staff member acting on their behalf), and may be assigned to one agent. It has a unique ticket number and an optional external reference that must also be unique.
+- A ticket has replies. A reply is written by one user and is either public or an internal note. Attachments belong to a ticket, may belong to a specific reply, and can be marked internal.
+- Holidays are dates on which the business is closed. CSV imports record who ran them, their progress and a list of per-row errors.
+- There is one counter per year for ticket numbers.
+- Each ticket also has a history of activity entries; each entry reads as one timeline line (listed below).
+
+**Roles**
+- Customers can create tickets, see and update their own tickets and reply to them.
+- Agents can create tickets (including on behalf of a customer), see all tickets, reply, add internal notes, claim tickets, update tickets assigned to them, hand off their own tickets and view the dashboard.
+- Admins can do everything agents can except hand off, and additionally update and assign any ticket, run CSV imports, manage users, categories and holidays.
+- Agents and admins together are "staff". Each role's permissions are set to exactly this list; re-running the setup neither duplicates permissions nor leaves stale ones.
+
+**Statuses**
+- Open, In Progress, Waiting for Customer, Resolved and Closed. Open, In Progress and Waiting for Customer are active; Resolved and Closed are finished.
+- Allowed changes: Open can go to In Progress, Waiting for Customer or Resolved. In Progress can go to Waiting for Customer or Resolved. Waiting for Customer can go to In Progress or Resolved. Resolved can go to Closed or back to In Progress. Closed is final and allows no change.
+
+**Priorities and assignment methods**
+- Priorities from lowest to highest are Low, Medium, High and Critical, and they sort in that order.
+- A ticket is assigned manually, claimed by an agent, or assigned automatically.
+
+**SLA state and escalation**
+- A ticket's SLA state is worked out from its due time and its warning time. It is Stopped once the ticket is Resolved or Closed, and Paused while the SLA clock is paused. Otherwise it is Breached at or after the due time, Approaching at or after the warning time, and Within before that. Both limits are inclusive.
+- Escalation level is 0 (none), 1 (approaching) or 2 (breached).
+
+**Who can see what**
+- Customers see only their own tickets. Staff see all tickets.
+- Customers never see internal notes or the "Internal note added" timeline entry. Staff see everything.
+
+**Fields that cannot be set directly**
+- A ticket's number, assignee, status, SLA fields and escalation level cannot be filled in from user input. Only the subject, description, priority, category, customer, creator and external reference can. Role assignment never comes from user input either.
+
+**Deleting records**
+- Nothing is soft-deleted; deletion is permanent.
+- Deleting a ticket deletes its replies and attachments. Deleting a reply deletes its attachments.
+- A user who is a ticket's customer or creator, a reply author, an attachment uploader or an importer, and a category that tickets use, cannot be deleted.
+- Deleting an agent leaves their tickets unassigned.
+- Deleting an agent or category removes the agent-category links.
+
+**Timeline lines**
+- Ticket created; Ticket updated (with the changed fields); Assigned to X or Reassigned from X to Y; Claimed by X; Unassigned from X; Status changed from A to B; Priority changed from A to B; Category changed from A to B; Agent replied or Customer replied; Internal note added (staff only); SLA paused while waiting for the customer; SLA resumed; SLA breach approaching; Ticket escalated: SLA breached; Ticket imported from CSV (with the row number when known).
+
+**Domain errors**
+- Invalid status change (422): the move is not in the allowed list.
+- Already claimed (409): another agent claimed the ticket first.
+- Agent not eligible (422): the chosen user is not an available agent for the ticket.
+- Ticket closed (422): a closed ticket no longer accepts changes.
+- Invalid import header (422): the CSV columns do not match what is expected.
+
+**Imports**
+- An import is Pending, Processing, Completed, Completed with errors or Failed.
+
+**Demo data**
+- Seeding creates an admin (admin@example.com), four agents (agent1 to agent4@example.com), and five customers (customer1 to customer5@example.com), all with the password "password".
+- There are three categories: Billing, Technical Support and General Inquiry. Agent 4 is unavailable.
+- Sixty tickets are created with sequential numbers, mixed statuses and priorities, and some breached or approaching. Open tickets are unassigned; all others are assigned to an available agent who handles the ticket's category.
+- Running the seed again when the demo data already exists adds nothing.
 
 ## SLA calculation (T02)
 _Pending._
