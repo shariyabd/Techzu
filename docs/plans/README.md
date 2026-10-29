@@ -92,7 +92,7 @@ For each task (`superpowers:subagent-driven-development`). Five subagent roles: 
 
 1. **Worktree (controller):**
    ```bash
-   git worktree add ../techzu-wt/Txx -b task/Txx-<slug> main
+   git worktree add .worktrees/Txx -b task/Txx-<slug> main
    ```
    Each worktree needs its own `.env` (copied from `.env.example`) with `DB_DATABASE=techzu_wt_txx` and `APP_URL=http://127.0.0.1:80NN`, where `NN` is the task number (T06 → 8006). `phpunit.xml` values take precedence over `.env`, so tests must be run with the database on the command line: `DB_DATABASE=techzu_wt_txx_testing ./vendor/bin/pest --parallel`. That keeps parallel worktrees from sharing a database or a port.
 2. **Implementer subagent:** given its task file, CLAUDE.md, the spec and this contract.
@@ -132,12 +132,12 @@ For each task (`superpowers:subagent-driven-development`). Five subagent roles: 
     Agents never touch `main`.
 11. **Owner review, land and clean up** (human only). Run from the main checkout, not the worktree:
     ```bash
-    cd ../techzu-wt/Txx && git log -p main..task/Txx-<slug>   # review commit by commit
+    cd .worktrees/Txx && git log -p main..task/Txx-<slug>   # review commit by commit
     git rebase main                                            # pick up tasks landed earlier in the wave; re-run the gate
     cd /home/shariya/techzu \
       && git merge --ff-only task/Txx-<slug> \
       && git push origin main \
-      && git worktree remove ../techzu-wt/Txx \
+      && git worktree remove .worktrees/Txx \
       && git branch -d task/Txx-<slug> \
       && env_val() { grep -E "^$1=" .env | tail -n1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//'; } \
       && MYSQL_PWD="$(env_val DB_PASSWORD)" mysql -h "$(env_val DB_HOST)" -P "$(env_val DB_PORT)" -u "$(env_val DB_USERNAME)" \

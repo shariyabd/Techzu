@@ -1032,7 +1032,7 @@ The result is cached in `Cache::remember('dashboard:'.$scope, 60)`.
 
 **Decision.**
 - The implementation is split into vertical-slice tasks (`docs/plans/`). Each task lists its objective, dependencies, the files it may and may not touch, the TDs it implements, acceptance criteria, required tests and verification commands.
-- Each task runs in its own git worktree and branch (`task/Txx-slug`), with three roles:
+- Each task runs in its own git worktree, at `.worktrees/Txx` inside the project (gitignored) so the owner can review it in the editor, and on its own branch (`task/Txx-slug`). Roles:
   1. An **implementer** subagent works test-first.
   2. A **spec reviewer** subagent checks the work against the acceptance criteria.
   3. A **code-quality reviewer** subagent checks it against `CLAUDE.md`.
