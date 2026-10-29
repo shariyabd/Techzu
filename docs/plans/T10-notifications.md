@@ -2233,10 +2233,10 @@ Expected: `vue-tsc` exits 0; Vite prints `✓ built in …`. `NavItem` comes fro
 ```
 Expected: PASS.
 
-- [ ] **Step 8: Manual smoke run** (`composer run dev` plus `php artisan queue:work --queue=notifications,default`)
+- [ ] **Step 8: Manual smoke run** (`npm run build && php artisan serve --port=80NN` in the worktree, README §2 step 6, plus `php artisan queue:work --queue=default,notifications`; stop both when done)
   - As `admin@example.com`, assign a ticket to `agent1@example.com`.
   - As `agent1`: the *Notifications* nav item shows a red `1`. Opening the inbox shows the item in bold; clicking it opens the ticket, and the badge clears.
-  - Mailpit (Sail) or `storage/logs/laravel.log` (log mailer) shows the "assigned to you" mail with a *View ticket* link.
+  - `storage/logs/laravel.log` (the `log` mailer) shows the "assigned to you" mail with a *View ticket* link.
 
 - [ ] **Step 9: Commit**
 

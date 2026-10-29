@@ -1427,7 +1427,7 @@ Expected: Vite prints `✓ built in …`; `vue-tsc` exits 0.
 ```
 Expected: PASS.
 
-- [ ] **Step 7: Manual smoke run** (`composer run dev`, as `admin@example.com`)
+- [ ] **Step 7: Manual smoke run** (`npm run build && php artisan serve --port=80NN` in the worktree, README §2 step 6; as `admin@example.com`)
   - Type `print` in Keyword. After about 300 ms the URL becomes `/tickets?scope=active&q=print`, the list narrows, and the input keeps focus (`preserveState`).
   - Toggle *Critical*, then pick *Breached*. The URL gains `priority[]=critical&sla_state=breached`. Back leaves the page rather than stepping through each change (`replace: true`).
   - Reload: the bar is restored from the `filters` prop. Switch to *Resolved & closed*: the status chips change to Resolved and Closed.

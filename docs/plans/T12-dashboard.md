@@ -83,7 +83,7 @@ Task-internal additions:
 
 **Cache scope.** All staff share one key, `dashboard:staff`, because they see the same numbers. A non-staff viewer, who can only reach this service by calling it directly since the gate blocks them, gets `dashboard:customer:{id}`. Their figures are limited to their own tickets (`visibleTo`) and `by_agent` is empty.
 
-**Cache payload.** The cached value is a plain array of ints and strings, never objects. Laravel 13's `config/cache.php` ships `'serializable_classes' => false`, so a cached model, Collection or Carbon instance would come back from the Redis or database store as `__PHP_Incomplete_Class` (upgrade guide, "Cache serializable_classes Configuration"). Keep `for()` returning arrays only; `myTickets()` is uncached, so its models never reach the cache.
+**Cache payload.** The cached value is a plain array of ints and strings, never objects. Laravel 13's `config/cache.php` ships `'serializable_classes' => false`, so a cached model, Collection or Carbon instance would come back from the cache store (`database` in development, TD-005) as `__PHP_Incomplete_Class` (upgrade guide, "Cache serializable_classes Configuration"). Keep `for()` returning arrays only; `myTickets()` is uncached, so its models never reach the cache.
 
 ## 4. Subtasks & mini-waves
 

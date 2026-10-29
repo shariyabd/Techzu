@@ -16,7 +16,7 @@
 | API | Separate versioned REST JSON API under `/api/v1`, Sanctum personal access tokens (TD-003) |
 | Shared logic | Web and API controllers are thin and call the same Actions, FormRequests and Policies (TD-001) |
 | Database | MySQL 8 (dev, test, CI) (TD-004, TD-031) |
-| Runtime | Config-driven: Laravel Sail (MySQL, Redis, Mailpit) is the primary setup; plain local (MySQL, `database` queue/cache, `log` mail) is also supported (TD-005) |
+| Runtime | Local machine during development: system MySQL 8, Apache 2.4 + PHP 8.3-FPM (`techzu.test`), `database` queue/cache/session, `log` mail. Docker packaging is the final task after T14 (TD-005) |
 | API docs | Scramble (OpenAPI generated from FormRequests and Resources), exported to `docs/api/openapi.json` (TD-033) |
 | Testing | Pest 4, Larastan level 6, Pint (TD-030); agent tooling: Laravel Boost MCP, Playwright MCP (TD-141) |
 
@@ -351,6 +351,6 @@ Priority order (critical risk first):
 - `docs/ERD.md` (Mermaid)
 - `docs/API.md`, plus `docs/api/openapi.json` (Scramble export) and a live `/docs/api`
 - `docs/TECHNICAL.md` (architecture, flows, how to run, queue/scheduler operations)
-- `README.md` (setup for Sail and local, demo credentials, test commands)
+- `README.md` (local setup with MySQL + Apache, demo credentials, workers, test commands)
 - `CLAUDE.md` (guardrails for subagents and contributors)
 - `docs/plans/` (task-by-task implementation plan)

@@ -111,7 +111,7 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 **Status:** Accepted
 
 **Why.**
-- Available locally and in Sail.
+- Available on the local MySQL 8 server and in CI.
 - Supports what the design relies on: `FULLTEXT` indexes (TD-080), `SELECT … FOR UPDATE` row locks and `INSERT IGNORE` (TD-022, TD-051), JSON columns (activity properties), and conditional aggregates (TD-100).
 
 **Alternatives rejected.**
@@ -124,24 +124,30 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 
 ---
 
-### TD-005 — Config-driven runtime: Sail as primary, plain local as supported
-**Status:** Accepted
+### TD-005 — Config-driven runtime: local machine during development, Docker packaging last
+**Status:** Accepted (amended 2026-10-29: Sail removed by owner decision)
 
 **Decision.**
-- Every infrastructure choice is an `.env` driver switch: `QUEUE_CONNECTION`, `CACHE_STORE`, `MAIL_MAILER`, `ATTACHMENTS_DISK`.
-- `.env.example` documents two profiles:
-  - **Sail:** MySQL, Redis queue and cache, Mailpit.
-  - **Local:** host MySQL, `database` queue and cache, `log` mailer.
+- Every infrastructure choice stays an `.env` driver switch: `QUEUE_CONNECTION`, `CACHE_STORE`, `MAIL_MAILER`, `ATTACHMENTS_DISK`.
+- During development the app runs on the owner's machine:
+  - system **MySQL 8** (`127.0.0.1:3306`), with the databases `techzu` and `techzu_testing`, and per-worktree databases on the same server;
+  - **Apache 2.4 + a dedicated PHP 8.3-FPM pool** serving the main checkout at `http://techzu.test` (setup in `docs/DEVELOPMENT.md`);
+  - the `database` queue, cache and session, and the `log` mailer.
+- Agent worktrees serve themselves with `php artisan serve --port=80NN` for browser checks, because the Apache vhost points at the main checkout only.
+- **No Sail or Docker in T00–T14.** Containerisation (Dockerfile/compose for app, MySQL, queue worker and scheduler) is a separate **final task after T14**, written when the owner asks for it.
 
 **Why.**
-- Reviewers can run the system either way.
-- The code never depends on Redis-only features. For example, locks use the database (TD-051), not `Cache::lock` on Redis.
+- The owner already runs MySQL and Apache locally. One server means no duplicate databases, no port clashes (the earlier Sail plan collided with existing containers on 3306, 3307, 6379 and 8025), and no extra disk use.
+- The code never depends on Redis-only features (locks use the database, TD-051), so the `database` drivers lose nothing for correctness.
+- Packaging last means it's written against the finished app instead of being maintained through every task.
 
 **Alternatives rejected.**
-- *Sail only.* Excludes machines without Docker.
-- *Local only.* Loses realistic queue and mail behavior (Mailpit shows the actual emails).
+- *Sail from T00.* It duplicates the owner's MySQL, needs Docker running for every task, and clashed with existing containers.
+- *Apache with the global mod_php.* The machine's Apache uses PHP 8.1 for other sites, and Laravel 13 needs 8.3. A per-vhost FPM pool isolates the version without affecting those sites.
 
-**Trade-offs.** CI and documentation must cover both profiles. CI runs with the `database` queue driver and MySQL, which is the lowest common denominator.
+**Trade-offs.**
+- Real email delivery isn't visible; `log` mail writes to `storage/logs`.
+- Someone without a local MySQL/Apache waits for the final Docker task, or sets up the same two services by hand.
 
 ---
 
@@ -833,7 +839,7 @@ UPDATE tickets
 - *Synchronous mail.* Blocks the request and fails it when SMTP is down.
 - *Broadcast / websockets.* Realtime isn't required.
 
-**Trade-offs.** A queue worker must be running. Without one, notifications pile up in `jobs` but aren't lost. The README documents `queue:work`, and Sail runs a worker.
+**Trade-offs.** A queue worker must be running. Without one, notifications pile up in `jobs` but aren't lost. The README and docs/DEVELOPMENT.md document running `queue:work` (and `schedule:work`) locally.
 
 ---
 
@@ -845,6 +851,9 @@ UPDATE tickets
   - `default`: auto-assign
   - `notifications`
   - `imports`: prepare, chunk and finalize jobs, so a large import never delays notifications
+- **Worker priority order: `--queue=default,notifications,imports`.**
+  - `default` (auto-assign) goes first, because a ticket's SLA clock runs while it waits for an agent.
+  - Bulk imports go last; in production they get their own worker pool.
 - Jobs declare `tries=3`, `backoff=[10, 60, 300]`, and `failed()` logging.
 - **Exception (amended 2026-10-29): import chunk jobs use `tries=1`.** A chunk commits row by row, so a retry would re-process rows that were already committed. Duplicates are prevented by `external_reference`, but rows without a reference would be duplicated. A failed chunk is recorded on the import instead, and the admin re-uploads the remaining rows.
 - Import chunks are `Batchable`.

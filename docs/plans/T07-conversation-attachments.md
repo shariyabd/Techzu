@@ -1695,7 +1695,7 @@ npm run build && npx vue-tsc --noEmit
 ```
 Expected: Vite prints `✓ built in …`; `vue-tsc` exits 0. If `vue-tsc` reports a missing field on `ReplyItem`, `AttachmentItem` or `TicketDetail`, the T05 types differ from the fields listed in the Contract notes: stop and report; don't edit `types/tickets.ts`.
 
-- [ ] **Step 6: Manual smoke run** (`composer run dev`, demo data from `DemoSeeder`)
+- [ ] **Step 6: Manual smoke run** (`npm run build && php artisan serve --port=80NN` in the worktree, README §2 step 6; demo data from `DemoSeeder`)
   - As `agent1@example.com`: open a ticket, post a reply with a PDF, then post an internal note. The note renders with the dashed amber border and the "Internal note" badge.
   - As that ticket's customer: the note is absent, the toggle is absent, and the PDF downloads (it doesn't open inline).
   - Select a `.exe` file: the amber hint appears. Submit anyway: the server's 422 message shows under the file input.

@@ -24,7 +24,7 @@
   - `spatie/laravel-activitylog:^4.12` (v5 needs PHP 8.4)
   - `dedoc/scramble:^0.13`
   - `pestphp/pest:^4.0` and `pestphp/pest-plugin-laravel:^4.0` (they replace the kit's `phpunit/phpunit`; Pest 5 needs PHP 8.4)
-  - `larastan/larastan:^3.13`, `laravel/pint`, `laravel/sail` (all shipped by the kit)
+  - `larastan/larastan:^3.13`, `laravel/pint` (shipped by the kit). The kit's `laravel/sail` is removed in T00: development runs on local MySQL + Apache, and Docker packaging is the final task after T14 (TD-005).
   - `laravel/boost:^2.10` (dev only, TD-141)
 - **No other runtime packages** without a new TD entry.
 - `declare(strict_types=1);` in every PHP file under `app/`, `database/`, `routes/` and `tests/`.
@@ -82,6 +82,7 @@ Wave 5   T14 Hardening & documentation
 | T12 | [T12-dashboard.md](T12-dashboard.md) | T05 | 4b |
 | T13 | [T13-admin-config.md](T13-admin-config.md) | T05 | 4b |
 | T14 | [T14-hardening-docs.md](T14-hardening-docs.md) | T00–T13 | 5 |
+| T15 | *(not written yet: Docker packaging, on request after T14; TD-005)* | T14 | 6 |
 
 Wave 4 tasks are independent of each other by construction: separate route files, separate component folders, auto-discovered listeners, and events defined in T05. If two wave-4 tasks seem to need the same file, the file-ownership table (§4) decides who owns it. The other task stops and reports.
 
