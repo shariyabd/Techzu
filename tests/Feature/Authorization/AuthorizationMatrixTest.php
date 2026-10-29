@@ -4,12 +4,17 @@ declare(strict_types=1);
 
 use App\Enums\Role;
 use App\Enums\TicketStatus;
+use App\Models\Category;
+use App\Models\Holiday;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Notifications\TicketAssignedNotification;
 use Illuminate\Auth\Access\Response;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Str;
 use Tests\Support\AuthorizationMatrix;
+use Tests\Support\Imports\ImportCsvFixture;
 use Tests\Support\TicketRelation;
 
 beforeEach(function (): void {
@@ -139,3 +144,80 @@ it('sends signed-in users away from the password reset screens', function (strin
     'reset form' => ['GET', '/reset-password/some-token'],
     'reset' => ['POST', '/reset-password'],
 ])->with([Role::Admin, Role::Customer]);
+
+dataset('p4 routes', function (): array {
+    $everyone = fn (int $status, int $guest): array => ['admin' => $status, 'agent' => $status, 'customer' => $status, 'guest' => $guest];
+    $staff = fn (int $status, int $guest): array => ['admin' => $status, 'agent' => $status, 'customer' => 403, 'guest' => $guest];
+    $admin = fn (int $status, int $guest): array => ['admin' => $status, 'agent' => 403, 'customer' => 403, 'guest' => $guest];
+    $routes = [
+        ['GET', '/notifications', $everyone(200, 302)],
+        ['POST', '/notifications/{notification}/read', $everyone(302, 302)],
+        ['POST', '/notifications/read-all', $everyone(302, 302)],
+        ['GET', '/api/v1/notifications', $everyone(200, 401)],
+        ['POST', '/api/v1/notifications/{notification}/read', $everyone(200, 401)],
+        ['POST', '/api/v1/notifications/read-all', $everyone(204, 401)],
+        ['GET', '/dashboard', $staff(200, 302)],
+        ['GET', '/api/v1/dashboard', $staff(200, 401)],
+        ['GET', '/admin/imports', $admin(200, 302)],
+        ['GET', '/admin/imports/create', $admin(200, 302)],
+        ['POST', '/admin/imports', $admin(302, 302)],
+        ['GET', '/admin/imports/{import}', $admin(200, 302)],
+        ['GET', '/admin/imports/{import}/errors/download', $admin(200, 302)],
+        ['POST', '/api/v1/imports', $admin(422, 401)],
+        ['GET', '/api/v1/imports/{import}', $admin(200, 401)],
+        ['GET', '/api/v1/imports/{import}/errors', $admin(200, 401)],
+        ['GET', '/admin/categories', $admin(200, 302)],
+        ['GET', '/admin/categories/create', $admin(200, 302)],
+        ['POST', '/admin/categories', $admin(302, 302)],
+        ['GET', '/admin/categories/{category}/edit', $admin(200, 302)],
+        ['PATCH', '/admin/categories/{category}', $admin(302, 302)],
+        ['DELETE', '/admin/categories/{category}', $admin(302, 302)],
+        ['GET', '/api/v1/categories', $everyone(200, 401)],
+        ['GET', '/api/v1/admin/categories', $admin(200, 401)],
+        ['POST', '/api/v1/admin/categories', $admin(422, 401)],
+        ['PATCH', '/api/v1/admin/categories/{category}', $admin(422, 401)],
+        ['DELETE', '/api/v1/admin/categories/{category}', $admin(204, 401)],
+        ['GET', '/admin/holidays', $admin(200, 302)],
+        ['GET', '/admin/holidays/create', $admin(200, 302)],
+        ['POST', '/admin/holidays', $admin(302, 302)],
+        ['GET', '/admin/holidays/{holiday}/edit', $admin(200, 302)],
+        ['PATCH', '/admin/holidays/{holiday}', $admin(302, 302)],
+        ['DELETE', '/admin/holidays/{holiday}', $admin(302, 302)],
+        ['GET', '/api/v1/admin/holidays', $admin(200, 401)],
+        ['POST', '/api/v1/admin/holidays', $admin(422, 401)],
+        ['PATCH', '/api/v1/admin/holidays/{holiday}', $admin(422, 401)],
+        ['DELETE', '/api/v1/admin/holidays/{holiday}', $admin(204, 401)],
+    ];
+    $cases = [];
+    foreach ($routes as [$method, $uri, $statuses]) {
+        foreach ($statuses as $who => $status) {
+            $cases["{$who} · {$method} {$uri} → {$status}"] = [$who, $method, $uri, $status];
+        }
+    }
+
+    return $cases;
+});
+
+it('authorizes every P4 route', function (string $who, string $method, string $uri, int $status): void {
+    $this->withoutVite();
+    $matrix = AuthorizationMatrix::for($this);
+    $user = $who === 'guest' ? null : $matrix->actingAsRole(Role::from($who));
+    if ($user === null) {
+        $matrix->asGuest();
+    }
+    $owner = $user ?? User::factory()->customer()->create();
+    $placeholders = [
+        '{notification}' => (string) $owner->notifications()->create([
+            'id' => (string) Str::uuid(),
+            'type' => TicketAssignedNotification::class,
+            'data' => ['ticket_number' => null, 'title' => 't', 'body' => 'b', 'url' => url('/')],
+        ])->id,
+        '{import}' => (string) ImportCsvFixture::pendingImport(User::factory()->admin()->create())->id,
+        '{category}' => (string) Category::factory()->create()->id,
+        '{holiday}' => (string) Holiday::factory()->create()->id,
+    ];
+    $response = $matrix->expectAccess($method, strtr($uri, $placeholders), $status);
+    if ($who === 'guest' && $status === 302) {
+        $response->assertRedirect(route('login'));
+    }
+})->with('p4 routes');
