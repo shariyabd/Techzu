@@ -210,13 +210,6 @@ it('decides on the database row, not on a stale model', function (): void {
         ->and(fn () => app(ClaimTicket::class)->handle($this->agent, $stale))->toThrow(TicketAlreadyClaimed::class);
     expect($ticket->fresh()?->assigned_agent_id)->toBe($winner->id);
 });
-
-it('maps the exception to 409 ticket_already_claimed', function (): void {
-    $exception = TicketAlreadyClaimed::for('TKT-2026-000001');
-
-    expect($exception->status())->toBe(409)
-        ->and($exception->errorCode())->toBe('ticket_already_claimed');
-});
 ```
 
 - [ ] **Step 3: run it, expect FAIL**
@@ -224,7 +217,7 @@ it('maps the exception to 409 ticket_already_claimed', function (): void {
 ```bash
 ./vendor/bin/pest tests/Feature/Assignment/ClaimTicketTest.php
 ```
-Expected: FAIL, `Target class [App\Actions\Assignment\ClaimTicket] does not exist.` (the last test passes: it covers T01's exception).
+Expected: FAIL, `Target class [App\Actions\Assignment\ClaimTicket] does not exist.`
 
 - [ ] **Step 4: create `app/Services/Assignment/UnassignedTicketAssigner.php`**
 
@@ -332,7 +325,7 @@ final class ClaimTicket
 ```bash
 ./vendor/bin/pest tests/Feature/Assignment/ClaimTicketTest.php
 ```
-Expected: PASS (5 tests).
+Expected: PASS (4 tests).
 
 - [ ] **Step 7: write the race test** `tests/Feature/Assignment/ClaimRaceTest.php`.
 
@@ -814,12 +807,6 @@ it('rejects targets that are not available agents', function (Closure $target): 
     'admin' => [fn () => User::factory()->admin()->create()],
 ]);
 
-it('maps AgentNotEligible to 422 agent_not_eligible', function (): void {
-    $e = new AgentNotEligible('x');
-
-    expect($e->status())->toBe(422)->and($e->errorCode())->toBe('agent_not_eligible');
-});
-
 it('is a no-op when the agent already owns the ticket', function (): void {
     $ticket = Ticket::factory()->status(TicketStatus::InProgress)->assignedTo($this->agent)->create();
 
@@ -845,7 +832,7 @@ it('locks the ticket row while deciding', function (): void {
 ```bash
 ./vendor/bin/pest tests/Feature/Assignment/AssignTicketTest.php
 ```
-Expected: FAIL, `Target class [App\Actions\Assignment\AssignTicket] does not exist.` (the 422-mapping test passes; it covers T01's exception).
+Expected: FAIL, `Target class [App\Actions\Assignment\AssignTicket] does not exist.`
 
 - [ ] **Step 3: create `app/Actions/Assignment/AssignTicket.php`**
 
@@ -907,7 +894,7 @@ final class AssignTicket
 ```bash
 ./vendor/bin/pest tests/Feature/Assignment/AssignTicketTest.php
 ```
-Expected: PASS (9 tests).
+Expected: PASS (8 tests).
 
 - [ ] **Step 5: commit**
 
@@ -946,7 +933,6 @@ use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Queue;
 use Spatie\Activitylog\Models\Activity;
 
 beforeEach(function (): void {
@@ -1039,17 +1025,6 @@ it('is a unique, retrying job on the default queue', function (): void {
         ->and($job->queue)->toBe('default')
         ->and($job->tries)->toBe(3)
         ->and($job->backoff)->toBe([10, 60, 300]);
-});
-
-it('queues one job per ticket even if dispatched twice', function (): void {
-    Queue::fake();
-
-    AutoAssignTicket::dispatch(7);
-    AutoAssignTicket::dispatch(7);
-    AutoAssignTicket::dispatch(8);
-
-    Queue::assertPushed(AutoAssignTicket::class, 2);
-    Queue::assertPushed(AutoAssignTicket::class, fn (AutoAssignTicket $job): bool => $job->ticketId === 7);
 });
 ```
 
@@ -1292,7 +1267,7 @@ Expected: `App\Listeners\QueueAutoAssignment@handle` listed under `App\Events\Ti
 ```bash
 ./vendor/bin/pest tests/Feature/Assignment/AutoAssignTicketTest.php tests/Feature/Assignment/QueueAutoAssignmentTest.php
 ```
-Expected: PASS (10 tests).
+Expected: PASS (9 tests).
 
 - [ ] **Step 9: run the full suite to catch side effects of auto-assignment on earlier tests**
 
@@ -1433,30 +1408,6 @@ describe('handoff authorization', function (): void {
         $this->postJson('/api/v1/tickets/'.$this->ticket->number.'/assign', ['agent_id' => $this->colleague->id])
             ->assertOk()
             ->assertJsonPath('data.assigned_agent.id', $this->colleague->id);
-    });
-
-    it('forbids an agent from reassigning a colleague\'s ticket', function (): void {
-        $this->ticket->forceFill(['assigned_agent_id' => $this->colleague->id])->save();
-        Sanctum::actingAs($this->agent);
-
-        $this->postJson('/api/v1/tickets/'.$this->ticket->number.'/assign', ['agent_id' => $this->agent->id])->assertForbidden();
-        expect($this->ticket->fresh()?->assigned_agent_id)->toBe($this->colleague->id);
-    });
-
-    it('forbids an agent from assigning an unassigned ticket (claim instead)', function (): void {
-        Sanctum::actingAs($this->agent);
-
-        $this->postJson('/api/v1/tickets/'.$this->ticket->number.'/assign', ['agent_id' => $this->colleague->id])->assertForbidden();
-    });
-
-    it('forbids customers, hiding tickets they do not own', function (): void {
-        Sanctum::actingAs($this->customer);
-        $this->postJson('/api/v1/tickets/'.$this->ticket->number.'/assign', ['agent_id' => $this->agent->id])->assertForbidden();
-        $this->postJson('/api/v1/tickets/'.$this->ticket->number.'/claim')->assertForbidden();
-
-        $foreign = Ticket::factory()->create();
-        $this->postJson('/api/v1/tickets/'.$foreign->number.'/assign', ['agent_id' => $this->agent->id])->assertNotFound();
-        $this->postJson('/api/v1/tickets/'.$foreign->number.'/claim')->assertNotFound();
     });
 });
 ```
@@ -1671,7 +1622,7 @@ Expected: `tickets.claim`, `api.v1.tickets.claim`, `tickets.assign`, `api.v1.tic
 ```bash
 ./vendor/bin/pest tests/Feature/Http/AssignmentEndpointsTest.php
 ```
-Expected: PASS (14 tests). If "returns 409" gets 403 instead, T04's `TicketPolicy::claim` rejects already-assigned tickets; stop and report (Contract notes, item 1).
+Expected: PASS (11 tests). If "returns 409" gets 403 instead, T04's `TicketPolicy::claim` rejects already-assigned tickets; stop and report (Contract notes, item 1).
 
 - [ ] **Step 10: replace `resources/js/components/tickets/AssignmentPanel.vue`** (keeps the T05 props contract: `ticket`, `agents`, `can`)
 

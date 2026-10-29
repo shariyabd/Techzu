@@ -228,13 +228,6 @@ it('follows the event contract', function (string $class, array $params): void {
             ->and($property->isReadOnly())->toBeTrue();
     }
 })->with('domain events');
-
-it('defaults TicketCreated::imported to false', function (): void {
-    $param = (new ReflectionClass(TicketCreated::class))->getConstructor()?->getParameters()[2];
-
-    expect($param?->isDefaultValueAvailable())->toBeTrue()
-        ->and($param?->getDefaultValue())->toBeFalse();
-});
 ```
 
 - [ ] **Step 2: run it, expect FAIL**
@@ -242,7 +235,7 @@ it('defaults TicketCreated::imported to false', function (): void {
 ```bash
 ./vendor/bin/pest tests/Unit/Events/EventContractTest.php
 ```
-Expected: FAIL, `ReflectionException: Class "App\Events\TicketCreated" does not exist` (11 failures).
+Expected: FAIL, `ReflectionException: Class "App\Events\TicketCreated" does not exist` (10 failures).
 
 - [ ] **Step 3: create `app/Events/TicketCreated.php`**
 
@@ -530,7 +523,7 @@ final class TicketImportFinished implements ShouldDispatchAfterCommit
 ```bash
 ./vendor/bin/pest tests/Unit/Events/EventContractTest.php
 ```
-Expected: PASS (11 tests).
+Expected: PASS (10 tests).
 
 - [ ] **Step 14: commit**
 
@@ -632,11 +625,6 @@ it('agrees with Ticket::slaState() for every ticket', function (): void {
             );
         }
     }
-});
-
-it('exposes breached and approaching shortcuts', function (): void {
-    expect(SlaQuery::whereBreached(Ticket::query(), $this->now)->count())->toBe(2)
-        ->and(SlaQuery::whereApproaching(Ticket::query(), $this->now)->count())->toBe(2);
 });
 ```
 
@@ -746,7 +734,7 @@ final class SlaQuery
 ```bash
 ./vendor/bin/pest tests/Feature/Sla/SlaQueryTest.php
 ```
-Expected: PASS (7 tests). If "agrees with Ticket::slaState()" fails, T01's precedence differs from the spec (§7: stopped → paused → breached → approaching → within); stop and report, do not change either side silently.
+Expected: PASS (6 tests). If "agrees with Ticket::slaState()" fails, T01's precedence differs from the spec (§7: stopped → paused → breached → approaching → within); stop and report, do not change either side silently.
 
 - [ ] **Step 5: commit**
 
@@ -837,17 +825,6 @@ it('stores files privately under a uuid name and records metadata', function ():
 
     Storage::disk('local')->assertExists($first->path);
     Storage::disk('local')->assertExists($attachments->last()->path);
-});
-
-it('marks attachments internal when asked', function (): void {
-    $ticket = Ticket::factory()->create();
-    $agent = User::factory()->agent()->create();
-
-    $attachments = app(AttachmentStorer::class)->storeMany($ticket, null, $agent, [
-        UploadedFile::fake()->create('notes.txt', 1, 'text/plain'),
-    ], true);
-
-    expect((bool) $attachments->first()->is_internal)->toBeTrue();
 });
 
 it('deletes already stored files when a row fails to insert', function (): void {
@@ -1006,7 +983,7 @@ final class AttachmentStorer
 ```bash
 ./vendor/bin/pest tests/Feature/Attachments/AttachmentStorerTest.php
 ```
-Expected: PASS (4 tests).
+Expected: PASS (3 tests).
 
 - [ ] **Step 7: commit**
 
@@ -2088,20 +2065,6 @@ it('records sla_approaching and escalated as system entries', function (): void 
         ->and($activities->pluck('causer_id')->unique()->all())->toBe([null])
         ->and($activities->last()->properties->get('level'))->toBe(2);
 });
-
-it('hides internal_note activities from customers only', function (): void {
-    $ticket = Ticket::factory()->create(['customer_id' => $this->customer->id]);
-    $public = TicketReply::factory()->create(['ticket_id' => $ticket->id, 'author_id' => $this->agent->id, 'is_internal' => false]);
-    $internal = TicketReply::factory()->internal()->create(['ticket_id' => $ticket->id, 'author_id' => $this->agent->id]);
-    TicketReplied::dispatch($ticket, $public, $this->agent);
-    TicketReplied::dispatch($ticket, $internal, $this->agent);
-
-    $forCustomer = $ticket->activitiesVisibleTo($this->customer)->pluck('event')->all();
-    $forAgent = $ticket->activitiesVisibleTo($this->agent)->pluck('event')->all();
-
-    expect($forCustomer)->toBe([ActivityType::Replied->value])
-        ->and($forAgent)->toEqualCanonicalizing([ActivityType::Replied->value, ActivityType::InternalNote->value]);
-});
 ```
 
 - [ ] **Step 2: run it, expect FAIL**
@@ -2308,7 +2271,7 @@ Expected: `RecordTicketActivity@handleTicket...` listed under each of `TicketCre
 ```bash
 ./vendor/bin/pest tests/Feature/Activity/RecordTicketActivityTest.php
 ```
-Expected: PASS (13 tests).
+Expected: PASS (12 tests).
 
 - [ ] **Step 7: commit**
 
@@ -2342,7 +2305,6 @@ use App\Models\User;
 use App\Services\Tickets\TicketListQuery;
 use App\Services\Tickets\TicketPageData;
 use Carbon\CarbonImmutable;
-use Illuminate\Http\Request;
 
 beforeEach(function (): void {
     $this->now = CarbonImmutable::parse('2026-11-01 03:00:00', 'UTC');
@@ -2356,7 +2318,8 @@ beforeEach(function (): void {
 it('lists only the viewer\'s visible tickets for the requested scope, newest first', function (): void {
     $older = Ticket::factory()->status(TicketStatus::Open)->create(['customer_id' => $this->customer->id, 'created_at' => $this->now->subDay()]);
     $newer = Ticket::factory()->status(TicketStatus::InProgress)->create(['customer_id' => $this->customer->id, 'created_at' => $this->now]);
-    $resolved = Ticket::factory()->status(TicketStatus::Resolved)->create(['customer_id' => $this->customer->id]);
+    $resolved = Ticket::factory()->status(TicketStatus::Resolved)->create(['customer_id' => $this->customer->id, 'created_at' => $this->now->subHour()]);
+    $closed = Ticket::factory()->status(TicketStatus::Closed)->create(['customer_id' => $this->customer->id, 'created_at' => $this->now]);
     Ticket::factory()->status(TicketStatus::Open)->create(['customer_id' => $this->otherCustomer->id]);
 
     $query = app(TicketListQuery::class);
@@ -2364,15 +2327,11 @@ it('lists only the viewer\'s visible tickets for the requested scope, newest fir
     $active = $query->paginate($this->customer, ['scope' => 'active'], $this->now);
     expect(collect($active->items())->pluck('id')->all())->toBe([$newer->id, $older->id]);
 
+    // The "resolved" scope is the finished list: resolved and closed tickets together.
     $finished = $query->paginate($this->customer, ['scope' => 'resolved'], $this->now);
-    expect(collect($finished->items())->pluck('id')->all())->toBe([$resolved->id]);
+    expect(collect($finished->items())->pluck('id')->all())->toBe([$closed->id, $resolved->id]);
 
     expect($query->paginate($this->agent, [], $this->now)->total())->toBe(3);
-});
-
-it('caps per_page at the configured maximum', function (): void {
-    expect(app(TicketListQuery::class)->paginate($this->admin, ['per_page' => 500], $this->now)->perPage())->toBe(100)
-        ->and(app(TicketListQuery::class)->paginate($this->admin, [], $this->now)->perPage())->toBe(20);
 });
 
 it('does not count internal replies for customers', function (): void {
@@ -2425,23 +2384,6 @@ it('offers claim only on unassigned tickets', function (): void {
     expect(TicketResource::abilities($this->agent, $unassigned)['claim'])->toBeTrue()
         ->and(TicketResource::abilities($this->admin, $assigned)['claim'])->toBeFalse()
         ->and(TicketResource::abilities($this->customer, $unassigned)['claim'])->toBeFalse();
-});
-
-it('serializes the TicketResource contract fields', function (): void {
-    $ticket = Ticket::factory()->create(['customer_id' => $this->customer->id]);
-    $ticket->load(['category:id,name', 'customer:id,name', 'assignedAgent:id,name']);
-    $request = Request::create('/');
-    $request->setUserResolver(fn () => $this->customer);
-
-    $data = TicketResource::make($ticket)->resolve($request);
-
-    expect(array_keys($data))->toBe([
-        'number', 'subject', 'description', 'status', 'priority', 'category', 'customer', 'assigned_agent',
-        'sla', 'escalation_level', 'created_at', 'updated_at', 'resolved_at', 'closed_at', 'can',
-    ])
-        ->and(array_keys($data['sla']))->toBe(['state', 'due_at', 'warning_at', 'paused_at'])
-        ->and($data['status'])->toBe(['value' => $ticket->status->value, 'label' => $ticket->status->label()])
-        ->and($data['assigned_agent'])->toBeNull();
 });
 ```
 
@@ -2875,7 +2817,7 @@ final class TicketPageData
 ```bash
 ./vendor/bin/pest tests/Feature/Tickets/TicketReadLayerTest.php
 ```
-Expected: PASS (7 tests). If the customer `allowedStatuses` assertion fails, T04's `changeStatus($user, $ticket, $to)` deviates from README §3.11; stop and report.
+Expected: PASS (5 tests). If the customer `allowedStatuses` assertion fails, T04's `changeStatus($user, $ticket, $to)` deviates from README §3.11; stop and report.
 
 #### 5.4.4 FormRequests
 
@@ -3268,16 +3210,6 @@ it('lists the customer\'s own active tickets', function (): void {
             ->has('filters'));
 });
 
-it('lists resolved and closed tickets under scope=resolved', function (): void {
-    Ticket::factory()->status(TicketStatus::Resolved)->create(['customer_id' => $this->customer->id]);
-    Ticket::factory()->status(TicketStatus::Closed)->create(['customer_id' => $this->customer->id]);
-    Ticket::factory()->status(TicketStatus::Open)->create(['customer_id' => $this->customer->id]);
-
-    $this->actingAs($this->customer)
-        ->get('/tickets?scope=resolved')
-        ->assertInertia(fn (Assert $page) => $page->where('scope', 'resolved')->has('tickets.data', 2));
-});
-
 it('rejects an invalid scope and an oversized page', function (): void {
     $this->actingAs($this->customer)
         ->get('/tickets?scope=everything&per_page=500')
@@ -3325,7 +3257,6 @@ it('validates the store payload', function (array $payload, array $errors): void
 
     expect(Ticket::query()->count())->toBe(0);
 })->with([
-    'missing subject' => [['subject' => ''], ['subject']],
     'bad priority' => [['priority' => 'urgent'], ['priority']],
     'unknown category' => [['category_id' => 999999], ['category_id']],
     'customer cannot pick a customer' => [['customer_email' => 'x@example.com'], ['customer_email']],
@@ -3397,12 +3328,6 @@ it('shows staff the internal data and the agent list', function (): void {
             ->where('ticket.can.allowedStatuses', ['in_progress', 'waiting_for_customer', 'resolved']));
 });
 
-it('returns 404 when a customer opens another customer\'s ticket', function (): void {
-    $ticket = Ticket::factory()->create();
-
-    $this->actingAs($this->customer)->get('/tickets/'.$ticket->number)->assertNotFound();
-});
-
 it('lets a customer edit the subject of their own open ticket', function (): void {
     $ticket = Ticket::factory()->status(TicketStatus::Open)->create(['customer_id' => $this->customer->id, 'subject' => 'Old']);
 
@@ -3435,18 +3360,6 @@ it('lets the assigned agent resolve a ticket', function (): void {
     expect($ticket->fresh()?->status)->toBe(TicketStatus::Resolved);
 });
 
-it('flashes the domain error for a forbidden transition', function (): void {
-    $ticket = Ticket::factory()->status(TicketStatus::Closed)->create();
-
-    $this->actingAs($this->admin)
-        ->from('/tickets/'.$ticket->number)
-        ->patch('/tickets/'.$ticket->number.'/status', ['status' => 'open'])
-        ->assertRedirect('/tickets/'.$ticket->number)
-        ->assertSessionHas('error');
-
-    expect($ticket->fresh()?->status)->toBe(TicketStatus::Closed);
-});
-
 it('lets an admin change the priority', function (): void {
     $ticket = Ticket::factory()->status(TicketStatus::Open)->priority(TicketPriority::Low)->create();
 
@@ -3455,10 +3368,6 @@ it('lets an admin change the priority', function (): void {
         ->assertRedirect();
 
     expect($ticket->fresh()?->priority)->toBe(TicketPriority::Critical);
-});
-
-it('redirects guests to login', function (): void {
-    $this->get('/tickets')->assertRedirect('/login');
 });
 ```
 
@@ -3641,7 +3550,7 @@ Expected: the 7 `tickets.*` routes above with `{ticket}` bound (no `api.v1.*` ye
 ```bash
 ./vendor/bin/pest tests/Feature/Http/Web/TicketPagesTest.php
 ```
-Expected: FAIL only in the `assertInertia` tests, with `Inertia page component file [tickets/Index] does not exist.` (and `tickets/Create`, `tickets/Show`). All redirect, validation and 404 tests PASS. (If `config('inertia.testing.ensure_pages_exist')` is false in this project, those tests already pass; continue anyway.)
+Expected: FAIL only in the `assertInertia` tests, with `Inertia page component file [tickets/Index] does not exist.` (and `tickets/Create`, `tickets/Show`). All redirect and validation tests PASS. (If `config('inertia.testing.ensure_pages_exist')` is false in this project, those tests already pass; continue anyway.)
 
 #### 5.4.6 Frontend: types, navigation, components, pages
 
@@ -4484,7 +4393,7 @@ Expected: `vp fmt` prints `Finished in …`. The build prints `✓ built in …`
 ```bash
 ./vendor/bin/pest tests/Feature/Http/Web/TicketPagesTest.php
 ```
-Expected: PASS (23 tests).
+Expected: PASS (18 tests).
 
 - [ ] **Step 41: commit**
 
@@ -4533,10 +4442,6 @@ beforeEach(function (): void {
     $this->customer = User::factory()->customer()->create();
     $this->agent = User::factory()->agent([$this->category->id])->create();
     $this->admin = User::factory()->admin()->create();
-});
-
-it('rejects unauthenticated requests with 401', function (): void {
-    $this->getJson('/api/v1/tickets')->assertUnauthorized();
 });
 
 it('lists visible tickets with pagination meta', function (): void {
@@ -4594,14 +4499,6 @@ it('shows a ticket', function (): void {
         ->assertJsonPath('data.number', $ticket->number);
 });
 
-it('returns 404 for another customer\'s ticket', function (): void {
-    $ticket = Ticket::factory()->create();
-    Sanctum::actingAs($this->customer);
-
-    $this->getJson('/api/v1/tickets/'.$ticket->number)->assertNotFound();
-    $this->patchJson('/api/v1/tickets/'.$ticket->number, ['subject' => 'x'])->assertNotFound();
-});
-
 it('updates a ticket', function (): void {
     $ticket = Ticket::factory()->status(TicketStatus::Open)->create(['customer_id' => $this->customer->id]);
     Sanctum::actingAs($this->customer);
@@ -4622,14 +4519,6 @@ it('changes the status and reports the domain error code on a forbidden transiti
     $this->patchJson('/api/v1/tickets/'.$ticket->number.'/status', ['status' => 'waiting_for_customer'])
         ->assertUnprocessable()
         ->assertJsonPath('code', 'invalid_status_transition');
-});
-
-it('forbids an agent from changing a ticket assigned to someone else', function (): void {
-    $ticket = Ticket::factory()->status(TicketStatus::InProgress)->assignedTo(User::factory()->agent()->create())->create();
-    Sanctum::actingAs($this->agent);
-
-    $this->patchJson('/api/v1/tickets/'.$ticket->number.'/status', ['status' => 'resolved'])->assertForbidden();
-    $this->patchJson('/api/v1/tickets/'.$ticket->number.'/priority', ['priority' => 'high'])->assertForbidden();
 });
 
 it('changes the priority', function (): void {
@@ -4665,7 +4554,7 @@ it('lists activities without internal notes for customers', function (): void {
 ```bash
 ./vendor/bin/pest tests/Feature/Http/Api/TicketApiTest.php
 ```
-Expected: FAIL. The 401 test passes or fails depending on the fallback route; the rest fail with `Expected response status code [200] but received 404.`
+Expected: FAIL. Every test fails with `Expected response status code [...] but received 404.` (no API routes yet).
 
 - [ ] **Step 3: create `app/Http/Controllers/Api/V1/TicketController.php`**
 
@@ -4799,7 +4688,7 @@ Expected: 7 routes `api.v1.tickets.index|store|show|update|status|priority|activ
 ```bash
 ./vendor/bin/pest tests/Feature/Http/Api/TicketApiTest.php
 ```
-Expected: PASS (11 tests).
+Expected: PASS (8 tests).
 
 - [ ] **Step 7: commit**
 

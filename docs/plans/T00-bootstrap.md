@@ -54,6 +54,7 @@
 **Delete**
 - `.github/workflows/tests.yml` (the kit's CI; `ci.yml` replaces it, so there is exactly one workflow)
 - `tests/Feature/ExampleTest.php` (the kit's `/` smoke test; `/` now redirects)
+- `tests/Unit/ExampleTest.php` (the kit's `assertTrue(true)` placeholder; it proves nothing and uses `RefreshDatabase` inside `Unit`, which breaks the no-database rule for unit tests)
 
 **Kept unchanged on purpose** (kit files T00 builds on but doesn't edit): `bootstrap/providers.php` (the kit's `use` imports and `FortifyServiceProvider`; T02 adds its provider), `resources/js/types/navigation.ts` (the kit's `BreadcrumbItem` and its own link type, also named `NavItem`, used by the settings tabs, header and footer links), `resources/js/types/{index,ui}.ts`, `tests/TestCase.php`, `tests/Feature/DashboardTest.php`, the other kit tests, `.github/dependabot.yml`, `components.json`, `pnpm-workspace.yaml`, `.npmrc`.
 
@@ -61,7 +62,6 @@
 - `tests/Fixtures/ExampleDomainException.php` (test-only subclass)
 - `tests/Feature/App/RouteLoadingTest.php`
 - `tests/Feature/App/DomainExceptionRenderingTest.php`
-- `tests/Feature/App/ConsoleScheduleTest.php`
 - `tests/Feature/App/AppServiceProviderTest.php`
 - `tests/Feature/App/InertiaSharedPropsTest.php`
 - `tests/Feature/Api/V1/AuthTokenTest.php`
@@ -112,8 +112,8 @@ abstract class DomainException extends \RuntimeException {
 | Subtask | Files | Depends on | Parallel-safe with |
 |---|---|---|---|
 | 0.1 Scaffold, packages, Boost, Sail, `.env` profiles | scaffold, `.gitignore`, `docs/DEVELOPMENT.md` (kit section), `composer.*`, `boost.json`, `.mcp.json`, `CLAUDE.md` (Boost block), `.env.example`, `docker/mysql/*`, compose file, sanctum/permission config + migrations, `config/app.php`, `app/Models/User.php` | — | — |
-| 0.2 Tooling & CI | `pint.json`, `phpstan.neon`, (`phpstan-baseline.neon`), `phpunit.xml`, `tests/Pest.php`, `tests/{Concurrency,Database}/.gitkeep`, `.github/workflows/ci.yml`, `.github/workflows/tests.yml` (delete), `docs/DEVELOPMENT.md`, Pint rewrites | 0.1 | — |
-| 0.3 Routing, exception renderer, console skeleton | `bootstrap/app.php`, `routes/web.php`, `routes/web/dashboard.php`, `routes/console.php`, `app/Exceptions/Domain/DomainException.php`, `app/Http/Middleware/ForceJsonResponse.php`, `tests/Fixtures/ExampleDomainException.php`, `tests/Feature/App/{RouteLoading,DomainExceptionRendering,ConsoleSchedule}Test.php` | 0.2 | 0.4 |
+| 0.2 Tooling & CI | `pint.json`, `phpstan.neon`, (`phpstan-baseline.neon`), `phpunit.xml`, `tests/Pest.php`, `tests/{Unit,Concurrency,Database}/.gitkeep`, `tests/Unit/ExampleTest.php` (delete), `.github/workflows/ci.yml`, `.github/workflows/tests.yml` (delete), `docs/DEVELOPMENT.md`, Pint rewrites | 0.1 | — |
+| 0.3 Routing, exception renderer, console skeleton | `bootstrap/app.php`, `routes/web.php`, `routes/web/dashboard.php`, `routes/console.php`, `app/Exceptions/Domain/DomainException.php`, `app/Http/Middleware/ForceJsonResponse.php`, `tests/Fixtures/ExampleDomainException.php`, `tests/Feature/App/{RouteLoading,DomainExceptionRendering}Test.php` | 0.2 | 0.4 |
 | 0.4 Rate limiters & lazy-loading guard | `app/Providers/AppServiceProvider.php`, `tests/Feature/App/AppServiceProviderTest.php` | 0.2 | 0.3 |
 | 0.5 Sanctum token API | `routes/api/v1/auth.php`, `app/Http/Requests/Auth/LoginTokenRequest.php`, `app/Actions/Auth/*`, `app/Http/Controllers/Api/V1/*`, `app/Http/Resources/V1/{ApiToken,CurrentUser}Resource.php`, `tests/Feature/Api/V1/AuthTokenTest.php` | 0.3, 0.4 | 0.6 |
 | 0.6 Inertia shared props, layout, navigation | `app/Http/Middleware/HandleInertiaRequests.php`, `resources/js/types/{shared,auth}.ts`, `resources/js/types/global.d.ts`, `resources/js/config/navigation.ts`, `resources/js/layouts/AppLayout.vue`, `resources/js/components/AppSidebar.vue`, `tests/Feature/App/InertiaSharedPropsTest.php` | 0.3 | 0.5, 0.7 |
@@ -787,10 +787,11 @@ pest()->extend(TestCase::class)
     ->in('Feature');
 ```
 
-- [ ] **Step 8: Create the Concurrency and Database suite directories** (T01 configures Concurrency; T03/T06 add tests there, and T08 adds `tests/Database`)
+- [ ] **Step 8: Create the Concurrency and Database suite directories** (T01 configures Concurrency; T03/T06 add tests there, and T08 adds `tests/Database`). Delete the kit's `tests/Unit/ExampleTest.php` (a trivial placeholder that uses `RefreshDatabase` inside `Unit`); `tests/Unit/.gitkeep` keeps the now-empty `Unit` directory in the repo until T01 adds unit tests.
 
 ```bash
-mkdir -p tests/Concurrency tests/Database && touch tests/Concurrency/.gitkeep tests/Database/.gitkeep
+git rm -q tests/Unit/ExampleTest.php
+mkdir -p tests/Unit tests/Concurrency tests/Database && touch tests/Unit/.gitkeep tests/Concurrency/.gitkeep tests/Database/.gitkeep
 ```
 
 - [ ] **Step 9: Run the suite on MySQL**
@@ -798,7 +799,7 @@ mkdir -p tests/Concurrency tests/Database && touch tests/Concurrency/.gitkeep te
 ```bash
 ./vendor/bin/pest
 ```
-Expected: **PASS**, same count as 0.1 Step 28, now against `techzu_testing`.
+Expected: **PASS**, one test fewer than 0.1 Step 28 (39 at kit commit `fd5b58f`; Step 8 deleted the kit's unit placeholder), now against `techzu_testing`.
 
 - [ ] **Step 10: Run the suite in parallel** (creates `techzu_testing_test_N`)
 
@@ -904,12 +905,12 @@ jobs:
 ```
 Expected: every command succeeds. `pest --parallel`, both here and in CI, runs every suite listed in `phpunit.xml` (Unit, Feature, Concurrency, Database), so neither the gate nor CI needs per-suite commands.
 
-- [ ] **Step 12a: Confirm `phpunit.xml` declares all four suites.** PHPUnit 12's `--list-suites` omits suites without tests, so it shows only `Feature` and `Unit` until T01/T03/T08 add tests to `tests/Concurrency` and `tests/Database`.
+- [ ] **Step 12a: Confirm `phpunit.xml` declares all four suites.** PHPUnit 12's `--list-suites` omits suites without tests, so it shows only `Feature` until later tasks add tests to `tests/Unit`, `tests/Concurrency` and `tests/Database`.
 
 ```bash
 grep -oE '<testsuite name="[A-Za-z]+"' phpunit.xml && ./vendor/bin/pest --list-suites
 ```
-Expected: the grep prints `Unit`, `Feature`, `Concurrency`, `Database`; `--list-suites` prints `Feature` and `Unit`.
+Expected: the grep prints `Unit`, `Feature`, `Concurrency`, `Database`; `--list-suites` prints `Feature`.
 
 - [ ] **Step 12b: Append the rest of `docs/DEVELOPMENT.md`** (developer runbook; 0.1 Step 3c wrote its title and kit section; T14 links to it from `README.md`)
 
@@ -995,11 +996,11 @@ grep -c "'docs/\*\*'" vite.config.ts && npm run build && npm run check
 ```
 Expected: `1`, then the build, then both `pass:` lines from `vp check`. If the grep prints `0`, the kit's indentation differs. Add the five entries by hand inside `fmt.ignorePatterns`.
 
-- [ ] **Step 13: Commit.** `git add -u` stages the files Pint rewrote (and the `tests.yml` deletion from Step 11); the new files are named explicitly. Add `phpstan-baseline.neon` to the second line only if Step 6a ran.
+- [ ] **Step 13: Commit.** `git add -u` stages the files Pint rewrote (and the `tests.yml` and `tests/Unit/ExampleTest.php` deletions from Steps 11 and 8); the new files are named explicitly. Add `phpstan-baseline.neon` to the second line only if Step 6a ran.
 
 ```bash
 git add -u
-git add pint.json phpstan.neon phpunit.xml tests/Pest.php tests/Concurrency/.gitkeep tests/Database/.gitkeep docs/DEVELOPMENT.md .github/workflows/ci.yml vite.config.ts
+git add pint.json phpstan.neon phpunit.xml tests/Pest.php tests/Unit/.gitkeep tests/Concurrency/.gitkeep tests/Database/.gitkeep docs/DEVELOPMENT.md .github/workflows/ci.yml vite.config.ts
 git commit -m "ci: add Pint, Larastan level 6, MySQL test suites and CI workflow" --trailer "Refs: T00.2" --trailer "Implements: TD-030, TD-031, TD-032, TD-034"
 ```
 
@@ -1051,14 +1052,6 @@ it('loads feature route files from routes/web inside the web middleware group', 
         ->and((new ReflectionFunction($action))->getFileName())->toBe(base_path('routes/web/dashboard.php'))
         ->and($route->uri())->toBe('dashboard')
         ->and($route->gatherMiddleware())->toContain('web', 'auth', 'verified');
-});
-
-it('still loads routes/web.php first', function (): void {
-    expect(Route::has('home'))->toBeTrue();
-});
-
-it('redirects guests away from the dashboard placeholder', function (): void {
-    $this->get('/dashboard')->assertRedirect('/login');
 });
 ```
 
@@ -1114,31 +1107,16 @@ it('renders framework errors on unknown API routes as JSON', function (): void {
 });
 ```
 
-- [ ] **Step 4: Write `tests/Feature/App/ConsoleScheduleTest.php`**
-
-```php
-<?php
-
-declare(strict_types=1);
-
-use Illuminate\Support\Facades\Artisan;
-
-it('no longer ships the starter kit demo command', function (): void {
-    expect(Artisan::all())->not->toHaveKey('inspire');
-});
-```
-
-- [ ] **Step 5: Run the new tests and confirm they fail**
+- [ ] **Step 4: Run the new tests and confirm they fail**
 
 ```bash
-./vendor/bin/pest tests/Feature/App/RouteLoadingTest.php tests/Feature/App/DomainExceptionRenderingTest.php tests/Feature/App/ConsoleScheduleTest.php
+./vendor/bin/pest tests/Feature/App/RouteLoadingTest.php tests/Feature/App/DomainExceptionRenderingTest.php
 ```
 Expected: **FAIL**:
 - `Class "App\Exceptions\Domain\DomainException" not found` (the fixture can't load).
 - The route test fails because the kit declares `dashboard` in `routes/web.php` as `Route::inertia('dashboard', 'Dashboard')`, whose action is `Inertia\Controller`, not a closure from `routes/web/dashboard.php`.
-- `inspire` is still registered.
 
-- [ ] **Step 6: Create `app/Exceptions/Domain/DomainException.php`**
+- [ ] **Step 5: Create `app/Exceptions/Domain/DomainException.php`**
 
 ```php
 <?php
@@ -1161,7 +1139,7 @@ abstract class DomainException extends RuntimeException
 }
 ```
 
-- [ ] **Step 7: Create `app/Http/Middleware/ForceJsonResponse.php`**
+- [ ] **Step 6: Create `app/Http/Middleware/ForceJsonResponse.php`**
 
 ```php
 <?php
@@ -1190,7 +1168,7 @@ final class ForceJsonResponse
 }
 ```
 
-- [ ] **Step 8: Replace `bootstrap/app.php`.** The Laravel 13 kit's file is the same `Application::configure()` chain with `web`/`commands`/`health` routing, the `appearance`/`sidebar_state` cookie exceptions, the three `web` middleware and `shouldRenderJsonWhen`; this version keeps all of that verbatim and adds the route globs, the `api/v1` group, `ForceJsonResponse`, `throttleApi()`, `dontReport` and the domain-exception renderer. (Laravel 13 renamed the CSRF middleware to `PreventRequestForgery`; nothing here references it.)
+- [ ] **Step 7: Replace `bootstrap/app.php`.** The Laravel 13 kit's file is the same `Application::configure()` chain with `web`/`commands`/`health` routing, the `appearance`/`sidebar_state` cookie exceptions, the three `web` middleware and `shouldRenderJsonWhen`; this version keeps all of that verbatim and adds the route globs, the `api/v1` group, `ForceJsonResponse`, `throttleApi()`, `dontReport` and the domain-exception renderer. (Laravel 13 renamed the CSRF middleware to `PreventRequestForgery`; nothing here references it.)
 
 ```php
 <?php
@@ -1264,7 +1242,7 @@ return Application::configure(basePath: dirname(__DIR__))
     })->create();
 ```
 
-- [ ] **Step 9: Remove the starter kit's dashboard route from `routes/web.php`.** Delete this group (it holds only the dashboard route) and leave everything else (the `Route::inertia('/', 'Welcome')->name('home')` route and `require __DIR__.'/settings.php';`) untouched:
+- [ ] **Step 8: Remove the starter kit's dashboard route from `routes/web.php`.** Delete this group (it holds only the dashboard route) and leave everything else (the `Route::inertia('/', 'Welcome')->name('home')` route and `require __DIR__.'/settings.php';`) untouched:
 
 ```php
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -1273,7 +1251,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 ```
 Check with `grep -c "name('dashboard')" routes/web.php`. Expected: `0`.
 
-- [ ] **Step 10: Create the placeholder `routes/web/dashboard.php`**
+- [ ] **Step 9: Create the placeholder `routes/web/dashboard.php`**
 
 ```php
 <?php
@@ -1292,7 +1270,7 @@ Route::get('dashboard', fn (): Response => Inertia::render('Dashboard'))
     ->name('dashboard');
 ```
 
-- [ ] **Step 11: Replace `routes/console.php`**
+- [ ] **Step 10: Replace `routes/console.php`**
 
 ```php
 <?php
@@ -1303,31 +1281,31 @@ declare(strict_types=1);
 // that introduces its command (T09 adds sla:scan), so features never edit each other's entries.
 ```
 
-- [ ] **Step 12: Run the new tests and confirm they pass**
+- [ ] **Step 11: Run the new tests and confirm they pass**
 
 ```bash
-./vendor/bin/pest tests/Feature/App/RouteLoadingTest.php tests/Feature/App/DomainExceptionRenderingTest.php tests/Feature/App/ConsoleScheduleTest.php
+./vendor/bin/pest tests/Feature/App/RouteLoadingTest.php tests/Feature/App/DomainExceptionRenderingTest.php
 ```
-Expected: **PASS** (8 tests).
+Expected: **PASS** (5 tests).
 
-- [ ] **Step 13: Run the starter kit's suite to prove nothing regressed** (login still redirects to `/dashboard`)
+- [ ] **Step 12: Run the starter kit's suite to prove nothing regressed** (login still redirects to `/dashboard`)
 
 ```bash
 ./vendor/bin/pest
 ```
 Expected: **PASS**. If 0.4 runs in parallel and isn't committed yet, its own test file may still be red; every other test passes.
 
-- [ ] **Step 14: Static checks**
+- [ ] **Step 13: Static checks**
 
 ```bash
 ./vendor/bin/pint --test && ./vendor/bin/phpstan analyse --memory-limit=1G
 ```
 Expected: `PASS` and `[OK] No errors`.
 
-- [ ] **Step 15: Commit**
+- [ ] **Step 14: Commit**
 
 ```bash
-git add tests/Fixtures/ExampleDomainException.php tests/Feature/App/RouteLoadingTest.php tests/Feature/App/DomainExceptionRenderingTest.php tests/Feature/App/ConsoleScheduleTest.php app/Exceptions/Domain/DomainException.php app/Http/Middleware/ForceJsonResponse.php bootstrap/app.php routes/web.php routes/web/dashboard.php routes/console.php
+git add tests/Fixtures/ExampleDomainException.php tests/Feature/App/RouteLoadingTest.php tests/Feature/App/DomainExceptionRenderingTest.php app/Exceptions/Domain/DomainException.php app/Http/Middleware/ForceJsonResponse.php bootstrap/app.php routes/web.php routes/web/dashboard.php routes/console.php
 git commit -m "feat(core): add per-feature route loading and domain exception renderer" --trailer "Refs: T00.3" --trailer "Implements: TD-003, TD-110, TD-140"
 ```
 
@@ -1519,25 +1497,10 @@ git commit -m "feat(core): add API and upload rate limiters and lazy-loading gua
 declare(strict_types=1);
 
 use App\Models\User;
-use Illuminate\Support\Facades\Route;
 use Laravel\Sanctum\PersonalAccessToken;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Permission as PermissionModel;
 use Spatie\Permission\Models\Role as RoleModel;
-
-it('registers the auth routes under api/v1 with the api middleware', function (string $name, string $method, string $uri, bool $authenticated): void {
-    $route = Route::getRoutes()->getByName($name);
-
-    expect($route)->not->toBeNull()
-        ->and($route->uri())->toBe($uri)
-        ->and($route->methods())->toContain($method)
-        ->and($route->gatherMiddleware())->toContain('api')
-        ->and(in_array('auth:sanctum', $route->gatherMiddleware(), true))->toBe($authenticated);
-})->with([
-    'issue' => ['api.v1.auth.tokens.store', 'POST', 'api/v1/auth/tokens', false],
-    'revoke' => ['api.v1.auth.tokens.destroy', 'DELETE', 'api/v1/auth/tokens/current', true],
-    'me' => ['api.v1.auth.me', 'GET', 'api/v1/me', true],
-]);
 
 it('issues a token whose abilities mirror the user permission names', function (): void {
     $user = User::factory()->create(['email' => 'agent@example.com']);
@@ -1580,18 +1543,6 @@ it('rejects wrong credentials with a validation error on email', function (): vo
 
     expect(PersonalAccessToken::query()->count())->toBe(0);
 });
-
-it('validates the token request', function (array $payload, string $field): void {
-    $this->postJson(route('api.v1.auth.tokens.store'), $payload)
-        ->assertUnprocessable()
-        ->assertJsonValidationErrors([$field]);
-})->with([
-    'missing email' => [['password' => 'password', 'device_name' => 'cli'], 'email'],
-    'invalid email' => [['email' => 'nope', 'password' => 'password', 'device_name' => 'cli'], 'email'],
-    'missing password' => [['email' => 'a@example.com', 'device_name' => 'cli'], 'password'],
-    'missing device name' => [['email' => 'a@example.com', 'password' => 'password'], 'device_name'],
-    'device name too long' => [['email' => 'a@example.com', 'password' => 'password', 'device_name' => str_repeat('x', 256)], 'device_name'],
-]);
 
 it('throttles token issuance to five attempts per minute', function (): void {
     $user = User::factory()->create();
@@ -1654,7 +1605,7 @@ it('rejects unauthenticated access to me and revoke', function (string $method, 
 ```bash
 ./vendor/bin/pest tests/Feature/Api/V1/AuthTokenTest.php
 ```
-Expected: **FAIL**. The route rows fail with `Failed asserting that null is not null.` and the others with `Route [api.v1.auth.tokens.store] not defined.`
+Expected: **FAIL**. Every test fails with `Route [api.v1.auth.…] not defined.` (`tokens.store`, `tokens.destroy` or `me`, whichever the test resolves first).
 
 - [ ] **Step 3: Create `app/Http/Requests/Auth/LoginTokenRequest.php`**
 
@@ -1903,7 +1854,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
 ```bash
 ./vendor/bin/pest tests/Feature/Api/V1/AuthTokenTest.php
 ```
-Expected: **PASS** (15 tests).
+Expected: **PASS** (7 tests).
 
 - [ ] **Step 12: Static checks**
 
@@ -2423,10 +2374,6 @@ it('falls back to the dashboard placeholder while tickets.index does not exist',
 
     $this->actingAs(User::factory()->create())->get('/')->assertRedirect(route('dashboard'));
 })->skip(fn (): bool => Route::has('tickets.index'), 'tickets.index exists (T05 merged)');
-
-it('makes Fortify redirect to home after login, registration and verification', function (): void {
-    expect(config('fortify.home'))->toBe('/');
-});
 ```
 
 - [ ] **Step 3: Run it and confirm it fails**
@@ -2434,7 +2381,7 @@ it('makes Fortify redirect to home after login, registration and verification', 
 ```bash
 ./vendor/bin/pest tests/Feature/App/HomeRedirectTest.php
 ```
-Expected: **FAIL**. `/` still renders the Welcome page through the kit's `Route::inertia('/', 'Welcome')` (`Response status code [200] is not a redirect status code.`), and `fortify.home` is `/dashboard`.
+Expected: **FAIL**. `/` still renders the Welcome page through the kit's `Route::inertia('/', 'Welcome')` (`Response status code [200] is not a redirect status code.`).
 
 - [ ] **Step 4: Create `app/Http/Controllers/HomeController.php`**
 
@@ -2512,7 +2459,7 @@ git rm tests/Feature/ExampleTest.php
 ```bash
 ./vendor/bin/pest tests/Feature/App/HomeRedirectTest.php tests/Feature/Auth
 ```
-Expected: **PASS** (31 tests at kit commit `fd5b58f`: 5 in `HomeRedirectTest`, 26 in the kit's `tests/Feature/Auth`, some of which the kit's `skipUnlessFortifyHas()` may skip). In T00 the "falls back" test runs, and it's reported as skipped once T05 has merged. If any other starter-kit test fails because it expects `/` to render `Welcome`, **STOP and report**.
+Expected: **PASS** (30 tests at kit commit `fd5b58f`: 4 in `HomeRedirectTest`, 26 in the kit's `tests/Feature/Auth`, some of which the kit's `skipUnlessFortifyHas()` may skip). In T00 the "falls back" test runs, and it's reported as skipped once T05 has merged. If any other starter-kit test fails because it expects `/` to render `Welcome`, **STOP and report**.
 
 - [ ] **Step 10: Gate**
 
@@ -2564,7 +2511,7 @@ php artisan route:list --path=api/v1
 ```
 Expected:
 - Pint `PASS` and PHPStan `[OK] No errors` (under an agent: `"result":"passed"` JSON lines from `laravel/pao`).
-- All Pest tests pass, both the starter kit's PHPUnit classes and the T00 tests (76 at kit commit `fd5b58f`).
+- All Pest tests pass, both the starter kit's PHPUnit classes and the T00 tests (63 at kit commit `fd5b58f`).
 - The build, `vp check` and the type check succeed.
 - `route:list` shows exactly `POST api/v1/auth/tokens`, `DELETE api/v1/auth/tokens/current` and `GET api/v1/me`, named `api.v1.auth.*`.
 

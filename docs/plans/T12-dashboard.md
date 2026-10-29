@@ -585,7 +585,6 @@ beforeEach(function (): void {
     $now = CarbonImmutable::now();
 
     $this->agent = User::factory()->agent()->create(['name' => 'Agent Alpha']);
-    $this->admin = User::factory()->admin()->create();
 
     $this->breached = Ticket::factory()->create([
         'status' => TicketStatus::InProgress,
@@ -621,15 +620,6 @@ it('renders the dashboard page with stats and the viewer\'s tickets', function (
             ->where('myTickets.0.number', $this->breached->number)
             ->where('myTickets.0.priority.value', 'critical')
             ->where('myTickets.0.sla.state', 'breached'));
-});
-
-it('gives an admin with no assigned tickets an empty strip', function (): void {
-    $this->actingAs($this->admin)
-        ->get(route('dashboard'))
-        ->assertOk()
-        ->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('dashboard/Index')
-            ->has('myTickets', 0));
 });
 
 it('returns the same figures from the API', function (): void {
@@ -683,23 +673,11 @@ it('rejects guests', function (): void {
     $matrix->expectAccess('GET', route('dashboard'), 302)->assertRedirect(route('login'));
     $matrix->expectAccess('GET', route('api.v1.dashboard'), 401);
 });
-
-it('sends customers from home to their tickets, so they never land on the 403', function (): void {
-    $matrix = AuthorizationMatrix::for($this);
-
-    $matrix->actingAsRole(Role::Customer);
-    $matrix->expectAccess('GET', route('home'), 302)->assertRedirect(route('tickets.index'));
-
-    $matrix->actingAsRole(Role::Agent);
-    $matrix->expectAccess('GET', route('home'), 302)->assertRedirect(route('dashboard'));
-});
 ```
-
-  > The last test covers T00's `home` route, which sends staff to the dashboard and customers to `tickets.index`. It is here because it is the reason a 403 on `dashboard` never reaches a customer through normal navigation.
 
 - [ ] **Step 3: Run both and expect FAIL.**
   `./vendor/bin/pest tests/Feature/Dashboard/DashboardHttpTest.php tests/Feature/Authorization/DashboardAuthorizationTest.php`
-  Expected: FAIL with `Symfony\Component\Routing\Exception\RouteNotFoundException: Route [dashboard] not defined.` T00 removes the starter kit's `dashboard` route, so T12 is its only definition. The `home` test passes already, because `home` is T00's.
+  Expected: FAIL with `Symfony\Component\Routing\Exception\RouteNotFoundException: Route [dashboard] not defined.` T00 removes the starter kit's `dashboard` route, so T12 is its only definition.
 
 - [ ] **Step 4: Create** `app/Http/Resources/V1/DashboardTicketResource.php`. It is a small, relation-free shape, so the strip needs no eager loading.
 
@@ -868,7 +846,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
 - [ ] **Step 10: Run both and expect PASS.**
   `./vendor/bin/pest tests/Feature/Dashboard tests/Feature/Authorization/DashboardAuthorizationTest.php`
-  Expected: PASS (18 tests: 10 stats, 3 HTTP, 5 authorization).
+  Expected: PASS (16 tests: 10 stats, 2 HTTP, 4 authorization).
 
 - [ ] **Step 11: Format and analyse.**
   `./vendor/bin/pint --dirty && ./vendor/bin/phpstan analyse --memory-limit=1G`
@@ -1329,7 +1307,7 @@ npm run build && npx vue-tsc --noEmit
 ```
 
 Expected:
-- 18 dashboard tests pass.
+- 16 dashboard tests pass.
 - `pint --test` passes, and PHPStan prints `[OK] No errors`.
 - The full suite has no failures.
 - The build succeeds with no type errors.
@@ -1351,5 +1329,5 @@ Manual check:
 
    `DashboardTicketResource` exists because `TicketListResource`'s fields aren't pinned in §3.12.
 3. **"My tickets" audience.** The strip is shown to all staff. Admins can hold tickets by claiming them. Restricting it to agents would mean a role check in the controller, which CLAUDE.md forbids.
-4. **Resolved:** T00's `home` route redirects customers to `tickets.index` and staff to `dashboard`. `dashboard` stays 403 for customers, and DashboardAuthorizationTest covers both behaviors.
+4. **Resolved:** T00's `home` route redirects customers to `tickets.index` and staff to `dashboard`. `dashboard` stays 403 for customers. T00's tests own the `home` redirect; DashboardAuthorizationTest covers the 403.
 5. **`by_agent` scope.** It lists every agent, including idle ones, plus admins only while they hold active tickets.

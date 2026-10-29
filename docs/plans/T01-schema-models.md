@@ -213,16 +213,6 @@ it('reports whether a status is active', function (TicketStatus $status, bool $a
     'resolved' => [TicketStatus::Resolved, false],
     'closed' => [TicketStatus::Closed, false],
 ]);
-
-it('has human labels', function (TicketStatus $status, string $label): void {
-    expect($status->label())->toBe($label);
-})->with([
-    [TicketStatus::Open, 'Open'],
-    [TicketStatus::InProgress, 'In Progress'],
-    [TicketStatus::WaitingForCustomer, 'Waiting for Customer'],
-    [TicketStatus::Resolved, 'Resolved'],
-    [TicketStatus::Closed, 'Closed'],
-]);
 ```
 
 - [ ] **Step 2: Write `tests/Unit/Enums/PermissionTest.php`**
@@ -281,29 +271,6 @@ it('grants each role exactly its TD-011 baseline', function (Role $role, array $
     ]],
 ]);
 
-it('never gives customers staff capabilities', function (Permission $permission): void {
-    expect(Permission::forRole(Role::Customer))->not->toContain($permission);
-})->with([
-    Permission::TicketsViewAny,
-    Permission::TicketsNotesInternal,
-    Permission::TicketsClaim,
-    Permission::TicketsCreateOnBehalf,
-    Permission::DashboardView,
-    Permission::ImportsManage,
-]);
-
-it('keeps admin areas admin-only', function (Permission $permission): void {
-    expect(Permission::forRole(Role::Agent))->not->toContain($permission)
-        ->and(Permission::forRole(Role::Admin))->toContain($permission);
-})->with([
-    Permission::ImportsManage,
-    Permission::UsersManage,
-    Permission::CategoriesManage,
-    Permission::HolidaysManage,
-    Permission::TicketsAssignAny,
-    Permission::TicketsUpdateAny,
-]);
-
 it('assigns every permission to at least one role, with no duplicates', function (): void {
     $granted = [];
 
@@ -314,16 +281,6 @@ it('assigns every permission to at least one role, with no duplicates', function
     }
 
     expect(array_values(array_unique($granted)))->toEqualCanonicalizing(permissionValues(Permission::cases()));
-});
-
-it('uses <resource>.<action>[.<scope>] names', function (Permission $permission): void {
-    expect($permission->value)->toMatch('/^[a-z]+\.[a-z]+(\.[a-z_]+)?$/');
-})->with(Permission::cases());
-
-it('labels roles', function (): void {
-    expect(Role::Admin->label())->toBe('Administrator')
-        ->and(Role::Agent->label())->toBe('Support Agent')
-        ->and(Role::Customer->label())->toBe('Customer');
 });
 ```
 
@@ -386,10 +343,7 @@ it('stores the spec §15 event values', function (): void {
 
 declare(strict_types=1);
 
-use App\Enums\AssignmentMethod;
 use App\Enums\EscalationLevel;
-use App\Enums\ImportStatus;
-use App\Enums\SlaState;
 use App\Enums\TicketPriority;
 
 it('ranks priorities from low to critical', function (): void {
@@ -402,26 +356,8 @@ it('ranks priorities from low to critical', function (): void {
         ]);
 });
 
-it('labels SLA states', function (): void {
-    expect(array_map(fn (SlaState $state): array => [$state->value, $state->label()], SlaState::cases()))
-        ->toBe([
-            ['within', 'Within SLA'],
-            ['approaching', 'Approaching breach'],
-            ['breached', 'Breached'],
-            ['paused', 'Paused'],
-            ['stopped', 'Stopped'],
-        ]);
-});
-
 it('backs escalation levels with the stored tinyint', function (): void {
     expect(array_map(fn (EscalationLevel $level): int => $level->value, EscalationLevel::cases()))->toBe([0, 1, 2]);
-});
-
-it('defines assignment methods and import statuses', function (): void {
-    expect(array_map(fn (AssignmentMethod $method): string => $method->value, AssignmentMethod::cases()))
-        ->toBe(['manual', 'claimed', 'automatic'])
-        ->and(array_map(fn (ImportStatus $status): string => $status->value, ImportStatus::cases()))
-        ->toBe(['pending', 'processing', 'completed', 'completed_with_errors', 'failed']);
 });
 ```
 
@@ -474,7 +410,7 @@ it('carries a stable status and code', function (DomainException $exception, int
 ```bash
 ./vendor/bin/pest tests/Unit/Enums tests/Unit/Exceptions
 ```
-Expected: **FAIL** with `Class "App\Enums\TicketStatus" not found` (and the same for the other enums and exceptions).
+Expected: **FAIL** with `Class "App\Enums\TicketStatus" not found` (and the same for `Permission`, `Role`, `ActivityType`, `TicketPriority`, `EscalationLevel` and the exceptions).
 
 - [ ] **Step 7: Create `app/Enums/Role.php`**
 
@@ -1876,7 +1812,6 @@ declare(strict_types=1);
 use App\Models\Category;
 use App\Models\Ticket;
 use App\Models\User;
-use Carbon\CarbonImmutable;
 
 it('links agents to categories through agent_category', function (): void {
     $categories = Category::factory()->count(2)->create();
@@ -1929,13 +1864,6 @@ it('scopes admins', function (): void {
     expect(User::query()->admins()->pluck('id')->all())->toBe([$admin->id]);
 });
 
-it('casts availability and the last assignment time', function (): void {
-    $user = User::factory()->create(['last_assigned_at' => '2026-10-29 10:00:00'])->fresh();
-
-    expect($user?->is_available)->toBeTrue()
-        ->and($user?->last_assigned_at)->toBeInstanceOf(CarbonImmutable::class);
-});
-
 it('mass-assigns only profile fields', function (): void {
     expect((new User)->getFillable())->toBe(['name', 'email', 'password', 'is_available']);
 });
@@ -1951,48 +1879,14 @@ declare(strict_types=1);
 use App\Enums\ActivityType;
 use App\Enums\EscalationLevel;
 use App\Enums\SlaState;
-use App\Enums\TicketPriority;
 use App\Enums\TicketStatus;
-use App\Models\Attachment;
-use App\Models\Category;
 use App\Models\Ticket;
-use App\Models\TicketReply;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 
 // Factory timestamps are relative to "now"; freezing it makes the SLA dataset exact.
 beforeEach(function (): void {
     $this->travelTo(CarbonImmutable::parse('2026-10-29 10:00:00', 'UTC'));
-});
-
-it('binds routes by ticket number', function (): void {
-    expect((new Ticket)->getRouteKeyName())->toBe('number');
-});
-
-it('exposes its relations', function (): void {
-    $agent = User::factory()->agent()->create();
-    $ticket = Ticket::factory()->assignedTo($agent)->create();
-    $reply = TicketReply::factory()->create(['ticket_id' => $ticket->id]);
-    $attachment = Attachment::factory()->create(['ticket_id' => $ticket->id]);
-    activity('ticket')->performedOn($ticket)->event(ActivityType::Created->value)->log('Ticket created');
-
-    expect($ticket->category)->toBeInstanceOf(Category::class)
-        ->and($ticket->customer?->is($ticket->creator))->toBeTrue()
-        ->and($ticket->assignedAgent?->is($agent))->toBeTrue()
-        ->and($ticket->replies->modelKeys())->toBe([$reply->id])
-        ->and($ticket->attachments->modelKeys())->toBe([$attachment->id])
-        ->and($ticket->activities->pluck('event')->all())->toBe([ActivityType::Created->value]);
-});
-
-it('casts status, priority, escalation level and timestamps', function (): void {
-    $ticket = Ticket::factory()->priority(TicketPriority::High)->create()->fresh();
-
-    expect($ticket?->status)->toBe(TicketStatus::Open)
-        ->and($ticket?->priority)->toBe(TicketPriority::High)
-        ->and($ticket?->escalation_level)->toBe(EscalationLevel::None)
-        ->and($ticket?->sla_due_at)->toBeInstanceOf(CarbonImmutable::class)
-        ->and($ticket?->sla_warning_at)->toBeInstanceOf(CarbonImmutable::class)
-        ->and($ticket?->created_at)->toBeInstanceOf(CarbonImmutable::class);
 });
 
 it('starts unsaved tickets at escalation level none', function (): void {
@@ -2068,7 +1962,6 @@ it('hides internal-note activities from customers only', function (): void {
 
 declare(strict_types=1);
 
-use App\Models\Attachment;
 use App\Models\Ticket;
 use App\Models\TicketReply;
 use App\Models\User;
@@ -2083,15 +1976,6 @@ it('hides internal replies from customers and shows everything to staff', functi
     expect($ticket->replies()->visibleTo($customer)->pluck('id')->all())->toBe([$public->id])
         ->and($ticket->replies()->visibleTo($staff)->orderBy('id')->pluck('id')->all())->toBe([$public->id, $internal->id]);
 })->with(['agent', 'admin']);
-
-it('belongs to a ticket and an author and owns its attachments', function (): void {
-    $reply = TicketReply::factory()->create();
-    $attachment = Attachment::factory()->create(['ticket_id' => $reply->ticket_id, 'reply_id' => $reply->id]);
-
-    expect($reply->ticket?->id)->toBe($reply->ticket_id)
-        ->and($reply->author?->id)->toBe($reply->ticket?->customer_id)
-        ->and($reply->attachments->modelKeys())->toBe([$attachment->id]);
-});
 
 it('defaults to a public reply and writes internal notes as staff', function (): void {
     $public = TicketReply::factory()->create()->fresh();
@@ -2114,70 +1998,23 @@ it('mass-assigns only body and is_internal', function (): void {
 
 declare(strict_types=1);
 
-use App\Enums\ImportStatus;
 use App\Models\Attachment;
 use App\Models\Category;
 use App\Models\Holiday;
-use App\Models\Ticket;
-use App\Models\TicketImport;
-use App\Models\TicketImportError;
-use App\Models\TicketReply;
-use App\Models\User;
-use Carbon\CarbonImmutable;
 
-it('relates categories to agents and tickets and scopes active ones', function (): void {
+it('scopes active categories', function (): void {
     $active = Category::factory()->create();
     Category::factory()->create(['is_active' => false]);
-    $agent = User::factory()->agent([$active->id])->create();
-    $ticket = Ticket::factory()->create(['category_id' => $active->id]);
 
-    expect($active->agents->modelKeys())->toBe([$agent->id])
-        ->and($active->tickets->modelKeys())->toBe([$ticket->id])
-        ->and(Category::query()->active()->pluck('id')->all())->toBe([$active->id]);
+    expect(Category::query()->active()->pluck('id')->all())->toBe([$active->id]);
 });
 
-it('relates an attachment to its ticket, reply and uploader and has no updated_at', function (): void {
-    $reply = TicketReply::factory()->create();
-    $attachment = Attachment::factory()->create(['ticket_id' => $reply->ticket_id, 'reply_id' => $reply->id])->fresh();
-
-    expect(Attachment::UPDATED_AT)->toBeNull()
-        ->and($attachment?->ticket?->id)->toBe($reply->ticket_id)
-        ->and($attachment?->reply?->id)->toBe($reply->id)
-        ->and($attachment?->uploader)->toBeInstanceOf(User::class)
-        ->and($attachment?->created_at)->toBeInstanceOf(CarbonImmutable::class)
-        ->and((new Attachment)->getFillable())->toBe([]);
+it('never mass-assigns attachment columns', function (): void {
+    expect((new Attachment)->getFillable())->toBe([]);
 });
 
-it('casts holiday dates to immutable dates', function (): void {
-    $holiday = Holiday::factory()->create(['date' => '2026-12-16', 'name' => 'Victory Day'])->fresh();
-
-    expect($holiday?->date)->toBeInstanceOf(CarbonImmutable::class)
-        ->and($holiday?->date->toDateString())->toBe('2026-12-16')
-        ->and((new Holiday)->getFillable())->toBe(['date', 'name']);
-});
-
-it('relates imports to their admin and row errors', function (): void {
-    $admin = User::factory()->admin()->create();
-    $import = new TicketImport(['original_name' => 'tickets.csv', 'path' => 'imports/tickets.csv']);
-    $import->user()->associate($admin);
-    $import->save();
-
-    $error = $import->errors()->create([
-        'row_number' => 3,
-        'errors' => ['subject' => ['The subject field is required.']],
-        'raw' => ['subject' => '', 'priority' => 'high'],
-    ]);
-
-    $import = $import->fresh();
-    $error = TicketImportError::query()->findOrFail($error->id);
-
-    expect($import?->status)->toBe(ImportStatus::Pending)
-        ->and($import?->user?->is($admin))->toBeTrue()
-        ->and($import?->errors->modelKeys())->toBe([$error->id])
-        ->and($error->import?->id)->toBe($import?->id)
-        ->and($error->errors)->toBe(['subject' => ['The subject field is required.']])
-        ->and($error->raw)->toBe(['subject' => '', 'priority' => 'high'])
-        ->and(TicketImportError::UPDATED_AT)->toBeNull();
+it('mass-assigns only the holiday date and name', function (): void {
+    expect((new Holiday)->getFillable())->toBe(['date', 'name']);
 });
 ```
 

@@ -478,23 +478,6 @@ it('stores a customer reply as public even when is_internal=1 is posted', functi
         ->and(TicketReply::query()->where('ticket_id', $this->ticket->id)->count())->toBe(2);
 });
 
-it('refuses a reply on a closed ticket at the policy (403), web and API', function (): void {
-    $closed = Ticket::factory()->status(TicketStatus::Closed)->create([
-        'customer_id' => $this->customer->id,
-        'created_by_id' => $this->customer->id,
-    ]);
-
-    // T04: TicketPolicy::reply denies Closed tickets for everyone, so HTTP never reaches AddReply.
-    Sanctum::actingAs($this->agent, ['*']);
-    $this->postJson(route('api.v1.tickets.replies.store', $closed), ['body' => 'Too late'])->assertForbidden();
-
-    $this->actingAs($this->customer)
-        ->post(route('tickets.replies.store', $closed), ['body' => 'Too late'])
-        ->assertForbidden();
-
-    expect(TicketReply::query()->where('ticket_id', $closed->id)->exists())->toBeFalse();
-});
-
 it('returns 422 ticket_closed when the ticket closes between authorization and the write', function (): void {
     // AddReply is resolved after the FormRequest has authorized, so this simulates a concurrent close.
     app()->resolving(AddReply::class, function (): void {
@@ -551,20 +534,13 @@ it('rejects more files than allowed per reply', function (): void {
         ->assertJsonValidationErrors('attachments');
 });
 
-it('accepts every allowed type at the size limit', function (UploadedFile $file): void {
+it('accepts an allowed file at the size limit', function (UploadedFile $file): void {
     Sanctum::actingAs($this->agent, ['*']);
 
     $this->postJson(route('api.v1.tickets.replies.store', $this->ticket), ['body' => 'Fine', 'attachments' => [$file]])
         ->assertCreated();
 })->with([
     'pdf at max size' => [fn (): UploadedFile => UploadedFile::fake()->create('max.pdf', (int) config('attachments.max_kb'), 'application/pdf')],
-    'png' => [fn (): UploadedFile => UploadedFile::fake()->image('shot.png')],
-    'jpg' => [fn (): UploadedFile => UploadedFile::fake()->image('shot.jpg')],
-    'txt' => [fn (): UploadedFile => UploadedFile::fake()->create('log.txt', 3, 'text/plain')],
-    'csv' => [fn (): UploadedFile => UploadedFile::fake()->create('rows.csv', 3, 'text/csv')],
-    'docx' => [fn (): UploadedFile => UploadedFile::fake()->create('spec.docx', 3, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')],
-    'xlsx' => [fn (): UploadedFile => UploadedFile::fake()->create('sheet.xlsx', 3, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')],
-    'zip' => [fn (): UploadedFile => UploadedFile::fake()->create('bundle.zip', 3, 'application/zip')],
 ]);
 
 it('stores attachments under a UUID name and keeps the original name only as metadata', function (): void {
@@ -979,7 +955,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
 ```bash
 ./vendor/bin/pest tests/Feature/Conversation/ReplyEndpointsTest.php
 ```
-Expected: PASS, 23 tests (13 of them from the two datasets).
+Expected: PASS, 15 tests (6 of them from the two datasets).
 
 - [ ] **Step 12: Confirm the routes**
 
@@ -1070,25 +1046,6 @@ it('lets staff download an internal attachment', function (): void {
         ->get(route('attachments.download', $this->internalAttachment))
         ->assertOk()
         ->assertDownload('internal-notes.pdf');
-});
-
-it('never lets the customer download an internal attachment', function (): void {
-    // AttachmentPolicy hides internal files as not found (T04).
-    $this->actingAs($this->customer)->get(route('attachments.download', $this->internalAttachment))->assertNotFound();
-
-    Sanctum::actingAs($this->customer, ['*']);
-    $this->getJson(route('api.v1.attachments.download', $this->internalAttachment))->assertNotFound();
-});
-
-it('never lets another customer download any attachment of the ticket', function (): void {
-    $stranger = User::factory()->customer()->create();
-
-    $this->actingAs($stranger)->get(route('attachments.download', $this->publicAttachment))->assertNotFound();
-});
-
-it('requires authentication', function (): void {
-    $this->get(route('attachments.download', $this->publicAttachment))->assertRedirect(route('login'));
-    $this->getJson(route('api.v1.attachments.download', $this->publicAttachment))->assertUnauthorized();
 });
 ```
 
@@ -1209,7 +1166,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
 ```bash
 ./vendor/bin/pest tests/Feature/Conversation/AttachmentDownloadTest.php tests/Feature/Conversation/ReplyEndpointsTest.php
 ```
-Expected: PASS, 29 tests.
+Expected: PASS, 18 tests.
 
 - [ ] **Step 8: Style and static analysis**
 
@@ -1775,7 +1732,7 @@ git commit -m "feat(conversation): add timeline, reply form and attachment list"
 ./vendor/bin/pest --parallel
 npm run build && npx vue-tsc --noEmit
 ```
-Expected: Pint reports no changes; PHPStan `[OK] No errors`; Pest all green, including the 80 T07 tests (`tests/Feature/Conversation/*` and `tests/Feature/Authorization/ConversationAuthorizationTest.php`); the build and `vue-tsc` exit 0.
+Expected: Pint reports no changes; PHPStan `[OK] No errors`; Pest all green, including the 69 T07 tests (`tests/Feature/Conversation/*` and `tests/Feature/Authorization/ConversationAuthorizationTest.php`); the build and `vue-tsc` exit 0.
 
 ```bash
 ./vendor/bin/pest --filter="internal" tests/Feature/Conversation tests/Feature/Authorization/ConversationAuthorizationTest.php

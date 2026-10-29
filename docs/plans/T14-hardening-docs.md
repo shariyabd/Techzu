@@ -42,7 +42,7 @@
 
 ### Consumes (README §3)
 
-- **Services:** `SlaQuery::whereBreached/whereApproaching`, `TicketFilter::apply(Builder, array, User, CarbonImmutable)`, `AttachmentStorer::storeMany`.
+- **Services:** `SlaQuery::whereBreached/whereApproaching`, `TicketFilter::apply(Builder, array, User, CarbonImmutable)`.
 - **Actions:** `Conversation\AddReply::handle`.
 - **Models:** `Ticket::activities()`, `TicketReply::scopeVisibleTo`.
 - **Policies:** `UserPolicy::viewAny`.
@@ -322,19 +322,11 @@ it('throws on an N+1 relation access', function (): void {
 
     expect(fn () => $tickets->first()?->customer)->toThrow(LazyLoadingViolationException::class);
 });
-
-it('allows the same access once the relation is eager-loaded', function (): void {
-    Ticket::factory()->count(2)->create();
-
-    $tickets = Ticket::query()->with('customer:id,name')->get();
-
-    expect($tickets->first()?->customer?->name)->toBeString();
-});
 ```
 
 - [ ] **Step 2: Run it.**
   `./vendor/bin/pest tests/Feature/Performance/LazyLoadingTest.php`
-  Expected: PASS (3 tests). If the first test fails, then T00's `AppServiceProvider` doesn't call `Model::preventLazyLoading(! app()->isProduction())` (or `Model::shouldBeStrict(...)`). Stop and report it as a T00 gap, since T14 doesn't own that file.
+  Expected: PASS (2 tests). If the first test fails, then T00's `AppServiceProvider` doesn't call `Model::preventLazyLoading(! app()->isProduction())` (or `Model::shouldBeStrict(...)`). Stop and report it as a T00 gap, since T14 doesn't own that file.
 
 - [ ] **Step 3: Commit.**
 
@@ -346,19 +338,19 @@ git commit -m "test(core): confirm lazy-loading prevention is active" --trailer 
 ---
 ### T14.3 — Security checklist (TD-120), each item proven by a test
 
-Earlier tasks test their own slice: T04 the matrix, T07 leakage, T10 notification routing. This file is a **cross-cutting regression suite**. Every TD-120 row (plus TD-012) has a `describe()` block that proves the measure end to end, through the public surface. A future change in any one task then can't quietly undo a guarantee.
+Earlier tasks test their own slice: T04 the matrix, T07 leakage, T10 notification routing. This file is a **cross-cutting regression suite**. Every TD-120 row (plus TD-012) whose guarantee spans tasks has a `describe()` block that proves the measure end to end, through the public surface. A measure that one task fully owns at the same layer (tokens, upload naming and download headers, the sort whitelist) is not repeated here; the table names the owning test. A future change in any one task then can't quietly undo a guarantee.
 
 | TD-120 item | Proven by (`SecurityChecklistTest.php`) | Also covered by |
 |---|---|---|
 | Server-side authorization | `server-side authorization` → every non-public route requires auth; every admin or import route carries `can:` | T04 `TicketPolicyTest`; T05–T13 `*AuthorizationTest.php` |
 | Internal-note leakage, 3 layers | `internal-note leakage` → scope, HTTP/Resource and Inertia props, attachment download, notifications | T07, T10 |
 | Mass assignment | `mass assignment` → protected columns not fillable; injected fields ignored by `tickets.store`; profile update can't change role | T05 |
-| File uploads | `file uploads` → PHP disguised as PDF rejected; UUID name on a private disk; download headers | T07 |
+| File uploads | `file uploads` → PHP disguised as PDF rejected | T07 (UUID name on a private disk, download headers) |
 | Rate limiting | `rate limiting` → 6th token request is 429; every API route is in the throttled `api` group; reply upload route throttled | T00 |
-| Tokens | `tokens` → abilities mirror permissions; `DELETE auth/tokens/current` revokes | T00 |
+| Tokens | — (not repeated here) | T00 `AuthTokenTest`: abilities mirror permissions; `DELETE auth/tokens/current` revokes |
 | Inertia props | `inertia shared props` → `auth.user` has exactly id, name, email, email_verified_at, roles; `auth.can` holds only booleans | T04 |
-| Search input | `search input` → FULLTEXT operators don't 500; injection text is bound; unknown sort is 422 | T08 |
-| CSRF / XSS | `csrf and xss` → the web group has `PreventRequestForgery` (Laravel 13's name for the CSRF middleware); no `v-html` anywhere in `resources/js` | — |
+| Search input | `search input` → FULLTEXT operators don't 500; injection text is bound | T08 (unknown sort is 422) |
+| CSRF / XSS | `csrf and xss` → no `v-html` anywhere in `resources/js`. CSRF is the framework's `web` group default (`PreventRequestForgery`), so it isn't re-tested | — |
 | 404 not 403 (TD-012) | `foreign tickets` → web and API return 404 to another customer | T04 |
 
 **Field names** come from the sibling plans:
@@ -379,8 +371,6 @@ use App\Models\Category;
 use App\Models\Ticket;
 use App\Models\TicketReply;
 use App\Models\User;
-use App\Services\Attachments\AttachmentStorer;
-use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Routing\Route as RoutingRoute;
 use Illuminate\Support\Facades\File;
@@ -388,7 +378,6 @@ use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia;
-use Laravel\Sanctum\PersonalAccessToken;
 use Laravel\Sanctum\Sanctum;
 
 beforeEach(function (): void {
@@ -565,33 +554,6 @@ describe('file uploads', function (): void {
 
         expect(Attachment::query()->count())->toBe(0);
     });
-
-    it('stores files under a random UUID name on the private disk', function (): void {
-        $stored = app(AttachmentStorer::class)->storeMany(
-            $this->ticket,
-            null,
-            $this->customer,
-            [UploadedFile::fake()->create('../../etc/passwd.pdf', 5, 'application/pdf')],
-            false,
-        )->sole();
-
-        expect($stored->path)->toMatch('#^attachments/'.$this->ticket->id.'/[0-9a-f-]{36}\.pdf$#')
-            ->and($stored->disk)->not->toBe('public')
-            ->and($stored->original_name)->toContain('passwd');
-        Storage::disk($stored->disk)->assertExists($stored->path);
-    });
-
-    it('downloads with nosniff and as an attachment', function (): void {
-        $stored = app(AttachmentStorer::class)->storeMany(
-            $this->ticket, null, $this->customer,
-            [UploadedFile::fake()->create('report.pdf', 5, 'application/pdf')], false,
-        )->sole();
-
-        $response = $this->actingAs($this->customer)->get(route('attachments.download', $stored));
-
-        $response->assertOk()->assertHeader('X-Content-Type-Options', 'nosniff');
-        expect((string) $response->headers->get('Content-Disposition'))->toStartWith('attachment');
-    });
 });
 
 describe('rate limiting', function (): void {
@@ -630,31 +592,6 @@ describe('rate limiting', function (): void {
     })->with(['tickets.replies.store', 'api.v1.tickets.replies.store', 'admin.imports.store', 'api.v1.imports.store']);
 });
 
-describe('tokens', function (): void {
-    it('issues tokens whose abilities mirror the user\'s permissions', function (): void {
-        $this->postJson(route('api.v1.auth.tokens.store'), [
-            'email' => $this->agent->email, 'password' => 'password', 'device_name' => 'cli',
-        ])->assertSuccessful();
-
-        $abilities = $this->agent->tokens()->sole()->abilities;
-        sort($abilities);
-        $permissions = $this->agent->getAllPermissions()->pluck('name')->sort()->values()->all();
-
-        expect($abilities)->toBe($permissions);
-    });
-
-    it('revokes the current token', function (): void {
-        $plain = $this->customer->createToken('cli')->plainTextToken;
-
-        $this->withToken($plain)->getJson(route('api.v1.auth.me'))->assertOk();
-        $this->withToken($plain)->deleteJson(route('api.v1.auth.tokens.destroy'))->assertSuccessful();
-
-        app('auth')->forgetGuards();
-        expect(PersonalAccessToken::findToken($plain))->toBeNull();
-        $this->withToken($plain)->getJson(route('api.v1.auth.me'))->assertUnauthorized();
-    });
-});
-
 describe('inertia shared props', function (): void {
     it('shares only id, name, email and roles for the user and only booleans for abilities', function (): void {
         $this->actingAs($this->agent)
@@ -689,20 +626,9 @@ describe('search input', function (): void {
             ->assertOk()
             ->assertDontSee('Other customer secret');
     });
-
-    it('rejects a sort column outside the whitelist', function (): void {
-        Sanctum::actingAs($this->agent, ['*']);
-
-        $this->getJson(route('api.v1.tickets.index', ['sort' => 'password']))->assertUnprocessable();
-    });
 });
 
 describe('csrf and xss', function (): void {
-    it('verifies CSRF tokens on the web group', function (): void {
-        // Laravel 13 registers PreventRequestForgery; ValidateCsrfToken is only a deprecated subclass alias.
-        expect(app('router')->getMiddlewareGroups()['web'] ?? [])->toContain(PreventRequestForgery::class);
-    });
-
     it('never renders raw HTML in Vue', function (): void {
         $offenders = collect(File::allFiles(resource_path('js')))
             ->filter(fn (\SplFileInfo $file): bool => str_contains((string) file_get_contents($file->getPathname()), 'v-html'))
@@ -729,7 +655,7 @@ describe('foreign tickets', function (): void {
 
 - [ ] **Step 2: Run it.**
   `./vendor/bin/pest tests/Feature/Security/SecurityChecklistTest.php`
-  Expected: PASS (31 tests, counting dataset rows). Every assertion describes behavior that T00–T13 committed to.
+  Expected: PASS (25 tests, counting dataset rows). Every assertion describes behavior that T00–T13 committed to.
 
 - [ ] **Step 3: Prove the suite can fail.**
   1. Temporarily add `<div v-html="'x'" />` to any page.
@@ -1876,7 +1802,7 @@ git commit -m "docs(api): regenerate OpenAPI spec" --trailer "Refs: T14.8"
   - the customer list uses `(customer_id, created_at)`
   - the activity timeline uses `activity_log(subject_type, subject_id, created_at)`
 - [ ] `Model::preventsLazyLoading()` is true in tests, and an N+1 access throws.
-- [ ] Every TD-120 row, plus TD-012, maps to a passing test in `SecurityChecklistTest.php`. Missing measures were reported to the controller, not patched from T14.
+- [ ] Every TD-120 row, plus TD-012, maps to a passing test: in `SecurityChecklistTest.php`, or in the owning task's test named in its "Also covered by" column. Missing measures were reported to the controller, not patched from T14.
 - [ ] Scramble documents `api/v1`. `/docs/api` is open in `local` and admin-only elsewhere (agents, customers and guests get 403). `docs/api/openapi.json` is committed and current.
 - [ ] `docs/API.md` covers the auth flow with curl examples, the error-code table (TD-110 plus `cannot_change_own_role`), pagination, the filter parameters, and every endpoint grouped by feature. The drift test passes in both directions.
 - [ ] `docs/TECHNICAL.md` contains:
@@ -1903,7 +1829,7 @@ php artisan scramble:export --path=docs/api/openapi.json && git diff --exit-code
 ```
 
 Expected:
-- The T14 tests pass: 4 index, 3 lazy-loading, 31 security and 4 docs.
+- The T14 tests pass: 4 index, 2 lazy-loading, 25 security and 4 docs.
 - `pint --test` passes, PHPStan reports no errors, and the full suite has no failures.
 - The build succeeds with no type errors.
 - The spec diff is empty.

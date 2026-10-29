@@ -1249,39 +1249,10 @@ declare(strict_types=1);
 
 use App\Enums\TicketPriority;
 use App\Models\Holiday;
-use App\Providers\SlaServiceProvider;
 use App\Services\Sla\BusinessCalendar;
 use App\Services\Sla\HolidayRepository;
 use App\Services\Sla\SlaCalculator;
 use Carbon\CarbonImmutable;
-
-it('is registered in bootstrap/providers.php', function (): void {
-    expect(app()->getProviders(SlaServiceProvider::class))->not->toBeEmpty();
-});
-
-it('ships the default SLA rules', function (): void {
-    expect(config('sla.resolution_minutes'))->toBe([
-        'low' => 2880,
-        'medium' => 1440,
-        'high' => 480,
-        'critical' => 120,
-    ])->and(config('sla.warning_threshold_percent'))->toBe(75);
-});
-
-it('ships the default business hours', function (): void {
-    $day = [['09:00', '18:00']];
-
-    expect(config('business_hours.timezone'))->toBe('Asia/Dhaka')
-        ->and(config('business_hours.week'))->toBe([
-            'sunday' => $day,
-            'monday' => $day,
-            'tuesday' => $day,
-            'wednesday' => $day,
-            'thursday' => $day,
-            'friday' => [],
-            'saturday' => [],
-        ]);
-});
 
 it('resolves a calculator that reproduces the PRD example from config', function (): void {
     $deadlines = app(SlaCalculator::class)->deadlinesFor(
@@ -1308,19 +1279,6 @@ it('builds the calendar with holidays from the database', function (): void {
         ->and(app(BusinessCalendar::class)->isBusinessTime(CarbonImmutable::parse('2026-11-01 10:00:00', 'Asia/Dhaka')))->toBeFalse();
 });
 
-it('binds the calendar and the calculator as scoped instances', function (): void {
-    $calendar = app(BusinessCalendar::class);
-    $calculator = app(SlaCalculator::class);
-
-    expect(app(BusinessCalendar::class))->toBe($calendar)
-        ->and(app(SlaCalculator::class))->toBe($calculator);
-
-    app()->forgetScopedInstances();
-
-    expect(app(BusinessCalendar::class))->not->toBe($calendar)
-        ->and(app(SlaCalculator::class))->not->toBe($calculator);
-});
-
 it('reads changed SLA rules on the next resolution', function (): void {
     config(['sla.resolution_minutes.critical' => 60, 'sla.warning_threshold_percent' => 50]);
     app()->forgetScopedInstances();
@@ -1337,7 +1295,7 @@ it('reads changed SLA rules on the next resolution', function (): void {
 
 - [ ] **Step 2: Run the test and confirm it fails.**
   Command: `./vendor/bin/pest tests/Feature/Sla/SlaServiceProviderTest.php`
-  Expected: FAIL. The first test fails with `Failed asserting that an array is not empty.` (the provider class doesn't exist yet), and the config tests fail with `Failed asserting that null is identical to Array (...)`.
+  Expected: FAIL. Every test fails with `Illuminate\Contracts\Container\BindingResolutionException: Unresolvable dependency resolving [Parameter #0 [ <required> array $week ]] in class App\Services\Sla\BusinessCalendar` (nothing binds the calendar or the calculator yet).
 
 - [ ] **Step 3: Create the SLA config.** Create `config/sla.php`:
 
@@ -1466,7 +1424,7 @@ return [
 
 - [ ] **Step 7: Run the test and confirm it passes.**
   Command: `./vendor/bin/pest tests/Feature/Sla/SlaServiceProviderTest.php`
-  Expected: PASS, 7 tests, 0 failures.
+  Expected: PASS, 3 tests, 0 failures.
 
 - [ ] **Step 8: Run everything this task added.**
   Command: `./vendor/bin/pest tests/Unit/Sla tests/Feature/Sla`

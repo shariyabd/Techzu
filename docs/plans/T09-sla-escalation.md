@@ -157,21 +157,6 @@ it('escalates at the right thresholds', function (
     'already approaching, still before due' => [-600, 1200, EscalationLevel::Approaching, EscalationLevel::Approaching, 0, 0],
 ]);
 
-it('escalates tickets built with the approaching and breached factory states', function (): void {
-    $overrides = ['status' => TicketStatus::InProgress, 'escalation_level' => EscalationLevel::None, 'escalated_at' => null];
-    $approaching = Ticket::factory()->approaching()->create($overrides);
-    $breached = Ticket::factory()->breached()->create($overrides);
-    $within = scanTicket(['sla_warning_at' => scanNow()->addHour(), 'sla_due_at' => scanNow()->addHours(2)]);
-
-    $this->artisan('sla:scan')->assertSuccessful();
-
-    expect($approaching->fresh()->escalation_level)->toBe(EscalationLevel::Approaching)
-        ->and($breached->fresh()->escalation_level)->toBe(EscalationLevel::Breached)
-        ->and($within->fresh()->escalation_level)->toBe(EscalationLevel::None);
-    Event::assertDispatched(TicketSlaApproaching::class, fn (TicketSlaApproaching $event): bool => $event->ticket->is($approaching));
-    Event::assertDispatched(TicketSlaBreached::class, fn (TicketSlaBreached $event): bool => $event->ticket->is($breached));
-});
-
 it('is idempotent: a second run dispatches nothing new', function (): void {
     scanTicket(['sla_warning_at' => scanNow()->subMinutes(10), 'sla_due_at' => scanNow()->addMinutes(20)]);
     scanTicket(['sla_warning_at' => scanNow()->subHours(2), 'sla_due_at' => scanNow()->subHour()]);

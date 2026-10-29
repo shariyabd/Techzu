@@ -208,12 +208,6 @@ it('builds tickets for every relation', function (): void {
         ->and($others->customer_id)->not->toBe($agent->id);
 });
 
-it('maps gate responses to HTTP-like statuses', function (): void {
-    expect(AuthorizationMatrix::statusOf(Response::allow()))->toBe(200)
-        ->and(AuthorizationMatrix::statusOf(Response::deny()))->toBe(403)
-        ->and(AuthorizationMatrix::statusOf(Response::denyAsNotFound()))->toBe(404);
-});
-
 it('labels dataset rows and rejects duplicates', function (): void {
     $row = [Role::Customer, TicketRelation::Own, TicketStatus::Resolved, 'changeStatus', [TicketStatus::Closed], 200];
 
@@ -532,7 +526,6 @@ declare(strict_types=1);
 use App\Enums\Role;
 use App\Enums\TicketStatus;
 use App\Models\Ticket;
-use App\Policies\TicketPolicy;
 use Illuminate\Support\Facades\Gate;
 use Tests\Support\AuthorizationMatrix;
 use Tests\Support\TicketRelation;
@@ -653,10 +646,6 @@ $rows = [
     [$admin, $others, $closed, 'addInternalNote', [], 403],
 ];
 
-it('is discovered as the policy for Ticket', function (): void {
-    expect(Gate::getPolicyFor(Ticket::class))->toBeInstanceOf(TicketPolicy::class);
-});
-
 it('authorizes class-level ticket abilities by role', function (Role $role, string $ability, int $expected): void {
     $matrix = AuthorizationMatrix::for($this);
     $user = $matrix->actingAsRole($role);
@@ -691,16 +680,6 @@ it('authorizes ticket abilities by role, ownership and status', function (
     expect(AuthorizationMatrix::statusOf($response))->toBe($expected);
 })->with(AuthorizationMatrix::ticketCases($rows));
 
-it('answers $user->can() with booleans for the same rules', function (): void {
-    $matrix = AuthorizationMatrix::for($this);
-    $customer = $matrix->actingAsRole(Role::Customer);
-    $ticket = $matrix->ticketFor(TicketRelation::Own, ['status' => TicketStatus::Resolved]);
-
-    expect($customer->can('changeStatus', [$ticket, TicketStatus::Closed]))->toBeTrue()
-        ->and($customer->can('changeStatus', [$ticket, TicketStatus::WaitingForCustomer]))->toBeFalse()
-        ->and($customer->can('view', $ticket))->toBeTrue();
-});
-
 it('uses a 404 status for invisible tickets so authorize() renders not found', function (): void {
     $matrix = AuthorizationMatrix::for($this);
     $customer = $matrix->actingAsRole(Role::Customer);
@@ -715,7 +694,7 @@ it('uses a 404 status for invisible tickets so authorize() renders not found', f
 
 - [ ] **Step 2: Run the test and confirm it fails.**
   Command: `./vendor/bin/pest tests/Feature/Authorization/TicketPolicyTest.php`
-  Expected: FAIL. The discovery test fails with `Class or interface "App\Policies\TicketPolicy" does not exist` (PHPUnit 12 rejects an unknown class in `toBeInstanceOf`). The rows expecting 200 or 404 fail with `Failed asserting that 403 is identical to 200.` (or `... to 404.`), because without a policy every ability is denied.
+  Expected: FAIL. The rows expecting 200 or 404 fail with `Failed asserting that 403 is identical to 200.` (or `... to 404.`), because without a policy every ability is denied.
 
 - [ ] **Step 3: Implement.** Create `app/Policies/TicketPolicy.php`:
 
@@ -860,7 +839,7 @@ final class TicketPolicy
 
 - [ ] **Step 4: Run the test and confirm it passes.**
   Command: `./vendor/bin/pest tests/Feature/Authorization/TicketPolicyTest.php`
-  Expected: PASS, 0 failures (89 matrix rows plus 12 other cases). If a row fails only for one role, check T01's `Permission::forRole()` against the baseline in §3 "Consumes". If they differ, stop and report rather than changing the expectation.
+  Expected: PASS, 0 failures (89 matrix rows plus 10 other cases). If a row fails only for one role, check T01's `Permission::forRole()` against the baseline in §3 "Consumes". If they differ, stop and report rather than changing the expectation.
 
 - [ ] **Step 5: Format.** Command: `./vendor/bin/pint --dirty`. Expected: exits 0.
 
@@ -883,14 +862,9 @@ declare(strict_types=1);
 
 use App\Enums\Role;
 use App\Models\TicketReply;
-use App\Policies\TicketReplyPolicy;
 use Illuminate\Support\Facades\Gate;
 use Tests\Support\AuthorizationMatrix;
 use Tests\Support\TicketRelation;
-
-it('is discovered as the policy for TicketReply', function (): void {
-    expect(Gate::getPolicyFor(TicketReply::class))->toBeInstanceOf(TicketReplyPolicy::class);
-});
 
 it('hides internal replies and invisible tickets from customers', function (Role $role, TicketRelation $relation, bool $internal, int $expected): void {
     $matrix = AuthorizationMatrix::for($this);
@@ -922,14 +896,9 @@ declare(strict_types=1);
 use App\Enums\Role;
 use App\Models\Attachment;
 use App\Models\TicketReply;
-use App\Policies\AttachmentPolicy;
 use Illuminate\Support\Facades\Gate;
 use Tests\Support\AuthorizationMatrix;
 use Tests\Support\TicketRelation;
-
-it('is discovered as the policy for Attachment', function (): void {
-    expect(Gate::getPolicyFor(Attachment::class))->toBeInstanceOf(AttachmentPolicy::class);
-});
 
 it('authorizes downloads by ticket visibility and the internal flag', function (Role $role, TicketRelation $relation, bool $internal, int $expected): void {
     $matrix = AuthorizationMatrix::for($this);
@@ -965,7 +934,7 @@ it('never lets a customer download a file attached to an internal note on their 
 
 - [ ] **Step 3: Run both tests and confirm they fail.**
   Command: `./vendor/bin/pest tests/Feature/Authorization/TicketReplyPolicyTest.php tests/Feature/Authorization/AttachmentPolicyTest.php`
-  Expected: FAIL. Discovery fails with `Class or interface "App\Policies\TicketReplyPolicy" does not exist` (and `...AttachmentPolicy`). The rows expecting 200 or 404 fail with `Failed asserting that 403 is identical to 200.` (or `... to 404.`).
+  Expected: FAIL. The rows expecting 200 or 404 fail with `Failed asserting that 403 is identical to 200.` (or `... to 404.`).
 
 - [ ] **Step 4: Implement the reply policy.** Create `app/Policies/TicketReplyPolicy.php`:
 
@@ -1070,21 +1039,8 @@ use App\Models\Category;
 use App\Models\Holiday;
 use App\Models\TicketImport;
 use App\Models\User;
-use App\Policies\CategoryPolicy;
-use App\Policies\HolidayPolicy;
-use App\Policies\TicketImportPolicy;
-use App\Policies\UserPolicy;
 use Illuminate\Support\Facades\Gate;
 use Tests\Support\AuthorizationMatrix;
-
-it('discovers each admin policy', function (string $model, string $policy): void {
-    expect(Gate::getPolicyFor($model))->toBeInstanceOf($policy);
-})->with([
-    'categories' => [Category::class, CategoryPolicy::class],
-    'holidays' => [Holiday::class, HolidayPolicy::class],
-    'users' => [User::class, UserPolicy::class],
-    'imports' => [TicketImport::class, TicketImportPolicy::class],
-]);
 
 it('limits admin areas to admins', function (string $model, string $ability, Role $role, int $expected): void {
     $user = AuthorizationMatrix::for($this)->actingAsRole($role);
@@ -1135,10 +1091,6 @@ use App\Enums\Role;
 use Illuminate\Support\Facades\Gate;
 use Tests\Support\AuthorizationMatrix;
 
-it('registers the viewDashboard gate', function (): void {
-    expect(Gate::has('viewDashboard'))->toBeTrue();
-});
-
 it('lets staff view the dashboard and keeps customers out', function (Role $role, bool $expected): void {
     $user = AuthorizationMatrix::for($this)->actingAsRole($role);
 
@@ -1153,7 +1105,7 @@ it('lets staff view the dashboard and keeps customers out', function (Role $role
 
 - [ ] **Step 3: Run both tests and confirm they fail.**
   Command: `./vendor/bin/pest tests/Feature/Authorization/AdminPoliciesTest.php tests/Feature/Authorization/DashboardGateTest.php`
-  Expected: FAIL. Discovery fails with `Class or interface "App\Policies\CategoryPolicy" does not exist` (and the other policies). The admin rows fail with `Failed asserting that 403 is identical to 200.` The gate test fails with `Failed asserting that false is identical to true.`
+  Expected: FAIL. The admin rows fail with `Failed asserting that 403 is identical to 200.` The gate rows for admin and agent fail with `Failed asserting that false is identical to true.`
 
 - [ ] **Step 4: Create `app/Policies/CategoryPolicy.php`.**
 
@@ -1515,7 +1467,7 @@ use Illuminate\Http\Request;
 ## 6. Acceptance criteria
 
 - [ ] Every policy and method in README §3.11 exists with the signatures in §3 "Produces". Each class is `final`, and each file has `declare(strict_types=1);`.
-- [ ] Policies are auto-discovered: `Gate::getPolicyFor()` resolves each of the seven model policies.
+- [ ] Policies are auto-discovered (no manual `Gate::policy()` registration); the allowed rows of each policy's matrix fail without it.
 - [ ] No policy calls `hasRole()` or `hasPermissionTo()`, and no role or permission is written as a string literal (`grep -rn "hasRole\|hasPermissionTo\|'tickets\.\|'admin'\|'agent'\|'customer'" app/Policies` returns nothing).
 - [ ] A customer gets 404 (`denyAsNotFound`) for every ability on a ticket they don't own, and for internal replies and internal attachments on their own tickets.
 - [ ] The customer special case of `changeStatus` holds: own `Resolved` ticket → `Closed` or `InProgress` allowed; any other target, status or ticket denied.

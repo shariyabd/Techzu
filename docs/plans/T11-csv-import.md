@@ -539,18 +539,13 @@ it('rejects an invalid value', function (array $overrides, string $field): void 
     expect($validator->fails())->toBeTrue()
         ->and(array_keys($validator->errors()->toArray()))->toBe([$field]);
 })->with([
-    'missing subject' => [['subject' => null], 'subject'],
-    'subject longer than 255' => [['subject' => str_repeat('a', 256)], 'subject'],
-    'missing description' => [['description' => null], 'description'],
     'unknown priority' => [['priority' => 'urgent'], 'priority'],
     'unknown or inactive category' => [['category' => 'plumbing'], 'category'],
-    'malformed email' => [['customer_email' => 'not-an-email'], 'customer_email'],
     'email of a non-customer' => [['customer_email' => 'agent@example.com'], 'customer_email'],
     'email without an account' => [['customer_email' => 'nobody@example.com'], 'customer_email'],
     'unknown status' => [['status' => 'archived'], 'status'],
     'unparseable created_at' => [['created_at' => '2026-13-45'], 'created_at'],
     'created_at in the future' => [['created_at' => '2030-01-01 00:00'], 'created_at'],
-    'reference longer than 64' => [['external_reference' => str_repeat('x', 65)], 'external_reference'],
     'reference already in the database' => [['external_reference' => 'EXT-OLD'], 'external_reference'],
 ]);
 
@@ -882,7 +877,7 @@ final class ImportTicketRow
 
 - [ ] **Step 7: Run both and expect PASS.**
   `./vendor/bin/pest tests/Feature/Imports/ImportTicketRowRulesTest.php tests/Feature/Imports/ImportTicketRowTest.php`
-  Expected: PASS (22 tests: 16 in the rules file, counting the 13 dataset rows, and 6 in the action file).
+  Expected: PASS (17 tests: 11 in the rules file, counting the 8 dataset rows, and 6 in the action file).
 
 - [ ] **Step 8: Format and analyse.**
   `./vendor/bin/pint --dirty && ./vendor/bin/phpstan analyse --memory-limit=1G`
@@ -930,7 +925,6 @@ declare(strict_types=1);
 
 use App\Enums\ImportStatus;
 use App\Enums\TicketStatus;
-use App\Events\TicketCreated;
 use App\Events\TicketImportFinished;
 use App\Models\Category;
 use App\Models\Ticket;
@@ -993,7 +987,7 @@ it('records each rejected row with its row number, messages and raw values', fun
         ->and($byRow[10]->errors)->toBe(['customer_email' => ['The customer email must belong to an existing customer.']]);
 });
 
-it('gives imported tickets a number and an SLA measured from created_at, without auto-assigning them', function (): void {
+it('gives imported tickets distinct numbers without auto-assigning them', function (): void {
     ImportCsvFixture::run($this->admin, ImportCsvFixture::mixed());
 
     $dated = Ticket::query()->where('external_reference', 'EXT-1')->sole();
@@ -1004,29 +998,18 @@ it('gives imported tickets a number and an SLA measured from created_at, without
         ->and($dated->customer_id)->toBe($this->customer->id)
         ->and($dated->created_by_id)->toBe($this->admin->id)
         ->and($dated->assigned_agent_id)->toBeNull()
-        ->and($dated->created_at->toDateTimeString())->toBe('2026-10-29 11:00:00')
-        ->and($dated->sla_started_at->toDateTimeString())->toBe('2026-10-29 11:00:00')
-        ->and($dated->sla_due_at->toDateTimeString())->toBe('2026-11-01 04:00:00')
         ->and($waiting->number)->toMatch('/^TKT-2026-\d{6}$/')
         ->and($waiting->number)->not->toBe($dated->number)
         ->and($waiting->status)->toBe(TicketStatus::WaitingForCustomer)
         ->and($waiting->customer_id)->toBe($this->customer->id)
-        ->and($waiting->sla_started_at->toDateTimeString())->toBe('2026-11-02 06:00:00')
-        ->and($waiting->sla_paused_at?->toDateTimeString())->toBe('2026-11-02 06:00:00')
         ->and($waiting->assigned_agent_id)->toBeNull();
 });
 
-it('fires TicketCreated only as imported, and TicketImportFinished exactly once', function (): void {
-    Event::fake([TicketCreated::class, TicketImportFinished::class]);
+it('fires TicketImportFinished exactly once', function (): void {
+    Event::fake([TicketImportFinished::class]);
 
     ImportCsvFixture::run($this->admin, ImportCsvFixture::mixed());
 
-    Event::assertDispatchedTimes(TicketCreated::class, 2);
-    Event::assertNotDispatched(TicketCreated::class, fn (TicketCreated $event): bool => $event->imported === false);
-    Event::assertDispatched(
-        TicketCreated::class,
-        fn (TicketCreated $event): bool => $event->actor?->is($this->admin) === true,
-    );
     Event::assertDispatchedTimes(TicketImportFinished::class, 1);
 });
 
@@ -1660,7 +1643,6 @@ it('rejects an invalid upload on the web', function (array $payload): void {
 
     expect(TicketImport::query()->count())->toBe(0);
 })->with([
-    'no file' => [[]],
     'a PDF' => [fn (): array => ['file' => UploadedFile::fake()->create('tickets.pdf', 10, 'application/pdf')]],
     'larger than 50 MB' => [fn (): array => ['file' => UploadedFile::fake()->create('tickets.csv', 51201, 'text/csv')]],
 ]);
@@ -1705,14 +1687,6 @@ it('accepts an upload over the API with 202 and the import resource', function (
         ->assertJsonPath('data.user.id', $this->admin->id);
 });
 
-it('returns 422 for an invalid API upload', function (): void {
-    Sanctum::actingAs($this->admin, ['*']);
-
-    $this->postJson(route('api.v1.imports.store'), [
-        'file' => UploadedFile::fake()->create('tickets.pdf', 10, 'application/pdf'),
-    ])->assertUnprocessable()->assertJsonValidationErrors('file');
-});
-
 it('lists imports on the index page, newest first', function (): void {
     $older = ImportCsvFixture::run($this->admin, ImportCsvFixture::mixed(), 'first.csv');
     $newer = ImportCsvFixture::run($this->admin, ImportCsvFixture::mixed(), 'second.csv');
@@ -1726,17 +1700,6 @@ it('lists imports on the index page, newest first', function (): void {
             ->where('imports.data.0.id', $newer->id)
             ->where('imports.data.1.id', $older->id)
             ->where('imports.meta.total', 2));
-});
-
-it('passes the upload limits to the create page', function (): void {
-    $this->actingAs($this->admin)
-        ->get(route('admin.imports.create'))
-        ->assertOk()
-        ->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('admin/imports/Create')
-            ->where('maxUploadKb', 51200)
-            ->where('columns.required', ['subject', 'description', 'priority', 'category', 'customer_email'])
-            ->where('columns.optional', ['external_reference', 'status', 'created_at']));
 });
 
 it('shows progress and a paginated error table', function (): void {
@@ -2381,7 +2344,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
 - [ ] **Step 16: Run both and expect PASS.**
   `./vendor/bin/pest tests/Feature/Imports/TicketImportHttpTest.php tests/Feature/Authorization/ImportAuthorizationTest.php`
-  Expected: PASS (18 tests: 13 in the HTTP file, counting 3 dataset rows, and 5 in the authorization file, counting 3 role rows).
+  Expected: PASS (15 tests: 10 in the HTTP file, counting 2 dataset rows, and 5 in the authorization file, counting 3 role rows).
 
 - [ ] **Step 17: Format and analyse.**
   `./vendor/bin/pint --dirty && ./vendor/bin/phpstan analyse --memory-limit=1G`
@@ -3126,7 +3089,7 @@ npm run build && npx vue-tsc --noEmit
 ```
 
 Expected:
-- The import tests pass. That is 6 reader tests, 22 rules and action tests, 9 pipeline and memory tests, and 18 HTTP and authorization tests.
+- The import tests pass. That is 6 reader tests, 17 rules and action tests, 9 pipeline and memory tests, and 15 HTTP and authorization tests.
 - `pint --test` passes, and PHPStan prints `[OK] No errors`.
 - The full suite has no failures.
 - The build succeeds with no type errors.

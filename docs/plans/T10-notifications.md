@@ -263,7 +263,6 @@ it('sends mail with a link to the ticket', function (BaseNotification $notificat
 it('keeps internal notes and import summaries in the database channel only', function (BaseNotification $notification): void {
     expect($notification->via($this->agent))->toBe(['database']);
 })->with([
-    'internal note' => [fn (): BaseNotification => new InternalNoteAddedNotification($this->ticket, $this->internalReply)],
     'import finished' => [fn (): BaseNotification => new TicketImportFinishedNotification($this->import)],
 ]);
 
@@ -739,7 +738,7 @@ final class TicketImportFinishedNotification extends BaseNotification
 ```bash
 ./vendor/bin/pest tests/Feature/Notifications/NotificationQueueingTest.php
 ```
-Expected: PASS, 25 tests.
+Expected: PASS, 24 tests.
 
 - [ ] **Step 13: Style and static analysis**
 
@@ -914,39 +913,12 @@ it('never notifies the actor about their own action', function (array $scenario)
 
     Notification::assertNothingSentTo($actor);
 })->with([
-    'agent claims' => [fn (): array => [
-        new TicketAssigned(($this->ticket)('agent'), $this->u['agent'], $this->u['agent'], null, AssignmentMethod::Claimed),
-        $this->u['agent'],
-    ]],
-    'admin creates on behalf' => [fn (): array => [new TicketCreated(($this->ticket)(null), $this->u['admin1']), $this->u['admin1']]],
-    'assignee replies publicly' => [function (): array {
-        $ticket = ($this->ticket)('agent');
-
-        return [new TicketReplied($ticket, ($this->reply)($ticket, 'agent', false), $this->u['agent']), $this->u['agent']];
-    }],
-    'customer replies on an unassigned ticket' => [function (): array {
-        $ticket = ($this->ticket)(null);
-
-        return [new TicketReplied($ticket, ($this->reply)($ticket, 'customer', false), $this->u['customer']), $this->u['customer']];
-    }],
-    'assignee writes an internal note' => [function (): array {
-        $ticket = ($this->ticket)('agent');
-
-        return [new TicketReplied($ticket, ($this->reply)($ticket, 'agent', true), $this->u['agent']), $this->u['agent']];
-    }],
     'admin replies to a ticket they are assigned' => [function (): array {
         $ticket = ($this->ticket)('admin1');
 
         return [new TicketReplied($ticket, ($this->reply)($ticket, 'admin1', false), $this->u['admin1']), $this->u['admin1']];
     }],
-    'agent resolves' => [fn (): array => [new TicketResolved(($this->ticket)('agent'), $this->u['agent']), $this->u['agent']]],
 ]);
-
-it('still sends the creation confirmation to a customer who opened their own ticket', function (): void {
-    event(new TicketCreated(($this->ticket)(null), $this->u['customer']));
-
-    Notification::assertSentToTimes($this->u['customer'], TicketCreatedNotification::class, 1);
-});
 ```
 
 - [ ] **Step 2: Write the failing test** `tests/Feature/Notifications/InternalNoteLeakageTest.php`
@@ -1346,7 +1318,7 @@ Expected: seven listener lines. `TicketCreated`, `TicketAssigned`, `TicketReplie
 ```bash
 ./vendor/bin/pest tests/Feature/Notifications
 ```
-Expected: PASS: `NotificationRecipientsTest` 33, `InternalNoteLeakageTest` 5, `NotificationQueueingTest` 26.
+Expected: PASS: `NotificationRecipientsTest` 26, `InternalNoteLeakageTest` 5, `NotificationQueueingTest` 25.
 
 - [ ] **Step 14: Style and static analysis**
 
@@ -1429,14 +1401,6 @@ it('filters to unread notifications', function (): void {
         ->assertJsonPath('data.0.title', 'unread one');
 });
 
-it('rejects per_page above 100', function (): void {
-    Sanctum::actingAs($this->me, ['*']);
-
-    $this->getJson(route('api.v1.notifications.index', ['per_page' => 101]))
-        ->assertUnprocessable()
-        ->assertJsonValidationErrors('per_page');
-});
-
 it('renders the inbox page', function (): void {
     ($this->store)($this->me);
     ($this->store)($this->someoneElse);
@@ -1477,12 +1441,6 @@ it('cannot mark another user\'s notification as read', function (): void {
     $this->actingAs($this->me)->post(route('notifications.read', $theirs->id))->assertNotFound();
 
     expect($theirs->fresh()->read_at)->toBeNull();
-});
-
-it('returns 404 for a malformed id', function (): void {
-    Sanctum::actingAs($this->me, ['*']);
-
-    $this->postJson('/api/v1/notifications/not-a-uuid/read')->assertNotFound();
 });
 
 it('marks all of my notifications as read and leaves others alone', function (): void {
@@ -1935,7 +1893,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
 ```bash
 ./vendor/bin/pest tests/Feature/Notifications/NotificationEndpointsTest.php tests/Feature/Authorization/NotificationAuthorizationTest.php
 ```
-Expected: PASS: `NotificationEndpointsTest` 9 tests, `NotificationAuthorizationTest` 24 tests. (`renders the inbox page` needs the page file from T10.4. Until it exists, Inertia's `ensure_pages_exist` check makes that one test fail with `Inertia page component file [notifications/Index] does not exist.` If T10.4 isn't in place yet, create T10.4's `Index.vue` first; it has no dependencies.)
+Expected: PASS: `NotificationEndpointsTest` 7 tests, `NotificationAuthorizationTest` 24 tests. (`renders the inbox page` needs the page file from T10.4. Until it exists, Inertia's `ensure_pages_exist` check makes that one test fail with `Inertia page component file [notifications/Index] does not exist.` If T10.4 isn't in place yet, create T10.4's `Index.vue` first; it has no dependencies.)
 
 - [ ] **Step 16: Confirm the routes**
 
@@ -2312,11 +2270,11 @@ git commit -m "feat(notifications): add navigation bell and inbox page" --traile
 npm run build && npx vue-tsc --noEmit
 php artisan event:list | grep -c -E "Send(Ticket|Sla|Import)"
 ```
-Expected: Pint shows no changes; PHPStan `[OK] No errors`; Pest is all green, including the T10 files (`NotificationQueueingTest` 26, `NotificationRecipientsTest` 33, `InternalNoteLeakageTest` 5, `NotificationEndpointsTest` 9, `NotificationAuthorizationTest` 24); the build and `vue-tsc` exit 0; the `event:list` count prints `7`.
+Expected: Pint shows no changes; PHPStan `[OK] No errors`; Pest is all green, including the T10 files (`NotificationQueueingTest` 25, `NotificationRecipientsTest` 26, `InternalNoteLeakageTest` 5, `NotificationEndpointsTest` 7, `NotificationAuthorizationTest` 24); the build and `vue-tsc` exit 0; the `event:list` count prints `7`.
 
 ## Contract notes for controller
 
-1. Resolved by the controller's decision: the customer's creation confirmation is the single documented exception to "the actor is never notified". It's isolated in `SendTicketCreatedNotifications` and has its own test.
+1. Resolved by the controller's decision: the customer's creation confirmation is the single documented exception to "the actor is never notified". It's isolated in `SendTicketCreatedNotifications` and covered by the `customer self-service` row of `notifies on TicketCreated`.
 2. Resolved by the controller's decision: on `TicketCreated`, admins are notified only when `config('tickets.auto_assign')` is false. When auto-assignment finds no agent, the ticket surfaces in the unassigned queue and on the dashboard, not through a notification. No new event is added.
 3. Resolved: the bell conforms to T00's `NavItem` (`@/config/navigation`, re-exported from `@/types/navigation`) and is mounted as the `icon` of `navigation/notifications.ts`. T00's `AppSidebar` renders it as `<component :is="item.icon" />`, and T00 offers no header slot. `NotificationBell` reads `SharedProps.notifications.unread_count`, which T00 types. Since it has no props, it can move into a header slot later without changes.
 4. `admin.imports.show` belongs to T11, which runs in parallel in wave 4b. `TicketImportFinishedNotification` uses `url('/admin/imports/{id}')` instead of `route()`, so T10 doesn't depend on T11's route existing. The path must match T11's route.

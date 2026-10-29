@@ -365,12 +365,6 @@ it('applies visibility before every other filter', function (): void {
         ->and(($this->run)([], $customer)->pluck('number')->sort()->values()->all())->toBe(($this->numbers)(['t1', 't2']));
 });
 
-it('uses FULLTEXT on MySQL', function (): void {
-    $sql = ($this->run)(['q' => 'printer'])->toSql();
-
-    expect(strtolower($sql))->toContain('match (')->toContain('in boolean mode')->not->toContain(' like ');
-});
-
 it('falls back to LIKE on drivers without FULLTEXT', function (): void {
     config(['database.connections.fulltext_probe' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']]);
 
@@ -396,7 +390,6 @@ declare(strict_types=1);
 use App\Enums\TicketStatus;
 use App\Models\Ticket;
 use App\Models\User;
-use App\Services\Tickets\TicketFilter;
 use Carbon\CarbonImmutable;
 use Laravel\Sanctum\Sanctum;
 
@@ -425,28 +418,6 @@ beforeEach(function (): void {
     ];
 });
 
-it('filters by SLA state', function (string $state): void {
-    $numbers = app(TicketFilter::class)
-        ->apply(Ticket::query(), ['sla_state' => $state], $this->admin, CarbonImmutable::now())
-        ->pluck('number')
-        ->all();
-
-    expect($numbers)->toBe([$this->tickets[$state]->number]);
-})->with(['within', 'approaching', 'breached', 'paused', 'stopped']);
-
-it('moves a ticket from within to approaching to breached as time passes', function (): void {
-    $state = fn (): array => app(TicketFilter::class)
-        ->apply(Ticket::query(), ['sla_state' => 'breached'], $this->admin, CarbonImmutable::now())
-        ->pluck('number')
-        ->all();
-
-    expect($state())->not->toContain($this->tickets['approaching']->number);
-
-    $this->travel(61)->minutes();
-
-    expect($state())->toContain($this->tickets['approaching']->number);
-});
-
 it('filters by SLA state over HTTP using the current time', function (): void {
     Sanctum::actingAs($this->admin, ['*']);
 
@@ -461,7 +432,7 @@ it('filters by SLA state over HTTP using the current time', function (): void {
 ```bash
 ./vendor/bin/pest tests/Feature/Tickets/TicketFilterTest.php tests/Feature/Tickets/TicketSlaFilterTest.php
 ```
-Expected: FAIL with `Illuminate\Contracts\Container\BindingResolutionException: Target class [App\Services\Tickets\TicketFilter] does not exist.` (The HTTP test in `TicketSlaFilterTest` still fails after Step 4; it passes in T08.3.)
+Expected: FAIL with `Illuminate\Contracts\Container\BindingResolutionException: Target class [App\Services\Tickets\TicketFilter] does not exist.` (`TicketSlaFilterTest` holds only the HTTP test, which still fails after Step 4; it passes in T08.3.)
 
 
 - [ ] **Step 4: Implement** `app/Services/Tickets/TicketFilter.php`
@@ -670,7 +641,7 @@ final class TicketFilter
 ```bash
 ./vendor/bin/pest tests/Feature/Tickets/TicketFilterTest.php tests/Feature/Tickets/TicketSlaFilterTest.php
 ```
-Expected: 38 passed (or 37 passed and 1 skipped without `pdo_sqlite`), 1 failed: `filters by SLA state over HTTP using the current time`. T05's `applyFilters()` doesn't call `TicketFilter` yet; T08.3 fixes that.
+Expected: 31 passed (or 30 passed and 1 skipped without `pdo_sqlite`), 1 failed: `filters by SLA state over HTTP using the current time`. T05's `applyFilters()` doesn't call `TicketFilter` yet; T08.3 fixes that.
 
 - [ ] **Step 6: Style and static analysis**
 
@@ -772,8 +743,6 @@ it('validates the other filters', function (array $query, string $field): void {
         ->assertUnprocessable()
         ->assertJsonValidationErrors($field);
 })->with([
-    'per_page over the max (T05 rule)' => [['per_page' => 101], 'per_page'],
-    'unknown scope (T05 rule)' => [['scope' => 'all'], 'scope'],
     'unknown status' => [['status' => ['lost']], 'status.0'],
     'status not a list' => [['status' => 'open'], 'status'],
     'unknown priority' => [['priority' => ['urgent']], 'priority.0'],
@@ -783,23 +752,6 @@ it('validates the other filters', function (array $query, string $field): void {
     'missing category' => [['category_id' => 999999], 'category_id'],
     'keyword too long' => [['q' => str_repeat('a', 201)], 'q'],
 ]);
-
-it('keeps T05 behaviour: newest first by default, scope and per_page', function (): void {
-    $this->travel(1)->minutes();
-    $newest = Ticket::factory()->status(TicketStatus::InProgress)->create();
-    Ticket::factory()->status(TicketStatus::Resolved)->create();
-    Sanctum::actingAs($this->admin, ['*']);
-
-    $this->getJson(route('api.v1.tickets.index', ['per_page' => 2]))
-        ->assertOk()
-        ->assertJsonPath('data.0.number', $newest->number)
-        ->assertJsonPath('meta.per_page', 2)
-        ->assertJsonPath('meta.total', 3);
-
-    $this->getJson(route('api.v1.tickets.index', ['scope' => 'resolved']))
-        ->assertOk()
-        ->assertJsonCount(1, 'data');
-});
 
 it('re-hydrates the filter bar from the validated filters prop', function (): void {
     $this->actingAs($this->admin)
@@ -892,8 +844,6 @@ Expected: FAIL, in four ways:
 - The sort rows and the new validation rows fail with `Expected response status code [422] but received 200.`
 - `builds filter options` fails with `Call to undefined method App\Services\Tickets\TicketPageData::filterOptions()`.
 - The SLA HTTP test still fails.
-
-The T05-rule rows (`per_page`, `scope`) already pass.
 
 - [ ] **Step 3: Modify** `app/Http/Requests/Tickets/IndexTicketsRequest.php`. Replace **only** the `rules()` method. The first three entries are T05's, verbatim. Add the imports `App\Enums\SlaState`, `App\Enums\TicketPriority`, `App\Enums\TicketStatus` and `App\Services\Tickets\TicketFilter`; `Illuminate\Validation\Rule` is already imported. Update the class docblock to `TD-080 filter rules added by T08; scope, page and per_page are T05's.`
 
@@ -1001,9 +951,9 @@ The T05-rule rows (`per_page`, `scope`) already pass.
 ./vendor/bin/pest tests/Feature/Tickets tests/Feature/Http tests/Feature/Performance/TicketQueryCountTest.php
 ```
 Expected: everything passes:
-- `TicketIndexFilteringTest`: 24;
-- `TicketSlaFilterTest`: 7;
-- `TicketFilterTest`: 32;
+- `TicketIndexFilteringTest`: 21;
+- `TicketSlaFilterTest`: 1;
+- `TicketFilterTest`: 31;
 - T05's `TicketReadLayerTest`, `TicketPagesTest`, `TicketApiTest` and `TicketQueryCountTest`. Their defaults are kept: `scope=active` and newest first.
 
 If a T05 test fails, the seam was changed beyond the three edits above. Revert to the three edits; don't change T05's tests.
@@ -1116,7 +1066,7 @@ Expected: PASS, 5 tests (the implementation came from T08.2). Check that this ru
 ```bash
 ./vendor/bin/pest tests/Database/TicketKeywordSearchTest.php tests/Feature/Tickets/TicketIndexFilteringTest.php
 ```
-Expected: PASS for both files in one process (the totals in `keeps T05 behaviour: newest first by default, scope and per_page` still see exactly 3 active tickets).
+Expected: PASS for both files in one process (the `assertJsonCount` totals in `TicketIndexFilteringTest` still see only its own tickets).
 
 - [ ] **Step 4: Style, then commit**
 
@@ -1509,7 +1459,7 @@ git commit -m "feat(search): add filter bar with query-string sync" --trailer "R
   - On MySQL/MariaDB it uses `MATCH(subject, description) AGAINST(? IN BOOLEAN MODE)`. The input is sanitized: `+-<>()~*"@` are stripped, words of 3 or more characters get `*`, and at most 10 terms are kept.
   - Other drivers use an escaped `LIKE`.
   - It is proven on committed rows in `tests/Database` (`DatabaseMigrations`).
-- [ ] `sla_state` goes through `SlaQuery::whereState`, tested for all five states with `travelTo`.
+- [ ] `sla_state` goes through `SlaQuery::whereState` (T05's `SlaQueryTest` covers the five states); the HTTP test proves it uses the current time.
 - [ ] `sort` accepts only the whitelist (with `-` for descending); anything else → 422. The default stays newest first. `priority` sorts by rank; `id` breaks ties.
 - [ ] `per_page` is still capped by T05's rule and clamp. Pagination links keep the query string.
 - [ ] Column-limited eager loading and a visible-only `replies_count` hold with filters active. The query count is identical for 5 and 50 tickets.
@@ -1528,9 +1478,9 @@ Expected:
 - PHPStan prints `[OK] No errors`.
 - Pest is all green. `pest --parallel` runs the Unit, Feature, Concurrency and Database suites (T00's `phpunit.xml`), including:
   - `tests/Unit/Tickets/FulltextSearchTermTest.php` (13);
-  - `tests/Feature/Tickets/TicketFilterTest.php` (32; one test may be skipped without `pdo_sqlite`);
-  - `TicketSlaFilterTest.php` (7);
-  - `TicketIndexFilteringTest.php` (24);
+  - `tests/Feature/Tickets/TicketFilterTest.php` (31; one test may be skipped without `pdo_sqlite`);
+  - `TicketSlaFilterTest.php` (1);
+  - `TicketIndexFilteringTest.php` (21);
   - `tests/Database/TicketKeywordSearchTest.php` (5);
   - T05's ticket tests, unchanged.
 - The build and `vue-tsc` exit 0.

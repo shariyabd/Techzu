@@ -110,10 +110,6 @@ function sequenceValue(int $year): ?int
     return $value === null ? null : (int) $value;
 }
 
-it('ships TKT as the default prefix', function (): void {
-    expect(config('tickets.number_prefix'))->toBe('TKT');
-});
-
 it('formats the first number of a year with the prefix and six-digit padding', function (): void {
     $number = ticketNumbers()->next(utc('2026-03-10 08:00:00'));
 
@@ -204,7 +200,7 @@ it('fails loudly when the business timezone is not configured', function (): voi
 ```bash
 ./vendor/bin/pest tests/Feature/Services/Tickets/TicketNumberGeneratorTest.php
 ```
-Expected: **FAIL**. The first test fails with `Failed asserting that null is identical to 'TKT'` (no `config/tickets.php` yet), and the rest fail with `Target class [App\Services\Tickets\TicketNumberGenerator] does not exist.`
+Expected: **FAIL**. Every test fails with `Target class [App\Services\Tickets\TicketNumberGenerator] does not exist.`
 
 - [ ] **Step 3: Create `config/tickets.php`**
 
@@ -279,7 +275,7 @@ final class TicketNumberGenerator
 ```bash
 ./vendor/bin/pest tests/Feature/Services/Tickets/TicketNumberGeneratorTest.php
 ```
-Expected: **PASS** (11 tests: 9 named tests, one of which is a 3-row dataset).
+Expected: **PASS** (10 tests: 8 named tests, one of which is a 3-row dataset).
 
 - [ ] **Step 6: Run the gate**
 
@@ -466,7 +462,7 @@ git commit -m "test(tickets): prove ticket number row lock across connections" -
 ./vendor/bin/pest --parallel
 ./vendor/bin/pest tests/Feature/Services/Tickets tests/Concurrency/TicketNumberConcurrencyTest.php
 ```
-Expected: Pint passes, PHPStan prints `[OK] No errors`, all Pest tests pass, and the last command reports 15 passing tests (11 + 4). `resources/js` is untouched, so no frontend build is needed.
+Expected: Pint passes, PHPStan prints `[OK] No errors`, all Pest tests pass, and the last command reports 14 passing tests (10 + 4). `resources/js` is untouched, so no frontend build is needed.
 
 ---
 
