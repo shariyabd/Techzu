@@ -1,0 +1,130 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Http\Controllers\Web;
+
+use App\Actions\Tickets\ChangeTicketPriority;
+use App\Actions\Tickets\ChangeTicketStatus;
+use App\Actions\Tickets\CreateTicket;
+use App\Actions\Tickets\UpdateTicket;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Tickets\ChangeTicketPriorityRequest;
+use App\Http\Requests\Tickets\ChangeTicketStatusRequest;
+use App\Http\Requests\Tickets\IndexTicketsRequest;
+use App\Http\Requests\Tickets\StoreTicketRequest;
+use App\Http\Requests\Tickets\UpdateTicketRequest;
+use App\Http\Resources\V1\ActivityResource;
+use App\Http\Resources\V1\AttachmentResource;
+use App\Http\Resources\V1\TicketListResource;
+use App\Http\Resources\V1\TicketResource;
+use App\Models\Ticket;
+use App\Models\TicketReply;
+use App\Models\User;
+use App\Services\Tickets\TicketListQuery;
+use App\Services\Tickets\TicketPageData;
+use Carbon\CarbonImmutable;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
+use Inertia\Inertia;
+use Inertia\Response as InertiaResponse;
+
+final class TicketController extends Controller
+{
+    public function __construct(
+        private readonly TicketPageData $pages,
+    ) {}
+
+    public function index(IndexTicketsRequest $request, TicketListQuery $tickets): InertiaResponse
+    {
+        $validated = $request->validated();
+
+        return Inertia::render('tickets/Index', [
+            'tickets' => TicketListResource::collection($tickets->paginate($this->user($request), $validated, CarbonImmutable::now())),
+            'scope' => $request->scope(),
+            'filters' => (object) $validated,
+        ]);
+    }
+
+    public function create(Request $request): InertiaResponse
+    {
+        Gate::authorize('create', Ticket::class);
+
+        return Inertia::render('tickets/Create', [
+            'options' => $this->pages->formOptions(),
+            'canCreateOnBehalf' => $this->user($request)->can('createOnBehalf', Ticket::class),
+        ]);
+    }
+
+    public function store(StoreTicketRequest $request, CreateTicket $createTicket): RedirectResponse
+    {
+        $ticket = $createTicket->handle($this->user($request), $request->actionData(), $request->attachmentFiles());
+
+        return to_route('tickets.show', $ticket)->with('success', "Ticket {$ticket->number} created.");
+    }
+
+    public function show(Request $request, Ticket $ticket): InertiaResponse
+    {
+        Gate::authorize('view', $ticket);
+
+        $user = $this->user($request);
+        $this->pages->loadForShow($ticket, $user);
+        $can = TicketResource::abilities($user, $ticket);
+
+        return Inertia::render('tickets/Show', [
+            'ticket' => TicketResource::make($ticket)->resolve($request),
+            'replies' => $this->replyItems($ticket, $request),
+            'attachments' => AttachmentResource::collection($ticket->attachments)->resolve($request),
+            'activities' => ActivityResource::collection($this->pages->activities($ticket, $user))->resolve($request),
+            'agents' => $can['assign'] ? $this->pages->agentOptions() : [],
+            'can' => $can,
+            'options' => $this->pages->formOptions(),
+        ]);
+    }
+
+    public function update(UpdateTicketRequest $request, Ticket $ticket, UpdateTicket $updateTicket): RedirectResponse
+    {
+        $updateTicket->handle($this->user($request), $ticket, $request->validated());
+
+        return back()->with('success', 'Ticket updated.');
+    }
+
+    public function status(ChangeTicketStatusRequest $request, Ticket $ticket, ChangeTicketStatus $changeStatus): RedirectResponse
+    {
+        $ticket = $changeStatus->handle($this->user($request), $ticket, $request->targetStatus());
+
+        return back()->with('success', "Status changed to {$ticket->status->label()}.");
+    }
+
+    public function priority(ChangeTicketPriorityRequest $request, Ticket $ticket, ChangeTicketPriority $changePriority): RedirectResponse
+    {
+        $ticket = $changePriority->handle($this->user($request), $ticket, $request->targetPriority());
+
+        return back()->with('success', "Priority changed to {$ticket->priority->label()}.");
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function replyItems(Ticket $ticket, Request $request): array
+    {
+        return $ticket->replies
+            ->map(static fn (TicketReply $reply): array => [
+                'id' => $reply->id,
+                'body' => $reply->body,
+                'is_internal' => (bool) $reply->is_internal,
+                'author' => ['id' => $reply->author->id, 'name' => $reply->author->name],
+                'attachments' => AttachmentResource::collection($reply->attachments)->resolve($request),
+                'created_at' => $reply->created_at?->toIso8601String(),
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function user(Request $request): User
+    {
+        $user = $request->user();
+        assert($user instanceof User);
+
+        return $user;
+    }
+}
