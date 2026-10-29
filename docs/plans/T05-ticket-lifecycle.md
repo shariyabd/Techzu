@@ -140,7 +140,7 @@ No controller, page or route file changes in T08.
 | `sla_paused` | TicketStatusChanged → waiting_for_customer | `{paused_at}` |
 | `sla_resumed` | TicketStatusChanged from waiting_for_customer | `{due_at, warning_at}` |
 | `priority_changed` | TicketPriorityChanged | `{from, to, due_at}` |
-| `replied` / `internal_note` | TicketReplied | `{reply_id}` |
+| `replied` / `internal_note` | TicketReplied | `{reply_id, author_is_staff}` (`describe()` reads `author_is_staff` to say "Agent replied" or "Customer replied") |
 | `sla_approaching` | TicketSlaApproaching | `{due_at}` |
 | `escalated` | TicketSlaBreached | `{level: 2, due_at}` |
 
@@ -2021,9 +2021,14 @@ it('records public replies and internal notes separately', function (): void {
     TicketReplied::dispatch($ticket, $public, $this->agent);
     TicketReplied::dispatch($ticket, $internal, $this->agent);
 
+    $customerReply = TicketReply::factory()->create(['ticket_id' => $ticket->id, 'author_id' => $this->customer->id, 'is_internal' => false]);
+    TicketReplied::dispatch($ticket, $customerReply, $this->customer);
+
     $activities = activitiesFor($ticket);
-    expect($activities->pluck('event')->all())->toBe([ActivityType::Replied->value, ActivityType::InternalNote->value])
-        ->and($activities->last()->properties->get('reply_id'))->toBe($internal->id);
+    expect($activities->pluck('event')->all())->toBe([ActivityType::Replied->value, ActivityType::InternalNote->value, ActivityType::Replied->value])
+        ->and($activities->get(1)->properties->get('reply_id'))->toBe($internal->id)
+        ->and($activities->first()->properties->get('author_is_staff'))->toBeTrue()
+        ->and($activities->last()->properties->get('author_is_staff'))->toBeFalse();
 });
 
 it('records sla_approaching and escalated as system entries', function (): void {
@@ -2175,6 +2180,7 @@ final class RecordTicketActivity
 
         $this->record($event->ticket, $event->author, $type, [
             'reply_id' => $event->reply->id,
+            'author_is_staff' => $event->author->isStaff(),
         ]);
     }
 
@@ -4895,7 +4901,7 @@ Landing: rebase and fast-forward into `main` (README §2 step 9). No squash. Acr
 1. **Resolved (superseded):** T01 defines and tests `activitiesVisibleTo`, and T05 only consumes it. **`Ticket::activitiesVisibleTo()` lives in a T01-owned file.** The spec (§15) and TD-026 require it, and the brief assigns it to T05, but README §3.3 does not list it and §4 does not allow T05 to modify `app/Models/Ticket.php`. T05 adds only that method. Please add the row `app/Models/Ticket.php | T01 | T05 (activitiesVisibleTo)` to §4.
 2. **Fourth stub `components/tickets/TicketFilterBar.vue` (props `scope`, `filters`) and the T08 seam.** README §3.13 lists three stubs. T05 adds a fourth so T08 can ship its filter UI without editing `tickets/Index.vue`. T08 then changes exactly three files: `TicketListQuery::applyFilters()` (delegates to `TicketFilter::apply`), `IndexTicketsRequest::rules()` (adds the TD-080 filters), and `TicketFilterBar.vue`. `TicketListQuery` is a T05 class that T08 modifies; please add both files to §4.
 3. **Resolved:** the `options` prop is approved. **Extra Inertia props.** `tickets/Show` also receives `options: TicketFormOptions` (status/priority labels and active categories), which the edit form and the status buttons need. `tickets/Create` receives `options` and `canCreateOnBehalf`. `tickets/Index` receives `scope` and `filters`. These are additions, not changes, to §3.13.
-4. **`ActivityType::describe()` (T01) has to read the properties schema in §3 of this file.** The contract fixes the signature but not the keys. If T01's `describe()` expects other keys, the timeline text will be wrong while the tests still pass. T05's tests compare against `describe()` output and do not hard-code the text.
+4. **Resolved (2026-10-29):** T01's `describe()` labels `replied` from `author_is_staff`, so the `replied` / `internal_note` properties are `{reply_id, author_is_staff}`. `imported` without `row` falls back to "Ticket imported from CSV". **`ActivityType::describe()` (T01) has to read the properties schema in §3 of this file.** The contract fixes the signature but not the keys. If T01's `describe()` expects other keys, the timeline text will be wrong while the tests still pass. T05's tests compare against `describe()` output and do not hard-code the text.
 5. **Resolved:** `ActivityType::Unassigned` stays in the enum, unused, only if T01 defines it. T05 never writes it. **No event creates `unassigned`, and `TicketResolved` / `TicketImportFinished` are not logged.** README §3.7 says RecordTicketActivity handles "every Ticket* event". T05 skips `TicketResolved` because the `status_changed` entry already records the resolution, so logging it would produce two entries. `ActivityType::Unassigned` has no producer in the contract.
 6. **Resolved:** the authorization tests use T04's real helper: `use Tests\Support\AuthorizationMatrix;`, `$matrix = AuthorizationMatrix::for($this)`, `$matrix->actingAsRole(...)`, `$matrix->expectAccess(...)`.
 7. **Resolved:** the `customer_email` picker is approved. **Staff choose the customer by `customer_email`, not `customer_id`, in `StoreTicketRequest`.** A select over every customer would be an unbounded list. The request resolves the email to `customer_id` for `CreateTicket` (whose contract is unchanged).
