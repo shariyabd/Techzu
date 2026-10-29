@@ -1036,7 +1036,7 @@ The result is cached in `Cache::remember('dashboard:'.$scope, 60)`.
   1. An **implementer** subagent works test-first.
   2. A **spec reviewer** subagent checks the work against the acceptance criteria.
   3. A **code-quality reviewer** subagent checks it against `CLAUDE.md`.
-  4. A **documenter** subagent writes the task's feature doc in `docs/features/`: each business rule mapped to its file::method and its proving test. The spec reviewer checks it against the code.
+  4. A **documenter** subagent writes the task's section of `docs/FEATURES.md`: the feature's logic and rules in plain language, without code references. The spec reviewer checks it against the code.
   5. The controller runs the gate on every commit and, for UI tasks, a browser check through Playwright MCP only (Claude in Chrome is denied in settings).
 - One Conventional Commit per subtask, with the plan subtask in a `Refs:` trailer and no co-author trailer. Every commit must pass the gate `pint --test && phpstan analyse && pest` on its own.
 - `main` is the only remote branch. Task branches are rebased and fast-forwarded into it by the owner after their review. There are no squash merges and no merge commits, so the commit-by-commit history stays linear and traceable.

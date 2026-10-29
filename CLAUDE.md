@@ -51,7 +51,7 @@ Laravel 13 · PHP 8.3 · MySQL 8 · Inertia 3 + Vue 3 (`<script setup lang="ts">
 - **No comments in code (strict).** This applies to every file we write or rewrite: PHP, TypeScript/JavaScript, Vue, CSS, Blade, SQL, and config files (`.env.example`, `*.neon`, `*.yml`, `vite.config.ts`, `config/*.php`).
   - Banned: `//`, `#`, `/* … */`, `<!-- … -->`, prose in docblocks, commented-out code, TODOs.
   - **Only exception:** PHPDoc *type tags* that Larastan level 6 needs, with no prose: `@var`, `@param`, `@return`, `@property`, `@property-read`, `@method`, `@mixin`, `@use`, `@template`, `@extends`, `@implements`, `@throws`. For example `/** @return array<string, string> */`.
-  - Explanations go in the commit body, the feature doc (`docs/features/`) or TECHNICAL_DECISIONS.md, never in the code. Names should make the intent clear.
+  - Explanations go in the commit body, `docs/FEATURES.md` or TECHNICAL_DECISIONS.md, never in the code. Names should make the intent clear.
   - **Plan code blocks are transcribed without their comments.** Where a plan snippet still contains one, drop it. Kit files we don't edit keep their own comments; any kit file we rewrite loses its prose comments.
   - Shell commands that an agent runs, and Markdown docs, aren't code. `#` comments are fine there.
 - Vue: Composition API with `<script setup lang="ts">`, typed props with `defineProps<...>()`. Pages go in `resources/js/pages/<feature>/`, components in `resources/js/components/<feature>/`. Use the shared types in `resources/js/types/`.
@@ -60,7 +60,7 @@ Laravel 13 · PHP 8.3 · MySQL 8 · Inertia 3 + Vue 3 (`<script setup lang="ts">
 - Touch **only** the files your task lists under "Files". If you need to change another file, stop and report, and explain why.
 - Routes: add them only to your feature's files, `routes/web/<feature>.php` and `routes/api/v1/<feature>.php`.
 - Don't edit migrations from earlier tasks. Add a new migration instead.
-- Exception: the task's own feature doc, `docs/features/<doc>.md` (map in `docs/features/README.md`), is always in scope for its documenter.
+- Exception: the task's own section of `docs/FEATURES.md` is always in scope for its documenter.
 
 ## Testing (TD-030, TD-031)
 - Work test-first: write the failing test, make it pass, then refactor.
@@ -135,8 +135,9 @@ Implements: TD-031, TD-050
 5. **Before finishing any task**, run `pgrep -af mysqld` (and check any other server you started) and report every server you started that is still running.
 
 ## Feature documentation (TD-140)
-- `docs/features/` holds the living explanation of the business logic, written for a reader who hasn't read the code. Each task's **documenter** subagent writes or updates its feature doc from `_TEMPLATE.md`, and the spec reviewer checks it against the code before the task is reported.
-- Every rule names the `path/File.php::method()` that implements it and the test that proves it. Document only what exists in the code.
+- `docs/FEATURES.md` is the single, living explanation of the business logic, written for a reader who hasn't read the code. It has one section per feature, and nothing else.
+- Each task's **documenter** subagent writes or updates only its own feature's section: what the feature does, its rules and its flow, in plain language. No file, class, method or test references.
+- Document only behaviour that exists in the code. The spec reviewer checks the section against the code before the task is reported.
 
 ## Laravel Boost guidelines (appended below by T00)
 T00 runs `php artisan boost:install`, which appends a `<laravel-boost-guidelines>` block below this line. Use Boost's MCP tools, especially `search-docs` for the installed versions, before writing code against any package API. **Where Boost's guidelines conflict with the rules above, the rules above win.** For example:

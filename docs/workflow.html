@@ -113,7 +113,7 @@
     <div class="card"><span class="pill done">Done</span><h3 style="margin-top:6px">Technical decisions</h3><span class="sub mono">TD-001 … TD-140</span></div>
     <div class="card"><span class="pill done">Done</span><h3 style="margin-top:6px">Plan + contract</h3><span class="sub mono">docs/plans T00–T14</span></div>
     <div class="card"><span class="pill done">Done</span><h3 style="margin-top:6px">Guardrails</h3><span class="sub mono">CLAUDE.md</span></div>
-    <div class="card"><span class="pill done">Ready</span><h3 style="margin-top:6px">Feature docs</h3><span class="sub mono">docs/features/ (filled per task)</span></div>
+    <div class="card"><span class="pill done">Ready</span><h3 style="margin-top:6px">Feature logic</h3><span class="sub mono">docs/FEATURES.md (one section per task)</span></div>
     <div class="card"><span class="pill next">Next</span><h3 style="margin-top:6px">Implementation</h3><span class="sub">Starts with T00; 0 of 15 tasks landed</span></div>
   </div>
 
@@ -192,7 +192,7 @@
     <div class="lane">
       <div class="who agent">Documenter agent</div>
       <div class="steps">
-        <div class="step agent"><div class="n">7</div><h3>Write the feature doc</h3><p><code>docs/features/&lt;feature&gt;.md</code>: every rule → <code>File.php::method()</code> → proving test, plus the flow, data, events and permissions</p></div>
+        <div class="step agent"><div class="n">7</div><h3>Write the feature section</h3><p>The task's section of <code>docs/FEATURES.md</code>: the feature's logic, rules and flow in plain language, no code references</p></div>
         <span class="to">→</span>
         <div class="step agent"><div class="n">7</div><h3>Spec reviewer checks it</h3><p>Every referenced file, method and test exists, and every rule matches the code</p></div>
       </div>
@@ -210,7 +210,7 @@
     <div class="lane">
       <div class="who human">You (owner)</div>
       <div class="steps">
-        <div class="step human"><div class="n">11</div><h3>Review</h3><p><code>git log -p main..task/T06-…</code> and the feature doc</p></div>
+        <div class="step human"><div class="n">11</div><h3>Review</h3><p><code>git log -p main..task/T06-…</code> and the feature section</p></div>
         <span class="to">→</span>
         <div class="step human"><div class="n">11</div><h3>Rebase + re-gate</h3><p>Picks up tasks from the same wave that landed first</p></div>
         <span class="to">→</span>
@@ -295,9 +295,9 @@ a 409 instead of silently overwriting.
         <tr><td><b>Implementer</b></td><td>Writes test-first code for its task's subtasks; one commit per subtask</td><td>Edits files its task doesn't own; fixes a wrong contract by improvising</td></tr>
         <tr><td><b>Spec reviewer</b></td><td>Checks acceptance criteria and the interface contract (README §3)</td><td>Sees the implementer's reasoning</td></tr>
         <tr><td><b>Code-quality reviewer</b></td><td>Checks CLAUDE.md rules, security, queries and tests, commit by commit</td><td>Approves while a finding is still open</td></tr>
-        <tr><td><b>Documenter</b></td><td>Writes the task's feature doc: each rule mapped to its file::method and its proving test</td><td>Documents anything that isn't in the code</td></tr>
+        <tr><td><b>Documenter</b></td><td>Writes the task's section of docs/FEATURES.md: the feature's logic in plain language</td><td>Documents anything that isn't in the code</td></tr>
         <tr><td><b>Browser check</b></td><td>Playwright MCP against the worktree's own server and seeded demo accounts</td><td>Uses Claude in Chrome or the built-in browser (denied in settings)</td></tr>
-        <tr><td><b>You (owner)</b></td><td>Reviews each commit and the feature doc, fast-forwards and pushes <code>main</code>, then deletes the worktree</td><td>Squash-merges, creates merge commits, force-pushes</td></tr>
+        <tr><td><b>You (owner)</b></td><td>Reviews each commit and the feature section, fast-forwards and pushes <code>main</code>, then deletes the worktree</td><td>Squash-merges, creates merge commits, force-pushes</td></tr>
         <tr><td><b>Team lead</b></td><td>Reviews the history on GitHub</td><td>n/a</td></tr>
       </tbody>
     </table>

@@ -108,11 +108,11 @@ For each task (`superpowers:subagent-driven-development`). Five subagent roles: 
    - Logs in as each affected demo role and walks the task's main flow: the pages it added, one happy path, and one forbidden path.
    - Checks the browser console for errors.
    - A failure goes back to the implementer as a fixup. Screenshots stay in the scratchpad and are never committed.
-7. **Documenter subagent:** given the task file, the final diff (`git diff main...HEAD`) and `docs/features/_TEMPLATE.md`.
-   - Writes or updates the task's feature doc, `docs/features/<doc>.md` (index in `docs/features/README.md`): every business rule mapped to the file::method that implements it and the test that proves it, plus the flow, data, events, permissions, config and edge cases.
-   - Documents only what the code does. Anything it can't find in the code goes to the report, not into the doc.
+7. **Documenter subagent:** given the task file and the final diff (`git diff main...HEAD`).
+   - Replaces the task's `_Pending._` section in `docs/FEATURES.md` (or updates it, if a later task changed that feature): what the feature does, its rules and its flow, in plain language. No file, class, method or test references.
+   - Touches no other section. Documents only what the code does; anything it can't find in the code goes to the report, not into the doc.
    - One commit: `docs(<scope>): document <feature> logic` with `Refs: Txx`.
-   - The spec reviewer then checks the doc in one pass: every referenced file::method and test exists, and every rule matches the code.
+   - The spec reviewer then checks the section in one pass: every rule matches the code.
 8. **Clean the history (controller):**
    - Fold every fixup into the commit it belongs to: `git rebase -i --autosquash main`, run with `GIT_SEQUENCE_EDITOR=true` so it doesn't stop for an editor.
    - The branch is now the exact sequence of commits the reviewer will read.
@@ -126,7 +126,7 @@ For each task (`superpowers:subagent-driven-development`). Five subagent roles: 
     - the commit list (`git log --oneline main..task/Txx-<slug>`)
     - the gate output
     - the browser-check result
-    - the feature doc path
+    - the `docs/FEATURES.md` section it wrote
     - any contract note that couldn't be confirmed
 
     Agents never touch `main`.
@@ -488,8 +488,7 @@ Files modified by more than one task, and who may touch what:
 | `components/tickets/TicketFilterBar.vue` | T05 (stub) | T08 (replaces it) |
 | `phpunit.xml` | T00 (suites Unit, Feature, Database, Concurrency; `TICKETS_AUTO_ASSIGN=false`) | none |
 | `TECHNICAL_DECISIONS.md` | — | any task: only to record an amendment it was told to make |
-| `docs/features/<doc>.md` | the task's documenter (map in `docs/features/README.md`) | later tasks' documenters may add a "Changed by Txx" section when their task changes that feature's logic |
-| `docs/features/README.md`, `docs/features/_TEMPLATE.md` | plan (already written) | none: each task fills only its own row's doc |
+| `docs/FEATURES.md` | plan (one `_Pending._` section per task) | each task's documenter: only its own feature's section; a later task may update the section of a feature whose logic it changes |
 
 ---
 
