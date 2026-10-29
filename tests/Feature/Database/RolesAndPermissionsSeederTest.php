@@ -42,7 +42,7 @@ it('is idempotent', function (): void {
 
     expect(PermissionModel::query()->count())->toBe(count(Permission::cases()))
         ->and(RoleModel::query()->count())->toBe(count(Role::cases()))
-        ->and(DB::table(config('permission.table_names.role_has_permissions'))->count())->toBe($pivotRows);
+        ->and(DB::table('role_has_permissions')->count())->toBe($pivotRows);
 });
 
 it('restores the documented baseline when a role drifted', function (): void {

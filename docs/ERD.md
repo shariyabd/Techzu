@@ -292,6 +292,9 @@ The spatie permission tables (`roles`, `permissions`, `model_has_roles`, `model_
 | tickets | `(category_id, status)` | category filter, candidate workload |
 | tickets | `(priority, status)` | priority filter, critical count, by-priority dashboard |
 | tickets | `(created_at)` | date-range filter, default sort |
+| tickets | `(status, resolved_at)` | dashboard "resolved in the last 30 days" count |
+| tickets | `(updated_at)` | ticket list sort by last update |
+| users | `(name)` | admin user list: sort by name and name prefix search |
 | tickets | FULLTEXT `(subject, description)` | keyword search |
 | tickets | `external_reference` unique | CSV de-duplication |
 | ticket_replies | `(ticket_id, is_internal, created_at)` | conversation timeline without internal notes |

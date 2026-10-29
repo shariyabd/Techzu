@@ -62,6 +62,8 @@ dataset('required indexes', [
     'tickets(category_id, status)' => ['tickets', ['category_id', 'status'], false, 'BTREE'],
     'tickets(priority, status)' => ['tickets', ['priority', 'status'], false, 'BTREE'],
     'tickets(created_at)' => ['tickets', ['created_at'], false, 'BTREE'],
+    'tickets(status, resolved_at)' => ['tickets', ['status', 'resolved_at'], false, 'BTREE'],
+    'tickets(updated_at)' => ['tickets', ['updated_at'], false, 'BTREE'],
     'tickets FULLTEXT(subject, description)' => ['tickets', ['subject', 'description'], false, 'FULLTEXT'],
     'tickets(external_reference) unique' => ['tickets', ['external_reference'], true, 'BTREE'],
     'ticket_sequences primary (year)' => ['ticket_sequences', ['year'], true, 'BTREE'],

@@ -3,7 +3,7 @@
 This document records every significant technical decision made for the Support Ticket & SLA Management System. For each one it records **what** was decided, **why**, which **alternatives** were considered and why they were rejected, and the **trade-offs** we accepted.
 
 - Requirements: [`PRD.md`](PRD.md)
-- Design spec: [`docs/superpowers/specs/2026-10-29-support-ticket-sla-design.md`](docs/superpowers/specs/2026-10-29-support-ticket-sla-design.md)
+- Design spec: [`docs/DESIGN.md`](docs/DESIGN.md)
 - Status values: **Accepted** (in force), **Superseded by TD-xxx**, **Amended** (with a dated note)
 
 Guiding principle (from the PRD): *use Laravel features where they are appropriate, not for the sake of using them.* Every decision below should be explainable in one sentence; anything that can't be explained that way was cut.
@@ -85,6 +85,12 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 - **Why:** the PRD asks for none of those features, and says not to use components for their own sake. Session login plus self-registration is three small classes.
 - **Alternatives rejected:** *keeping Fortify with most features disabled.* It still brings its provider, its action classes and the rule traits, which is indirection for two forms.
 
+**Password reset added back; email verification stays out (amended 2026-10-29, owner decision; plan P2).**
+- Forgot/reset password uses Laravel's built-in Password broker and the `password_reset_tokens` table. It has one small `PasswordResetController` and its FormRequests, with no Fortify.
+- Mail uses the `log` mailer (TD-005), so the reset link appears in `storage/logs/laravel.log`. Switching to SMTP is only a matter of setting `MAIL_MAILER`.
+- Email verification is omitted. The demo has no SMTP, seeded accounts are trusted, and the PRD doesn't ask for it. This limitation is documented in the README.
+- Roles are fixed (`Admin`, `Agent`, `Customer`). Admins change a user's role through one Action. Permissions are defined in code (`Permission` enum + `RolesAndPermissionsSeeder`) and shown read-only: an editable matrix could grant customers access to internal notes.
+
 **Moved to Laravel 13 (amended 2026-10-29, before any code was written).**
 - The only kit tag, v1.0.2 (Feb 2025), is the old Laravel 12 kit without Fortify or Wayfinder.
 - The maintained kit is `dev-main`, on Laravel 13 and Inertia 3.
@@ -139,25 +145,24 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 
 **Decision.**
 - Every infrastructure choice stays an `.env` driver switch: `QUEUE_CONNECTION`, `CACHE_STORE`, `MAIL_MAILER`, `ATTACHMENTS_DISK`.
-- During development the app runs on the owner's machine:
-  - system **MySQL 8** (`127.0.0.1:3306`), with the databases `techzu` and `techzu_testing`, and per-worktree databases on the same server;
-  - **Apache 2.4 + a dedicated PHP 8.3-FPM pool** serving the main checkout at `http://techzu.test` (setup in `docs/DEVELOPMENT.md`);
-  - the `database` queue, cache and session, and the `log` mailer.
-- Agent worktrees serve themselves with `php artisan serve --port=80NN` for browser checks, because the Apache vhost points at the main checkout only.
+- During development the app runs on the owner's machine with the two standard commands `php artisan serve` and `npm run dev` (amended 2026-10-29, owner decision: Apache dropped):
+  - system **MySQL 8** (`127.0.0.1:3306`), with the databases `techzu`, `techzu_testing` and `techzu_testing_agent1..8`;
+  - `QUEUE_CONNECTION=sync` locally, so queued work runs inline without a worker. `composer run dev` with `QUEUE_CONNECTION=database` plus `php artisan schedule:work` is the realistic asynchronous setup, documented in the README;
+  - the `database` cache and session, and the `log` mailer.
 - **No Sail or Docker in T00–T14.** Containerisation (Dockerfile/compose for app, MySQL, queue worker and scheduler) is a separate **final task after T14**, written when the owner asks for it.
 
 **Why.**
-- The owner already runs MySQL and Apache locally. One server means no duplicate databases, no port clashes (the earlier Sail plan collided with existing containers on 3306, 3307, 6379 and 8025), and no extra disk use.
+- The owner already runs MySQL locally, and `php artisan serve` needs no web-server setup. One database server means no duplicate databases, no port clashes (the earlier Sail plan collided with existing containers on 3306, 3307, 6379 and 8025), and no extra disk use.
 - The code never depends on Redis-only features (locks use the database, TD-051), so the `database` drivers lose nothing for correctness.
 - Packaging last means it's written against the finished app instead of being maintained through every task.
 
 **Alternatives rejected.**
 - *Sail from T00.* It duplicates the owner's MySQL, needs Docker running for every task, and clashed with existing containers.
-- *Apache with the global mod_php.* The machine's Apache uses PHP 8.1 for other sites, and Laravel 13 needs 8.3. A per-vhost FPM pool isolates the version without affecting those sites.
+- *Apache with a PHP 8.3-FPM vhost.* It works, but needs sudo setup that `php artisan serve` doesn't (dropped 2026-10-29).
 
 **Trade-offs.**
 - Real email delivery isn't visible; `log` mail writes to `storage/logs`.
-- Someone without a local MySQL/Apache waits for the final Docker task, or sets up the same two services by hand.
+- Someone without a local MySQL waits for the final Docker task, or sets up the same two services by hand.
 
 ---
 
@@ -298,6 +303,9 @@ Each index exists to serve a named query:
 | `tickets(category_id, status)` | category filter, candidate workload |
 | `tickets(priority, status)` | priority filter, critical count, by-priority dashboard |
 | `tickets(created_at)` | date-range filter, default sort |
+| `tickets(status, resolved_at)` | dashboard "resolved in the last 30 days" count |
+| `tickets(updated_at)` | ticket list `sort=updated_at` (P3) |
+| `users(name)` | admin user list: sort by name and name prefix search (P2) |
 | `tickets FULLTEXT(subject, description)` | keyword search |
 | `tickets(external_reference)` unique | CSV de-duplication |
 | `ticket_replies(ticket_id, is_internal, created_at)` | conversation timeline with internal notes filtered out |
@@ -518,7 +526,7 @@ Each index exists to serve a named query:
 **Decision.**
 - `dedoc/scramble` generates OpenAPI 3.1 from routes, FormRequests and Resources.
 - It's served at `/docs/api` (local or admin-only) and exported to `docs/api/openapi.json`.
-- `docs/API.md` adds the narrative: auth flow, error codes and examples.
+- There's no hand-written API guide (amended 2026-10-29): Scramble is the only API documentation, and the README links to it.
 
 **Why.** The documentation is derived from the code that enforces the contract, so it can't drift, and it needs no docblock annotations to maintain.
 
@@ -832,7 +840,7 @@ UPDATE tickets
 - *Calling `Notification::send()` inside Actions.* Couples every use case to every channel, and testing an Action would require faking notifications.
 - *Model observers.* No business intent (TD-026).
 
-**Trade-offs.** It's an indirection: to see what happens on ticket creation, you read the listeners. This is mitigated by documenting the event → listener table in `docs/TECHNICAL.md`.
+**Trade-offs.** It's an indirection: to see what happens on ticket creation, you read the listeners. This is mitigated by documenting the event → listener flow in `docs/FEATURES.md`.
 
 ---
 
@@ -851,7 +859,7 @@ UPDATE tickets
 - *Synchronous mail.* Blocks the request and fails it when SMTP is down.
 - *Broadcast / websockets.* Realtime isn't required.
 
-**Trade-offs.** A queue worker must be running. Without one, notifications pile up in `jobs` but aren't lost. The README and docs/DEVELOPMENT.md document running `queue:work` (and `schedule:work`) locally.
+**Trade-offs.** A queue worker must be running. Without one, notifications pile up in `jobs` but aren't lost. Locally `QUEUE_CONNECTION=sync` avoids this (TD-005). The README documents `composer run dev` / `queue:work` and `schedule:work` for the asynchronous setup.
 
 ---
 
@@ -1039,41 +1047,29 @@ The result is cached in `Cache::remember('dashboard:'.$scope, 60)`.
 
 ## Development process
 
-### TD-140 — Subagent-driven development with isolated tasks, worktrees and two-stage review
-**Status:** Accepted
+### TD-140 — Plan-driven development on `main` with parallel subagents and one review per plan
+**Status:** Accepted (rewritten 2026-10-29 by owner decision; the worktree flow used for T00–T05 is retired)
 
 **Decision.**
-- The implementation is split into vertical-slice tasks (`docs/plans/`). Each task lists its objective, dependencies, the files it may and may not touch, the TDs it implements, acceptance criteria, required tests and verification commands.
-- Each task runs in its own git worktree, at `.worktrees/Txx` inside the project (gitignored) so the owner can review it in the editor, and on its own branch (`task/Txx-slug`). Roles:
-  1. An **implementer** subagent works test-first.
-  2. A **spec reviewer** subagent checks the work against the acceptance criteria.
-  3. A **code-quality reviewer** subagent checks it against `CLAUDE.md`.
-  4. A **documenter** subagent writes the task's section of `docs/FEATURES.md`: the feature's logic and rules in plain language, without code references. The spec reviewer checks it against the code.
-  5. The controller runs the gate on every commit and, for UI tasks, a browser check through Playwright MCP only (Claude in Chrome is denied in settings).
-- One Conventional Commit per subtask, with the plan subtask in a `Refs:` trailer and no co-author trailer. Every commit must pass the gate `pint --test && phpstan analyse && pest` on its own.
-- `main` is the only remote branch. Task branches are rebased and fast-forwarded into it by the owner after their review. There are no squash merges and no merge commits, so the commit-by-commit history stays linear and traceable.
-- At most 4 subagents run in parallel per wave.
-- Conflict avoidance is designed into the structure:
-  - routes are split per feature (`routes/api/v1/*.php`, `routes/web/*.php`)
-  - events are auto-discovered
-  - filtering lives in `TicketFilter`, not in model scopes
-  - all event classes are defined up front
-  - the ticket detail page is assembled from per-feature components
+- The remaining work is six plans (`docs/plans/P1…P6`), executed in order on `main` in the main checkout, following `docs/plans/ROADMAP.md`. There are no worktrees and no task branches.
+- Each plan is split into waves. A wave's subtasks never share a file, and each subtask gets its own implementer subagent, running in parallel. Implementers run only their own test files on their own test database (`techzu_testing_agent<N>`), and never touch git.
+- After the last wave, the session runs the full gate **once**. Spec, quality and security reviewers and a documenter then run in parallel on the uncommitted diff. Fixes rerun only the affected tests.
+- Nothing is committed until the owner approves. Then the session creates one Conventional Commit per subtask (staging that subtask's files), with a `Refs: Pn.m` trailer and no AI attribution. The owner pushes.
+- During development, a column or index on an existing table is added by editing that table's migration (`migrate:fresh` rebuilds the dev and test databases). Nothing has been deployed, so this is safe, and it avoids a trail of one-column migrations.
 
 **Why.**
-- Each commit is independently reviewable and revertible, and `git log --grep 'Refs: T06'` traces any commit back to its plan subtask.
-- Parallel work can't collide on shared files.
-- Independent reviewers catch what the implementer missed.
+- The worktree flow ran the full suite after every wave and again for every commit (`rebase --exec`), which cost far more time than it bought.
+- Parallelism inside a plan gives the speed-up without the coordination cost of parallel sessions.
+- Owner approval before committing keeps the history the team lead reviews clean and per-subtask.
 
 **Alternatives rejected.**
-- *Horizontal layers (all migrations → all actions → all controllers → all UI).* Nothing is testable end to end until the end.
-- *One long-running agent.* No independent review, and its context fills up.
-- *Squash-merge per task.* One giant commit per task, which hides the subtask steps a reviewer reads commit by commit.
-- *Plan numbers in the subject (`T06.1: ...`).* Non-standard. A `Refs:` trailer keeps the traceability, and the subject stays a Conventional Commit.
+- *Worktrees + task branches + a per-commit gate* (used for T00–T05). Too slow and too complex for one developer.
+- *Parallel plan sessions on one checkout.* Their uncommitted changes would mix.
+- *One implementer for a whole plan.* Slower, with no parallelism.
 
 **Trade-offs.**
-- Coordination overhead: the plan must be precise about file ownership.
-- Rule: a task that needs to change a file it doesn't own stops and reports, rather than editing the file.
+- Only each plan's final state is proven by the gate; intermediate per-subtask commits aren't tested on their own. An optional `git rebase --exec` check can be run once at the end if the owner asks for it.
+- Plans must be precise about file ownership within a wave.
 
 ---
 
@@ -1089,7 +1085,7 @@ The result is cached in `Cache::remember('dashboard:'.$scope, 60)`.
   - the last error
 
   Its guidelines are appended **below** our rules in CLAUDE.md, and our rules win where they conflict. The Antigravity files it creates are removed.
-- **Playwright MCP** (`.mcp.json`) is the only browser automation. Agents use it for the browser check of UI tasks (README §2 step 6), against the worktree's own server and seeded data.
+- **Playwright MCP** (`.mcp.json`) is the only browser automation. Agents use it for the browser check of UI tasks (ROADMAP.md step 7), against a local `php artisan serve` the session starts and stops, using the seeded data.
 - **Claude in Chrome and the built-in Claude browser are denied** in `.claude/settings.json` and in the owner's global settings.
 
 **Why.**
@@ -1103,5 +1099,5 @@ The result is cached in `Cache::remember('dashboard:'.$scope, 60)`.
 
 **Trade-offs.**
 - Boost adds dev-only files (`boost.json` and the guideline block) that `boost:update` can change, so review its diffs like any other change.
-- Browser checks aren't a committed regression suite. They're a per-task verification step.
+- Browser checks aren't a committed regression suite. They're a per-plan verification step.
 

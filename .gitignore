@@ -43,5 +43,3 @@ yarn-error.log
 /AGENTS.md
 /opencode.json
 /opencode.jsonc
-# Task worktrees live inside the project for review (docs/plans/README.md §2)
-/.worktrees/
