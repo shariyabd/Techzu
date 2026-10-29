@@ -110,6 +110,11 @@ final class SlaCalculator
         return EscalationLevel::None;
     }
 
+    public function applyCurrentLevel(Ticket $ticket, CarbonImmutable $now): void
+    {
+        $ticket->escalation_level = $this->levelFor($ticket, $now);
+    }
+
     private function lowerEscalation(Ticket $ticket, CarbonImmutable $now): void
     {
         $current = $ticket->getAttribute('escalation_level');

@@ -5,13 +5,17 @@ declare(strict_types=1);
 namespace Tests\Support;
 
 use App\Models\Attachment;
+use App\Models\Category;
+use App\Models\Holiday;
 use App\Models\Ticket;
 use App\Models\User;
 use Closure;
 use Illuminate\Routing\Route;
 use Illuminate\Support\Facades\Route as Router;
+use Illuminate\Support\Str;
 use LogicException;
 use ReflectionFunction;
+use Tests\Support\Imports\ImportCsvFixture;
 
 final class RouteAudit
 {
@@ -32,7 +36,6 @@ final class RouteAudit
         'POST logout',
         'GET api/v1/me',
         'DELETE api/v1/auth/tokens/current',
-        'GET dashboard',
     ];
 
     /** @return array<string, Closure(): string> */
@@ -42,6 +45,10 @@ final class RouteAudit
             'attachment' => static fn (): string => (string) Attachment::factory()->create()->id,
             'ticket' => static fn (): string => Ticket::factory()->create()->number,
             'user' => static fn (): string => (string) User::factory()->customer()->create()->id,
+            'notification' => static fn (): string => (string) Str::uuid(),
+            'import' => static fn (): string => (string) ImportCsvFixture::pendingImport(User::factory()->admin()->create())->id,
+            'category' => static fn (): string => (string) Category::factory()->create()->id,
+            'holiday' => static fn (): string => (string) Holiday::factory()->create()->id,
         ];
     }
 

@@ -2,10 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Web\DashboardController;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
-use Inertia\Response;
 
-Route::get('dashboard', fn (): Response => Inertia::render('Dashboard'))
-    ->middleware(['auth'])
-    ->name('dashboard');
+Route::get('dashboard', DashboardController::class)->middleware('auth')->can('viewDashboard')->name('dashboard');

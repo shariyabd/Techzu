@@ -15,7 +15,7 @@ class HolidayFactory extends Factory
     public function definition(): array
     {
         return [
-            'date' => CarbonImmutable::instance(fake()->unique()->dateTimeBetween('now', '+1 year'))->toDateString(),
+            'date' => CarbonImmutable::today()->addDays(fake()->unique()->numberBetween(1, 3650))->toDateString(),
             'name' => ucfirst(fake()->words(2, true)),
         ];
     }

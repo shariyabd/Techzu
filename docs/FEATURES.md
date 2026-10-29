@@ -336,20 +336,98 @@ The ticket list can be narrowed and sorted. It always shows only tickets the vie
 **What the page offers**
 - The filter form offers the statuses for the current scope, priorities, SLA states, sorts and active categories. Staff also get a list of agents to filter by and the customer and agent filters; customers do not see those.
 
-## SLA escalation (T09)
-_Pending._
+## SLA escalation (P4)
+A background scan runs every minute and raises the escalation level of tickets whose SLA clock is running out. The scan only ever raises a level. The level is lowered elsewhere: when a ticket leaves Waiting for customer or its priority changes, the deadlines are recalculated and the level drops if the ticket is no longer close to its new deadline, so it can escalate again later.
 
-## Notifications (T10)
-_Pending._
+**Which tickets are scanned**
+- Only active tickets whose SLA clock is running. Tickets whose clock is paused (Waiting for customer), and resolved or closed tickets, are never escalated.
+- Approaching: the warning time has passed but the due time has not. The ticket moves to the "approaching" level.
+- Breached: the due time has passed. The ticket moves to the "breached" level and the moment of escalation is recorded on it. A ticket that was never flagged as approaching (for example because the scan was down) goes straight to breached.
+- A ticket is escalated once per level. Scanning it again changes nothing and sends nothing, and two scans running at once cannot escalate the same ticket twice. Scans do not overlap and run on only one server at a time.
 
-## CSV import (T11)
-_Pending._
+**What happens on escalation**
+- The timeline gets an entry, with no person attached because the system did it: "SLA approaching" or "escalated", with the due time.
+- Notifications go out (see Notifications and inbox): approaching warns the assigned agent, or the admins when nobody is assigned; breached tells the assigned agent and all admins.
 
-## Dashboard (T12)
-_Pending._
+## Notifications and inbox (P4)
+People are told about ticket events by email and in an in-app inbox. Every notification is sent in the background after the change has been saved, so a failed save never produces a message.
 
-## Administration (T13)
-_Pending._
+**Who is told what**
+- A ticket is created: the customer gets a confirmation. When automatic assignment is turned off, the admins are also told that a new ticket is waiting to be assigned (except the admin who created it).
+- A ticket is assigned (claim, manual or automatic): the agent is told it is theirs, and the customer is told which agent is handling it. The person who made the assignment is not told about their own action.
+- A public reply: if the author is not the customer, the customer is told. If the customer wrote it, the assigned agent is told, or the admins when nobody is assigned. The author is never notified of their own reply.
+- An internal note: the assigned agent is told (not the author), by inbox only. The customer is never told about internal notes and never receives their text.
+- A ticket is resolved: the customer is told, unless they resolved it themselves.
+- SLA approaching and breached: see SLA escalation.
+- An import finishes: the admin who started it is told how many tickets were imported and how many rows failed, by inbox only, with a link to the import.
+- Tickets created by a CSV import send no creation notifications.
+- The same person is never notified twice for one event, and the person who caused the event is left out.
+
+**Channels**
+- Ticket notifications go by email and into the inbox. Internal notes and import results go to the inbox only. Each notification has a title, a short text and a link to the ticket (or the import); a ticket notification carries the ticket number. Deadlines in messages are shown in the business time zone.
+
+**The inbox**
+- Anyone who can view tickets (customers see their own, staff see all) has an inbox of their own notifications, newest first, 20 per page (up to 100). It can be limited to unread ones. The unread count is shown across the application.
+- A user can mark one notification read or mark all read. Marking someone else's notification is answered with "not found", so notifications can never be read or changed across users.
+
+## CSV ticket import (P4)
+Administrators can bring existing tickets in from a CSV file. The import runs in the background, so large files do not block the page, and its progress can be followed on screen or through the API. Only people with the import permission can start or view imports, and uploads are limited to 20 per minute per user.
+
+**The file**
+- It must be a CSV (or text) file, up to 50 MB by default. The first row is the header.
+- Columns: external reference, subject, description, priority, category, customer email, status, created at. The required columns are subject, description, priority, category and customer email. Header names are matched without regard to case, and a leading byte-order mark is ignored.
+- A header with a missing required column, an unknown column or a repeated column fails the whole import at once with a message saying which. An empty file fails the same way.
+- Blank lines are skipped. Rows are worked through in chunks (500 rows by default) and a chunk failing unexpectedly is recorded without stopping the others.
+
+**Row rules** (each row is checked on its own, and bad rows never stop good ones)
+- Subject is required (up to 255 characters), description is required, priority must be a valid priority, and category must be the short name (slug) of an active category. Priority, status, category and email are read without regard to case, and surrounding spaces are trimmed.
+- The customer email must belong to an existing customer.
+- The external reference is optional (up to 64 characters) and must be unique among all tickets. This stops the same row from being imported twice, including when two imports race.
+- Status is optional and defaults to Open. Created at is optional and defaults to now; it is read in the business time zone, must be a valid date and must not be in the future.
+- A row with the wrong number of columns is rejected.
+
+**What an imported ticket gets**
+- It receives a normal ticket number, counted in the year of its created-at date, and its SLA clock starts from that created-at date, so an old ticket may already be approaching or breached when it arrives. Waiting for customer starts paused; Resolved and Closed get their resolved (and closed) time set to the time of import and have no running SLA.
+- It is created by the importing admin on behalf of the customer, is not auto-assigned and sends no creation notifications. Its timeline shows that it was imported.
+
+**Progress and result**
+- An import goes Pending, then Processing, then ends as Completed (all rows imported), Completed with errors (some rows rejected) or Failed (bad header, an unexpected failure, or a chunk that crashed). Total, processed, imported and failed row counts and the start and finish times are kept.
+- Each rejected row is stored with its line number, the reasons and the original values. The error list can be paged through, and downloaded as a CSV that repeats the original columns beside the reasons. Cells that could start a spreadsheet formula are neutralised in that download.
+- When the import ends, the admin who started it is notified.
+
+## Categories and holidays administration (P4)
+Administrators with the matching permission maintain the lists that drive ticket handling. Everyone else gets "forbidden".
+
+**Categories**
+- The list shows every category, active or not, with how many tickets use it, alphabetically.
+- A category has a name (up to 100 characters), a unique slug (lower case letters and digits separated by single hyphens, up to 100 characters; entered in upper case it is lowercased first) and an active flag, which is on by default.
+- Only active categories are offered when creating tickets or filtering, and only active ones are accepted by the import. Deactivating a category does not touch tickets that already use it.
+- Deleting a category that no ticket uses removes it. Deleting one that tickets use does not remove it: it is deactivated instead and the response shows it as inactive.
+
+**Holidays**
+- A holiday is a date with a name (up to 100 characters). Each date can exist only once. Dates must be written as year-month-day.
+- The list shows one year at a time, in date order, 50 per page; the current year in the business time zone is the default, and years from 2000 to 2100 are accepted.
+- Adding, changing or removing a holiday takes effect immediately for SLA calculation: the cached list of holidays used by the business calendar is cleared. Deadlines already stored on existing tickets are not recalculated.
+
+## Dashboard statistics (P4)
+Agents and admins have a dashboard; customers do not, and anyone without access gets "forbidden". People who can open it are sent there when they open the home page.
+
+**Totals** (for all tickets, not only the viewer's)
+- Open: active tickets (Open, In progress, Waiting for customer).
+- Unassigned: active tickets with no agent.
+- Critical: active tickets with critical priority.
+- Breached: active tickets with a running SLA clock past their due time. Approaching: running tickets past their warning time but not yet due. Paused tickets are in neither.
+- Resolved: tickets resolved or closed in the last 30 days.
+
+**Breakdowns**
+- By priority: the number of active tickets for each priority, most urgent first, with zero shown where there are none.
+- By agent: every agent with their active ticket count and breached count, busiest first, then by name.
+
+**My tickets**
+- The viewer's own assigned active tickets, the five most due soonest, in the same form as the ticket list.
+
+**Freshness**
+- The totals and breakdowns are shared by all viewers and kept for 60 seconds, so they can lag behind reality by up to a minute. The viewer's own ticket list is always current.
 
 ## Security and performance (T14)
 _Pending._
