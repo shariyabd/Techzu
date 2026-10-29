@@ -232,7 +232,6 @@ it('stores the reply and its attachments together', function (): void {
 });
 
 it('deletes the stored files when the transaction fails after storing them', function (): void {
-    // Registered after the fixture is created, so only AddReply's touch() of the ticket trips it.
     Ticket::updating(function (): void {
         throw new RuntimeException('simulated failure');
     });
@@ -248,7 +247,6 @@ it('deletes the stored files when the transaction fails after storing them', fun
 });
 
 it('moves a WaitingForCustomer ticket to InProgress on a customer reply and resumes the SLA', function (): void {
-    // Sunday 2026-11-01 09:00 Asia/Dhaka (03:00 UTC) start, due 17:00 Dhaka (11:00 UTC).
     $ticket = Ticket::factory()->status(TicketStatus::InProgress)->assignedTo($this->agent)->create([
         'customer_id' => $this->customer->id,
         'created_by_id' => $this->customer->id,
@@ -258,12 +256,10 @@ it('moves a WaitingForCustomer ticket to InProgress on a customer reply and resu
         'sla_paused_at' => null,
     ]);
 
-    // Paused Sunday 10:00 Dhaka: 420 business minutes remain.
     $this->travelTo(CarbonImmutable::parse('2026-11-01 04:00:00', 'UTC'));
     $ticket = app(ChangeTicketStatus::class)->handle($this->agent, $ticket, TicketStatus::WaitingForCustomer);
     expect($ticket->fresh()->sla_paused_at)->not->toBeNull();
 
-    // Customer answers Monday 10:00 Dhaka: due moves to Monday 17:00 Dhaka (11:00 UTC).
     $this->travelTo(CarbonImmutable::parse('2026-11-02 04:00:00', 'UTC'));
     app(AddReply::class)->handle($this->customer, $ticket->fresh(), 'Here is the info you asked for.', false);
 
@@ -301,6 +297,8 @@ Expected: FAIL, every test errors with `Error: Class "App\Actions\Conversation\A
 
 - [ ] **Step 3: Implement** `app/Actions/Conversation/AddReply.php`
 
+AddReply forces `is_internal` to false for customers whatever the request says (TD-060), locks the ticket so a concurrent close cannot slip between the check and the insert, stores one file per call so files written before a mid-batch failure can be compensated (files are not transactional, TD-053), moves a waiting ticket back via the system actor because the customer's answer caused the transition (TD-042), and touches the ticket so "recently updated" sorting reflects conversation activity.
+
 ```php
 <?php
 
@@ -331,12 +329,10 @@ final class AddReply
 
     /**
      * @param  list<UploadedFile>  $files
-     *
      * @throws TicketClosed
      */
     public function handle(User $author, Ticket $ticket, string $body, bool $isInternal, array $files = []): TicketReply
     {
-        // Customers can never author internal notes, whatever the request says (TD-060).
         $isInternal = $isInternal && $author->can('addInternalNote', $ticket);
 
         /** @var Collection<int, Attachment> $stored */
@@ -344,7 +340,6 @@ final class AddReply
 
         try {
             return DB::transaction(function () use ($author, $ticket, $body, $isInternal, $files, &$stored): TicketReply {
-                // Lock so a concurrent close cannot slip in between the check and the insert.
                 $current = Ticket::query()->whereKey($ticket->getKey())->lockForUpdate()->firstOrFail();
 
                 if ($current->status === TicketStatus::Closed) {
@@ -356,7 +351,6 @@ final class AddReply
                 $reply->author()->associate($author);
                 $reply->save();
 
-                // One file per call, so files stored before a mid-batch failure are known and compensated.
                 foreach ($files as $file) {
                     $stored = $stored->merge($this->storer->storeMany($current, $reply, $author, [$file], $isInternal));
                 }
@@ -364,11 +358,9 @@ final class AddReply
                 if (! $isInternal
                     && $author->getKey() === $current->customer_id
                     && $current->status === TicketStatus::WaitingForCustomer) {
-                    // System actor: the customer did not choose the transition, their answer caused it (TD-042).
                     $current = $this->changeTicketStatus->handle(null, $current, TicketStatus::InProgress);
                 }
 
-                // Keeps "recently updated" sorting meaningful for conversation activity.
                 $current->touch();
 
                 TicketReplied::dispatch($current, $reply, $author);
@@ -376,7 +368,6 @@ final class AddReply
                 return $reply;
             });
         } catch (Throwable $exception) {
-            // Files are not transactional: remove what was written before the rollback (TD-053).
             $this->storer->deleteFiles($stored);
 
             throw $exception;
@@ -479,7 +470,6 @@ it('stores a customer reply as public even when is_internal=1 is posted', functi
 });
 
 it('returns 422 ticket_closed when the ticket closes between authorization and the write', function (): void {
-    // AddReply is resolved after the FormRequest has authorized, so this simulates a concurrent close.
     app()->resolving(AddReply::class, function (): void {
         DB::table('tickets')->where('id', $this->ticket->id)->update(['status' => TicketStatus::Closed->value]);
     });
@@ -590,6 +580,8 @@ Expected: FAIL with `Symfony\Component\Routing\Exception\RouteNotFoundException:
 
 - [ ] **Step 3: Implement** `app/Http/Requests/StoreReplyRequest.php`
 
+StoreReplyRequest checks both the sniffed content MIME type (`types()`) and the client extension (`extensions()`); both must pass (TD-061). Reply authorization answers 404 for a ticket the user may not see (TD-012) and 403 on Closed (T04).
+
 ```php
 <?php
 
@@ -610,13 +602,10 @@ final class StoreReplyRequest extends FormRequest
 {
     public function authorize(): Response
     {
-        // TicketPolicy::reply answers 404 for a ticket the user may not see (TD-012) and 403 on Closed (T04).
         return Gate::forUser($this->user())->inspect('reply', $this->ticket());
     }
 
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function rules(): array
     {
         /** @var list<string> $extensions */
@@ -626,7 +615,6 @@ final class StoreReplyRequest extends FormRequest
             'body' => ['required', 'string', 'max:20000'],
             'is_internal' => ['sometimes', 'boolean'],
             'attachments' => ['sometimes', 'array', 'max:'.(int) config('attachments.max_files')],
-            // types() sniffs the content's MIME type; extensions() checks the client name. Both must pass (TD-061).
             'attachments.*' => [
                 'required',
                 File::types($extensions)
@@ -662,9 +650,7 @@ final class StoreReplyRequest extends FormRequest
         return $this->boolean('is_internal');
     }
 
-    /**
-     * @return list<UploadedFile>
-     */
+    /** @return list<UploadedFile> */
     public function attachmentFiles(): array
     {
         return array_values(array_filter(
@@ -697,9 +683,7 @@ final class IndexRepliesRequest extends FormRequest
         return Gate::forUser($this->user())->inspect('view', $this->ticket());
     }
 
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function rules(): array
     {
         return [
@@ -733,6 +717,8 @@ final class IndexRepliesRequest extends FormRequest
 
 - [ ] **Step 5: Implement** `app/Services/Conversation/ConversationQuery.php`
 
+ConversationQuery sets the ticket on each reply because the resource's visibility check needs it, avoiding a lazy load per reply, and keeps a defence-in-depth filter so public replies only carry public files.
+
 ```php
 <?php
 
@@ -748,9 +734,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 final class ConversationQuery
 {
-    /**
-     * @return LengthAwarePaginator<int, TicketReply>
-     */
+    /** @return LengthAwarePaginator<int, TicketReply> */
     public function paginateFor(Ticket $ticket, User $viewer, int $perPage): LengthAwarePaginator
     {
         $seesInternal = $viewer->can('viewInternal', $ticket);
@@ -762,7 +746,6 @@ final class ConversationQuery
                 'attachments' => static function (HasMany $query) use ($seesInternal): void {
                     $query->select(['id', 'ticket_id', 'reply_id', 'original_name', 'mime_type', 'size_bytes', 'is_internal', 'created_at']);
 
-                    // Defence in depth: public replies only carry public files, but never rely on that alone.
                     if (! $seesInternal) {
                         $query->where('is_internal', false);
                     }
@@ -773,7 +756,6 @@ final class ConversationQuery
             ->paginate($perPage)
             ->withQueryString();
 
-        // The resource's visibility check needs the ticket; set it instead of lazy loading it per reply.
         $paginator->getCollection()->each(static fn (TicketReply $reply): TicketReply => $reply->setRelation('ticket', $ticket));
 
         return $paginator;
@@ -782,6 +764,8 @@ final class ConversationQuery
 ```
 
 - [ ] **Step 6: Implement** `app/Http/Resources/V1/TicketReplyResource.php`
+
+TicketReplyResource is the second leakage layer (TD-120): if a query ever forgets `visibleTo`, it fails closed instead of serializing an internal note.
 
 ```php
 <?php
@@ -795,14 +779,11 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-/**
- * @mixin TicketReply
- */
+/** @mixin TicketReply */
 final class TicketReplyResource extends JsonResource
 {
     /**
      * @return array<string, mixed>
-     *
      * @throws AuthorizationException
      */
     public function toArray(Request $request): array
@@ -811,7 +792,6 @@ final class TicketReplyResource extends JsonResource
         $reply = $this->resource;
         $viewer = $request->user();
 
-        // Second leakage layer (TD-120): if a query ever forgets visibleTo, fail closed instead of serializing the note.
         if ($reply->is_internal && ($viewer === null || $viewer->cannot('view', $reply))) {
             throw new AuthorizationException('This reply is not visible to you.');
         }
@@ -923,7 +903,6 @@ use App\Http\Controllers\Web\TicketReplyController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth')->group(function (): void {
-    // Upload throttle, spec §17.
     Route::post('tickets/{ticket}/replies', [TicketReplyController::class, 'store'])
         ->middleware('throttle:20,1')
         ->name('tickets.replies.store');
@@ -1058,6 +1037,8 @@ Expected: FAIL with `RouteNotFoundException: Route [attachments.download] not de
 
 - [ ] **Step 3: Implement** `app/Http/Controllers/Web/AttachmentDownloadController.php`
 
+The download response uses an attachment disposition plus nosniff so the browser never renders user-supplied content inline (TD-061).
+
 ```php
 <?php
 
@@ -1077,7 +1058,6 @@ final class AttachmentDownloadController extends Controller
     {
         Gate::authorize('view', $attachment);
 
-        // attachment disposition + nosniff: the browser never renders user-supplied content inline (TD-061).
         return Storage::disk($attachment->disk)->download($attachment->path, $attachment->original_name, [
             'Content-Type' => $attachment->mime_type,
             'X-Content-Type-Options' => 'nosniff',
@@ -1127,7 +1107,6 @@ use App\Http\Controllers\Web\TicketReplyController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth')->group(function (): void {
-    // Upload throttle, spec §17.
     Route::post('tickets/{ticket}/replies', [TicketReplyController::class, 'store'])
         ->middleware('throttle:20,1')
         ->name('tickets.replies.store');
@@ -1310,11 +1289,6 @@ beforeEach(function (): void {
     Storage::fake(config('attachments.disk'));
 });
 
-/*
- * $relation: 'own'   → the acting customer owns the ticket
- *            'other' → the ticket belongs to a different customer (for staff this is the normal case)
- * $role null → guest.
- */
 it('enforces the conversation matrix', function (?Role $role, string $relation, string $method, string $target, string $ticketStatus, int $status): void {
     $matrix = AuthorizationMatrix::for($this);
     $actor = $role === null ? null : $matrix->actingAsRole($role);
@@ -1335,7 +1309,6 @@ it('enforces the conversation matrix', function (?Role $role, string $relation, 
     $internalFile = Attachment::query()->where('reply_id', $internal->id)->sole();
 
     if ($ticketStatus === 'closed') {
-        // Fixture only: the replies above were written while the ticket was open.
         $ticket->forceFill(['status' => TicketStatus::Closed, 'closed_at' => now()])->save();
     }
 
@@ -1351,29 +1324,24 @@ it('enforces the conversation matrix', function (?Role $role, string $relation, 
 
     $matrix->expectAccess($method, $uri, $status, $method === 'POST' ? ['body' => 'matrix reply'] : []);
 })->with([
-    // web reply
     'guest · web reply' => [null, 'other', 'POST', 'web.reply', 'open', 302],
     'customer · own · web reply' => [Role::Customer, 'own', 'POST', 'web.reply', 'open', 302],
     'customer · other · web reply' => [Role::Customer, 'other', 'POST', 'web.reply', 'open', 404],
     'agent · web reply' => [Role::Agent, 'other', 'POST', 'web.reply', 'open', 302],
     'admin · web reply' => [Role::Admin, 'other', 'POST', 'web.reply', 'open', 302],
-    // API reply
     'guest · api reply' => [null, 'other', 'POST', 'api.reply', 'open', 401],
     'customer · own · api reply' => [Role::Customer, 'own', 'POST', 'api.reply', 'open', 201],
     'customer · other · api reply' => [Role::Customer, 'other', 'POST', 'api.reply', 'open', 404],
     'agent · api reply' => [Role::Agent, 'other', 'POST', 'api.reply', 'open', 201],
     'admin · api reply' => [Role::Admin, 'other', 'POST', 'api.reply', 'open', 201],
-    // reply on a Closed ticket: T04 denies for everyone
     'customer · own · api reply · closed' => [Role::Customer, 'own', 'POST', 'api.reply', 'closed', 403],
     'agent · api reply · closed' => [Role::Agent, 'other', 'POST', 'api.reply', 'closed', 403],
     'admin · web reply · closed' => [Role::Admin, 'other', 'POST', 'web.reply', 'closed', 403],
-    // API replies index
     'guest · api replies' => [null, 'other', 'GET', 'api.replies', 'open', 401],
     'customer · own · api replies' => [Role::Customer, 'own', 'GET', 'api.replies', 'open', 200],
     'customer · other · api replies' => [Role::Customer, 'other', 'GET', 'api.replies', 'open', 404],
     'agent · api replies' => [Role::Agent, 'other', 'GET', 'api.replies', 'open', 200],
     'admin · api replies' => [Role::Admin, 'other', 'GET', 'api.replies', 'open', 200],
-    // public attachment
     'guest · web public file' => [null, 'other', 'GET', 'web.public_file', 'open', 302],
     'customer · own · web public file' => [Role::Customer, 'own', 'GET', 'web.public_file', 'open', 200],
     'customer · other · web public file' => [Role::Customer, 'other', 'GET', 'web.public_file', 'open', 404],
@@ -1383,7 +1351,6 @@ it('enforces the conversation matrix', function (?Role $role, string $relation, 
     'customer · own · api public file' => [Role::Customer, 'own', 'GET', 'api.public_file', 'open', 200],
     'customer · other · api public file' => [Role::Customer, 'other', 'GET', 'api.public_file', 'open', 404],
     'agent · api public file' => [Role::Agent, 'other', 'GET', 'api.public_file', 'open', 200],
-    // internal attachment: never a customer, hidden as 404 (T04)
     'customer · own · web internal file' => [Role::Customer, 'own', 'GET', 'web.internal_file', 'open', 404],
     'customer · other · web internal file' => [Role::Customer, 'other', 'GET', 'web.internal_file', 'open', 404],
     'agent · web internal file' => [Role::Agent, 'other', 'GET', 'web.internal_file', 'open', 200],
@@ -1432,8 +1399,6 @@ Expected: PASS (exit 0) on the T05 stubs.
 - [ ] **Step 2: Create** `resources/js/lib/attachments.ts`
 
 ```ts
-// Client-side hints only. The server (StoreReplyRequest, built from config/attachments.php) is the authority;
-// these mirror its defaults so users get feedback before uploading 10 MB for nothing.
 export const ATTACHMENT_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'txt', 'csv', 'doc', 'docx', 'xls', 'xlsx', 'zip'] as const;
 export const ATTACHMENT_MAX_KB = 10240;
 export const ATTACHMENT_MAX_FILES = 5;
@@ -1487,7 +1452,6 @@ defineProps<{
     attachments: AttachmentItem[];
 }>();
 
-// A plain anchor (not an Inertia <Link>) to T05's download_url: the response is a file with Content-Disposition: attachment.
 </script>
 
 <template>
@@ -1548,7 +1512,6 @@ const isClosed = computed(() => props.ticket.status.value === 'closed');
 const canPost = computed(() => props.can.reply && !isClosed.value);
 const submitLabel = computed(() => (form.is_internal ? 'Add internal note' : 'Send reply'));
 
-// Server-side keys look like "attachments" or "attachments.2"; show them all under the file input.
 const attachmentErrors = computed(() =>
     Object.entries(form.errors as Record<string, string | undefined>)
         .filter(([key, message]) => key.startsWith('attachments') && message !== undefined)

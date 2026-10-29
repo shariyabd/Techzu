@@ -279,7 +279,7 @@ it('refuses to build a public reply notification from an internal note', functio
 ```
 Expected: FAIL with `Error: Class "App\Notifications\TicketCreatedNotification" not found` (every dataset row errors).
 
-- [ ] **Step 3: Implement** `app/Notifications/BaseNotification.php`
+- [ ] **Step 3: Implement** `app/Notifications/BaseNotification.php` Notifications use the `notifications` queue so user-facing mail is never stuck behind imports or auto-assign (TD-072), and `afterCommit()` stops them announcing state that a rolled-back transaction undid (TD-071).
 
 ```php
 <?php
@@ -299,15 +299,11 @@ abstract class BaseNotification extends Notification implements ShouldQueue
 
     public function __construct()
     {
-        // Isolated from imports and auto-assign so user-facing mail is never stuck behind bulk work (TD-072).
         $this->onQueue('notifications');
-        // Never announce state that a rolled-back transaction undid (TD-071).
         $this->afterCommit();
     }
 
-    /**
-     * @return list<string>
-     */
+    /** @return list<string> */
     public function via(object $notifiable): array
     {
         return ['mail', 'database'];
@@ -321,9 +317,7 @@ abstract class BaseNotification extends Notification implements ShouldQueue
             ->action($this->actionText(), $this->url());
     }
 
-    /**
-     * @return array{ticket_number: string|null, title: string, body: string, url: string}
-     */
+    /** @return array{ticket_number: string|null, title: string, body: string, url: string} */
     public function toArray(object $notifiable): array
     {
         return [
@@ -451,7 +445,7 @@ final class TicketAssignedNotification extends BaseNotification
 }
 ```
 
-- [ ] **Step 6: Implement** `app/Notifications/TicketRepliedNotification.php`
+- [ ] **Step 6: Implement** `app/Notifications/TicketRepliedNotification.php` Because this class reaches customers by mail, an internal reply must never be its payload, so it throws (TD-120).
 
 ```php
 <?php
@@ -471,7 +465,6 @@ final class TicketRepliedNotification extends BaseNotification
         public readonly Ticket $ticket,
         public readonly TicketReply $reply,
     ) {
-        // This class reaches customers by mail; an internal note must never be its payload (TD-120).
         if ($reply->is_internal) {
             throw new LogicException('Internal notes use InternalNoteAddedNotification.');
         }
@@ -501,7 +494,7 @@ final class TicketRepliedNotification extends BaseNotification
 }
 ```
 
-- [ ] **Step 7: Implement** `app/Notifications/InternalNoteAddedNotification.php`
+- [ ] **Step 7: Implement** `app/Notifications/InternalNoteAddedNotification.php` It is database-only: note text must not leave the system by mail (TD-071).
 
 ```php
 <?php
@@ -523,12 +516,9 @@ final class InternalNoteAddedNotification extends BaseNotification
         parent::__construct();
     }
 
-    /**
-     * @return list<string>
-     */
+    /** @return list<string> */
     public function via(object $notifiable): array
     {
-        // In-app only: note text must not leave the system by mail (TD-071).
         return ['database'];
     }
 
@@ -594,7 +584,7 @@ final class TicketResolvedNotification extends BaseNotification
 }
 ```
 
-- [ ] **Step 9: Implement** `app/Notifications/SlaApproachingNotification.php`
+- [ ] **Step 9: Implement** `app/Notifications/SlaApproachingNotification.php` The due time is shown in business time, the clock the SLA is measured in.
 
 ```php
 <?php
@@ -619,7 +609,6 @@ final class SlaApproachingNotification extends BaseNotification
 
     protected function body(object $notifiable): string
     {
-        // Shown in business time, the clock the SLA is measured in.
         $due = $this->ticket->sla_due_at?->setTimezone((string) config('business_hours.timezone'))->format('D j M Y H:i T');
 
         return sprintf('"%s" is due %s.', $this->ticket->subject, $due ?? 'soon');
@@ -679,7 +668,7 @@ final class SlaBreachedNotification extends BaseNotification
 }
 ```
 
-- [ ] **Step 11: Implement** `app/Notifications/TicketImportFinishedNotification.php`
+- [ ] **Step 11: Implement** `app/Notifications/TicketImportFinishedNotification.php` The URL is a path rather than `route()` because `admin.imports.show` belongs to T11, developed in parallel (Contract note 4).
 
 ```php
 <?php
@@ -697,9 +686,7 @@ final class TicketImportFinishedNotification extends BaseNotification
         parent::__construct();
     }
 
-    /**
-     * @return list<string>
-     */
+    /** @return list<string> */
     public function via(object $notifiable): array
     {
         return ['database'];
@@ -717,7 +704,6 @@ final class TicketImportFinishedNotification extends BaseNotification
 
     protected function url(): string
     {
-        // A path, not route(): admin.imports.show is T11's, developed in parallel (Contract note 4).
         return url('/admin/imports/'.$this->import->getKey());
     }
 
@@ -758,7 +744,7 @@ git commit -m "feat(notifications): add queued ticket notification classes" --tr
 
 ### T10.2 — Listeners and recipient rules
 
-- [ ] **Step 1: Write the failing test** `tests/Feature/Notifications/NotificationRecipientsTest.php`
+- [ ] **Step 1: Write the failing test** `tests/Feature/Notifications/NotificationRecipientsTest.php` `Queue::fake()` keeps T06's auto-assign job from running and assigning mid-test; expected users get the notification exactly once and everyone else not at all.
 
 ```php
 <?php
@@ -792,7 +778,7 @@ use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
     Notification::fake();
-    Queue::fake(); // keeps T06's auto-assign job from running and assigning mid-test
+    Queue::fake();
     config(['tickets.auto_assign' => false]);
 
     $this->u = [
@@ -816,7 +802,6 @@ beforeEach(function (): void {
         ->for($this->u[$author], 'author')
         ->create(['is_internal' => $internal]);
 
-    // Expected users get the notification exactly once; everyone else not at all.
     $this->expectRecipients = function (string $notification, array $expected): void {
         foreach ($this->u as $key => $user) {
             in_array($key, $expected, true)
@@ -1018,7 +1003,6 @@ it('pushes real notification jobs onto the notifications queue', function (): vo
 
     event(new TicketAssigned($this->ticket, $this->admin, $this->agent, null, AssignmentMethod::Manual));
 
-    // Agent + customer, each on mail + database.
     Queue::assertPushed(SendQueuedNotifications::class, 4);
     Queue::assertPushedOn('notifications', SendQueuedNotifications::class, fn (SendQueuedNotifications $job): bool => $job->notification instanceof TicketAssignedNotification);
     Queue::assertNotPushed(SendQueuedNotifications::class, fn (SendQueuedNotifications $job): bool => $job->queue !== 'notifications');
@@ -1032,7 +1016,7 @@ it('pushes real notification jobs onto the notifications queue', function (): vo
 ```
 Expected: FAIL. Recipient rows fail with `The expected [App\Notifications\TicketCreatedNotification] notification was sent 0 times instead of 1 times.`; the real-dispatch test fails with `The expected [Illuminate\Notifications\SendQueuedNotifications] job was pushed 0 times instead of 4 times.` Rows whose expectation is "nobody" already pass.
 
-- [ ] **Step 5: Implement** `app/Services/Notifications/Recipients.php`
+- [ ] **Step 5: Implement** `app/Services/Notifications/Recipients.php` `Recipients` loads users fresh so a relation eager-loaded without `email` can never break mail, uses one bounded query for admins because they are a small staff-managed set, and removes the actor so nobody is notified about their own action (TD-071).
 
 ```php
 <?php
@@ -1048,27 +1032,18 @@ final class Recipients
 {
     private const COLUMNS = ['id', 'name', 'email'];
 
-    /**
-     * Loaded fresh so a relation eager-loaded without `email` (or lazy loading) can never break mail.
-     */
     public function find(?int $userId): ?User
     {
         return $userId === null ? null : User::query()->whereKey($userId)->first(self::COLUMNS);
     }
 
-    /**
-     * Admins are a small, staff-managed set, so a single bounded query is fine here.
-     *
-     * @return Collection<int, User>
-     */
+    /** @return Collection<int, User> */
     public function admins(): Collection
     {
         return User::query()->admins()->orderBy('id')->get(self::COLUMNS);
     }
 
     /**
-     * De-duplicates and removes the actor: nobody is notified about their own action (TD-071).
-     *
      * @param  iterable<int, User|null>  $users
      * @return Collection<int, User>
      */
@@ -1083,7 +1058,7 @@ final class Recipients
 }
 ```
 
-- [ ] **Step 6: Implement** `app/Listeners/SendTicketCreatedNotifications.php`
+- [ ] **Step 6: Implement** `app/Listeners/SendTicketCreatedNotifications.php` Imports would flood inboxes, so the importing admin gets one summary instead (spec §13); the customer confirmation is sent even when they are the actor because it is their receipt (Contract note 1); with auto-assignment off, admins are told because nobody else will pick the ticket up.
 
 ```php
 <?php
@@ -1103,20 +1078,17 @@ final class SendTicketCreatedNotifications
 
     public function handle(TicketCreated $event): void
     {
-        // Imports would flood inboxes; the importing admin gets one summary instead (spec §13).
         if ($event->imported) {
             return;
         }
 
         $ticket = $event->ticket;
 
-        // The confirmation is the customer's receipt, so it is sent even when they are the actor (Contract note 1).
         $customer = $this->recipients->find($ticket->customer_id);
         if ($customer !== null) {
             Notification::send($customer, new TicketCreatedNotification($ticket));
         }
 
-        // With auto-assignment off, nobody else will pick the ticket up unless admins hear about it.
         if (! config('tickets.auto_assign')) {
             $admins = $this->recipients->excluding($this->recipients->admins(), $event->actor);
             Notification::send($admins, new TicketCreatedNotification($ticket));
@@ -1155,7 +1127,7 @@ final class SendTicketAssignedNotifications
 }
 ```
 
-- [ ] **Step 8: Implement** `app/Listeners/SendTicketRepliedNotifications.php`
+- [ ] **Step 8: Implement** `app/Listeners/SendTicketRepliedNotifications.php` Only the assignee is a candidate and never the customer, as the third leakage layer (TD-120).
 
 ```php
 <?php
@@ -1182,7 +1154,6 @@ final class SendTicketRepliedNotifications
         $author = $event->author;
 
         if ($reply->is_internal) {
-            // Third leakage layer (TD-120): only the assignee is a candidate, and never the customer.
             $assignee = $this->recipients->find($ticket->assigned_agent_id);
             $recipients = $this->recipients->excluding([$assignee], $author)
                 ->reject(static fn (User $user): bool => $user->getKey() === $ticket->customer_id);
@@ -1238,7 +1209,7 @@ final class SendTicketResolvedNotifications
 }
 ```
 
-- [ ] **Step 10: Implement** `app/Listeners/SendSlaNotifications.php`
+- [ ] **Step 10: Implement** `app/Listeners/SendSlaNotifications.php` An unassigned ticket has no owner to warn, so whoever can assign it is told instead.
 
 ```php
 <?php
@@ -1262,7 +1233,6 @@ final class SendSlaNotifications
     {
         $agent = $this->recipients->find($event->ticket->assigned_agent_id);
 
-        // An unassigned ticket has no owner to warn, so whoever can assign it is told instead.
         $targets = $agent !== null ? [$agent] : $this->recipients->admins();
 
         Notification::send($this->recipients->excluding($targets, null), new SlaApproachingNotification($event->ticket));
@@ -1475,7 +1445,7 @@ it('shares my unread count with every Inertia page', function (): void {
 });
 ```
 
-- [ ] **Step 2: Write the failing test** `tests/Feature/Authorization/NotificationAuthorizationTest.php` (T04's `AuthorizationMatrix`: `/api/` URIs are sent as JSON with Sanctum, others through the web session)
+- [ ] **Step 2: Write the failing test** `tests/Feature/Authorization/NotificationAuthorizationTest.php` (T04's `AuthorizationMatrix`: `/api/` URIs are sent as JSON with Sanctum, others through the web session) In the URIs, `{own}` is replaced by the id of a notification owned by the acting user (for guests, by another user's notification); ownership across users is covered in `NotificationEndpointsTest`. Each row is `[method, uri, status signed in, status as guest]`.
 
 ```php
 <?php
@@ -1488,10 +1458,6 @@ use App\Notifications\TicketAssignedNotification;
 use Illuminate\Support\Str;
 use Tests\Support\AuthorizationMatrix;
 
-/*
- * `{own}` in a URI is replaced by the id of a notification owned by the acting user
- * (for guests, by some other user's notification). Ownership across users is covered in NotificationEndpointsTest.
- */
 it('enforces the notifications matrix', function (?Role $role, string $method, string $uri, int $status): void {
     $matrix = AuthorizationMatrix::for($this);
     $owner = $role === null ? User::factory()->customer()->create() : $matrix->actingAsRole($role);
@@ -1508,7 +1474,6 @@ it('enforces the notifications matrix', function (?Role $role, string $method, s
     $matrix->expectAccess($method, str_replace('{own}', $notificationId, $uri), $status);
 })->with(function (): array {
     $routes = [
-        // [method, uri, status when signed in, status as guest]
         ['GET', '/notifications', 200, 302],
         ['POST', '/notifications/{own}/read', 302, 302],
         ['POST', '/notifications/read-all', 302, 302],
@@ -1536,7 +1501,7 @@ it('enforces the notifications matrix', function (?Role $role, string $method, s
 ```
 Expected: FAIL with `RouteNotFoundException: Route [api.v1.notifications.index] not defined.`; the matrix rows fail with `Expected response status code [200] but received 404.`
 
-- [ ] **Step 4: Implement** `app/Actions/Notifications/MarkNotificationRead.php`
+- [ ] **Step 4: Implement** `app/Actions/Notifications/MarkNotificationRead.php` The notification is looked up through the owner's relation, so another user's id is simply not found (404) and never touched.
 
 ```php
 <?php
@@ -1552,7 +1517,6 @@ final class MarkNotificationRead
 {
     public function handle(User $user, string $notificationId): DatabaseNotification
     {
-        // Looked up through the owner's relation: another user's id is simply not found (404) and never touched.
         /** @var DatabaseNotification $notification */
         $notification = $user->notifications()->whereKey($notificationId)->firstOrFail();
 
@@ -1563,7 +1527,7 @@ final class MarkNotificationRead
 }
 ```
 
-- [ ] **Step 5: Implement** `app/Actions/Notifications/MarkAllNotificationsRead.php`
+- [ ] **Step 5: Implement** `app/Actions/Notifications/MarkAllNotificationsRead.php` It is a single UPDATE scoped to the owner, served by the `(notifiable_type, notifiable_id, read_at)` index.
 
 ```php
 <?php
@@ -1576,18 +1540,15 @@ use App\Models\User;
 
 final class MarkAllNotificationsRead
 {
-    /**
-     * @return int number of notifications marked
-     */
+    /** @return int */
     public function handle(User $user): int
     {
-        // A single UPDATE scoped to the owner, served by the (notifiable_type, notifiable_id, read_at) index.
         return $user->unreadNotifications()->update(['read_at' => now()]);
     }
 }
 ```
 
-- [ ] **Step 6: Implement** `app/Services/Notifications/NotificationFeed.php`
+- [ ] **Step 6: Implement** `app/Services/Notifications/NotificationFeed.php` The relation already orders newest first.
 
 ```php
 <?php
@@ -1602,14 +1563,11 @@ use Illuminate\Notifications\DatabaseNotification;
 
 final class NotificationFeed
 {
-    /**
-     * @return LengthAwarePaginator<int, DatabaseNotification>
-     */
+    /** @return LengthAwarePaginator<int, DatabaseNotification> */
     public function for(User $user, int $perPage, bool $unreadOnly): LengthAwarePaginator
     {
         $relation = $unreadOnly ? $user->unreadNotifications() : $user->notifications();
 
-        // The relation already orders newest first.
         return $relation
             ->select(['id', 'type', 'data', 'read_at', 'created_at'])
             ->paginate($perPage)
@@ -1618,7 +1576,7 @@ final class NotificationFeed
 }
 ```
 
-- [ ] **Step 7: Implement** `app/Http/Requests/IndexNotificationsRequest.php`
+- [ ] **Step 7: Implement** `app/Http/Requests/IndexNotificationsRequest.php` Every query is scoped to the user's own notifications, so being signed in is the whole authorization rule.
 
 ```php
 <?php
@@ -1634,13 +1592,10 @@ final class IndexNotificationsRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        // Every query is scoped to the user's own notifications, so being signed in is the whole rule.
         return $this->user() !== null;
     }
 
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function rules(): array
     {
         return [
@@ -1670,7 +1625,7 @@ final class IndexNotificationsRequest extends FormRequest
 }
 ```
 
-- [ ] **Step 8: Implement** `app/Http/Requests/MarkNotificationReadRequest.php`
+- [ ] **Step 8: Implement** `app/Http/Requests/MarkNotificationReadRequest.php` Ownership is enforced by the Actions, which only ever see the user's own notifications.
 
 ```php
 <?php
@@ -1686,13 +1641,10 @@ final class MarkNotificationReadRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        // Ownership is enforced by the Actions, which only ever see the user's own notifications.
         return $this->user() !== null;
     }
 
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function rules(): array
     {
         return [];
@@ -1721,14 +1673,10 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Notifications\DatabaseNotification;
 
-/**
- * @mixin DatabaseNotification
- */
+/** @mixin DatabaseNotification */
 final class NotificationResource extends JsonResource
 {
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
         /** @var DatabaseNotification $notification */
@@ -1750,7 +1698,7 @@ final class NotificationResource extends JsonResource
 }
 ```
 
-- [ ] **Step 10: Implement** `app/Http/Controllers/Web/NotificationController.php`
+- [ ] **Step 10: Implement** `app/Http/Controllers/Web/NotificationController.php` The page prop is not named `notifications`, because that key is the shared `{unread_count}` prop and a page prop would shadow it.
 
 ```php
 <?php
@@ -1775,7 +1723,6 @@ final class NotificationController extends Controller
     public function index(IndexNotificationsRequest $request, NotificationFeed $feed): Response
     {
         return Inertia::render('notifications/Index', [
-            // Not named `notifications`: that key is the shared {unread_count} prop and a page prop would shadow it.
             'items' => NotificationResource::collection(
                 $feed->for($request->actor(), $request->perPage(), $request->unreadOnly()),
             ),
@@ -1879,10 +1826,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
 });
 ```
 
-- [ ] **Step 14: Modify** `app/Http/Middleware/HandleInertiaRequests.php`. In the array returned by `share()`, replace **only the value** of the `'notifications'` key (T00's placeholder returns `unread_count` 0) with the closure below. Leave every other key, and the method signature, untouched. If `Illuminate\Http\Request` isn't already imported (it is in the starter kit), don't add anything else.
+- [ ] **Step 14: Modify** `app/Http/Middleware/HandleInertiaRequests.php`. In the array returned by `share()`, replace **only the value** of the `'notifications'` key (T00's placeholder returns `unread_count` 0) with the closure below. Leave every other key, and the method signature, untouched. If `Illuminate\Http\Request` isn't already imported (it is in the starter kit), don't add anything else. The closure is lazy: it is evaluated only when the page is rendered, and skipped on partial reloads that don't ask for it.
 
 ```php
-            // Lazy: only evaluated when the page is rendered, and skipped on partial reloads that don't ask for it.
             'notifications' => fn (): array => [
                 'unread_count' => $request->user()?->unreadNotifications()->count() ?? 0,
             ],
@@ -1947,7 +1893,6 @@ export type NotificationItem = {
     created_at: string | null;
 };
 
-/** Laravel's paginated resource collection shape, as the Inertia prop receives it. */
 export type NotificationPage = {
     data: NotificationItem[];
     links: {
@@ -1976,7 +1921,6 @@ import { usePage } from '@inertiajs/vue3';
 import { Bell } from '@lucide/vue';
 import { computed } from 'vue';
 
-// No props: T00's sidebar renders NavItem icons as `<component :is="item.icon" />`, so the bell must stand alone.
 const page = usePage<SharedProps>();
 
 const unread = computed(() => page.props.notifications.unread_count);
@@ -2007,8 +1951,6 @@ const badge = computed(() =>
 import NotificationBell from '@/components/notifications/NotificationBell.vue';
 import type { NavItem } from '@/config/navigation';
 
-// T00's AppSidebar renders `<component :is="item.icon" v-if="item.icon" />` for each NavItem, so the bell
-// (with its unread badge) appears in the sidebar, collapsed or not, without editing a T00 file.
 const items: NavItem[] = [
     {
         title: 'Notifications',

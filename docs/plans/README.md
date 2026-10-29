@@ -100,7 +100,7 @@ For each task (`superpowers:subagent-driven-development`). Five subagent roles: 
    - Works test-first (red → green → refactor), writing only the tests that CLAUDE.md §Testing allows.
    - Commits per subtask on the task branch, in Conventional Commits format with `Refs: Txx.n` and `Implements: TD-...` trailers (CLAUDE.md §Commits). No plan number in the subject, no co-author trailer.
 3. **Spec reviewer subagent:** has **not** seen the implementation reasoning. Checks every acceptance criterion and every "Produces" interface against this contract, and reports PASS or a list of gaps.
-4. **Code-quality reviewer subagent:** checks against CLAUDE.md (architecture, security, database, style rules), naming consistency, and missing tests for risky logic. It also flags **redundant tests**: framework behavior, duplicates across layers, trivial getters. Reports PASS or a list of findings.
+4. **Code-quality reviewer subagent:** checks against CLAUDE.md (architecture, security, database, style rules), naming consistency, and missing tests for risky logic. It also flags **redundant tests**: framework behavior, duplicates across layers, trivial getters. And it flags **any comment in code**: only tag-only PHPDoc type docblocks are allowed (CLAUDE.md §Code style). Reports PASS or a list of findings.
 5. **Fix loop:** the implementer fixes the findings as `git commit --fixup <sha>`, and the reviewers re-check only those findings.
 6. **Browser check (controller, only if the task touched `resources/js` or web routes):**
    - Uses **Playwright MCP only** (CLAUDE.md §Browser).

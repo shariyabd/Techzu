@@ -60,29 +60,31 @@ A `beforeEach` listener throws on any `QueryExecuted` event, which proves the "u
 
 ### Produces (README §3.4, verbatim)
 
+`SlaServiceProvider` binds `BusinessCalendar` (built from config and `HolidayRepository`, scoped) and `SlaCalculator` (scoped). None of the `SlaCalculator` methods saves.
+
 ```php
-// app/Services/Sla
 final class BusinessCalendar {
-    /** @param array<string, list<array{0:string,1:string}>> $week  lowercase weekday => [['09:00','18:00'], ...]
-     *  @param list<string> $holidays  'Y-m-d' dates in business timezone */
+    /**
+     * @param array<string, list<array{0:string,1:string}>> $week
+     * @param list<string> $holidays
+     */
     public function __construct(array $week, string $timezone, array $holidays = []);
-    public function addBusinessMinutes(CarbonImmutable $from, int $minutes): CarbonImmutable; // returns UTC
-    public function businessMinutesBetween(CarbonImmutable $from, CarbonImmutable $to): int;  // 0 if $to <= $from
+    public function addBusinessMinutes(CarbonImmutable $from, int $minutes): CarbonImmutable;
+    public function businessMinutesBetween(CarbonImmutable $from, CarbonImmutable $to): int;
     public function isBusinessTime(CarbonImmutable $at): bool;
 }
-final class HolidayRepository { /** @return list<string> */ public function dates(): array; public function flush(): void; } // cache key 'sla.holidays'
+final class HolidayRepository { /** @return list<string> */ public function dates(): array; public function flush(): void; }
 final readonly class SlaDeadlines { public function __construct(public CarbonImmutable $dueAt, public CarbonImmutable $warningAt); }
 final class SlaCalculator {
-    /** @param array<string,int> $resolutionMinutes keyed by TicketPriority value */
+    /** @param array<string,int> $resolutionMinutes */
     public function __construct(BusinessCalendar $calendar, array $resolutionMinutes, int $warningPercent);
     public function deadlinesFor(TicketPriority $priority, CarbonImmutable $start): SlaDeadlines;
-    public function applyInitial(Ticket $ticket, CarbonImmutable $start): void;          // sets sla_started_at, sla_due_at, sla_warning_at (no save)
-    public function recalculateForPriority(Ticket $ticket, CarbonImmutable $now): void;  // from sla_started_at; keeps pause; resets escalation_level via levelFor (no save)
-    public function pause(Ticket $ticket, CarbonImmutable $now): void;                   // no save
-    public function resume(Ticket $ticket, CarbonImmutable $now): void;                  // shifts due/warning; resets escalation_level via levelFor (no save)
-    public function levelFor(Ticket $ticket, CarbonImmutable $now): EscalationLevel;     // level the ticket *should* have now
+    public function applyInitial(Ticket $ticket, CarbonImmutable $start): void;
+    public function recalculateForPriority(Ticket $ticket, CarbonImmutable $now): void;
+    public function pause(Ticket $ticket, CarbonImmutable $now): void;
+    public function resume(Ticket $ticket, CarbonImmutable $now): void;
+    public function levelFor(Ticket $ticket, CarbonImmutable $now): EscalationLevel;
 }
-// app/Providers/SlaServiceProvider.php binds BusinessCalendar (built from config + HolidayRepository, scoped) and SlaCalculator (singleton per request = scoped).
 ```
 
 Behavioural contract for later tasks:
@@ -111,6 +113,8 @@ Mini-waves: **A** = 2.1 ∥ 2.2 → **B** = 2.3 → **C** = 2.4.
 
 - [ ] **Step 1: Write the failing test.** Create `tests/Unit/Sla/BusinessCalendarTest.php`:
 
+These are pure unit tests (no Laravel app, no database, TD-041). 2026-10-29 is a Thursday, so 10-30 is Friday, 10-31 Saturday and 11-01 Sunday. Expectations are in local business time and the result is also checked to be UTC. The standard week lists windows afternoon-first on purpose, so the calendar must sort them itself, and the DST case uses Friday 16:00 BST (UTC+1) because clocks go back on Sunday 2026-10-25.
+
 ```php
 <?php
 
@@ -118,12 +122,6 @@ declare(strict_types=1);
 
 use App\Services\Sla\BusinessCalendar;
 use Carbon\CarbonImmutable;
-
-/*
- * Pure unit tests: no Laravel application, no database (TD-041).
- * Dates: 2026-10-29 is a Thursday; 2026-10-30 Fri, 2026-10-31 Sat, 2026-11-01 Sun.
- * All expectations are written in local (business) time and the result is also checked to be UTC.
- */
 
 /** @return array<string, list<array{0: string, 1: string}>> */
 function bcStandardWeek(): array
@@ -144,7 +142,6 @@ function bcStandardWeek(): array
 /** @return array<string, list<array{0: string, 1: string}>> */
 function bcLunchWeek(): array
 {
-    // Listed afternoon-first on purpose: the calendar must sort windows itself.
     $day = [['14:00', '18:00'], ['09:00', '13:00']];
 
     return [
@@ -245,7 +242,6 @@ describe('addBusinessMinutes', function (): void {
             'friday' => [['09:00', '17:00']],
         ];
         $calendar = new BusinessCalendar($week, 'Europe/London');
-        // Friday 16:00 BST (UTC+1); clocks go back on Sunday 2026-10-25.
         $from = bcAt('2026-10-23 16:00:00', 'Europe/London');
 
         $result = $calendar->addBusinessMinutes($from, 120);
@@ -370,6 +366,8 @@ describe('constructor validation', function (): void {
 
 - [ ] **Step 3: Implement.** Create `app/Services/Sla/BusinessCalendar.php`:
 
+`BusinessCalendar` is pure (TD-041): no config, facades or `now()`, everything is injected. All arithmetic runs on local wall-clock time in the business timezone (local date plus seconds since local midnight), so a window means the same hours on every day regardless of DST. Inputs may be in any timezone, results are always UTC, and precision is one second. The scan gives up after a fixed run of consecutive days without any usable window. `format('l')` is used because it is locale-independent, unlike Carbon's translated day names. The day anchor is noon because noon never falls in a DST gap or overlap, so stepping by whole days is safe and only its calendar date is used.
+
 ```php
 <?php
 
@@ -383,16 +381,8 @@ use Exception;
 use InvalidArgumentException;
 use RuntimeException;
 
-/**
- * Pure business-time arithmetic (TD-041). No config, facades or now() in here: everything is injected.
- *
- * All arithmetic runs on local wall-clock time in the business timezone (local date + seconds since
- * local midnight), so a window means the same wall-clock hours on every day regardless of DST.
- * Inputs may be in any timezone; results are always UTC. Precision is one second.
- */
 final class BusinessCalendar
 {
-    /** Consecutive days without any usable window before we decide the schedule is unusable. */
     private const MAX_LOOKAHEAD_DAYS = 366;
 
     private const SECONDS_PER_MINUTE = 60;
@@ -401,17 +391,17 @@ final class BusinessCalendar
 
     private const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
-    /** @var array<string, list<array{0: int, 1: int}>> weekday => sorted [startSecond, endSecond) windows */
+    /** @var array<string, list<array{0: int, 1: int}>> */
     private readonly array $windows;
 
-    /** @var array<string, true> 'Y-m-d' => true */
+    /** @var array<string, true> */
     private readonly array $holidays;
 
     private readonly string $timezone;
 
     /**
-     * @param  array<string, list<array{0:string,1:string}>>  $week  lowercase weekday => [['09:00','18:00'], ...]
-     * @param  list<string>  $holidays  'Y-m-d' dates in business timezone
+     * @param  array<string, list<array{0:string,1:string}>>  $week
+     * @param  list<string>  $holidays
      */
     public function __construct(array $week, string $timezone, array $holidays = [])
     {
@@ -537,14 +527,9 @@ final class BusinessCalendar
             return [];
         }
 
-        // format('l') is locale-independent, unlike Carbon's translated day names.
         return $this->windows[strtolower($localDay->format('l'))] ?? [];
     }
 
-    /**
-     * Noon never falls in a DST gap or overlap, so stepping the anchor by whole days is safe;
-     * only its calendar date is used.
-     */
     private static function anchor(CarbonImmutable $local): CarbonImmutable
     {
         return $local->setTime(12, 0, 0);
@@ -713,6 +698,8 @@ it('queries the holidays table once while the cache is warm', function (): void 
 
 - [ ] **Step 3: Implement.** Create `app/Services/Sla/HolidayRepository.php`:
 
+Holidays are operational data edited by admins (TD-045), but the calendar consults them on every SLA calculation, so they are cached forever under `sla.holidays` and flushed explicitly on change (TD-101).
+
 ```php
 <?php
 
@@ -723,10 +710,6 @@ namespace App\Services\Sla;
 use App\Models\Holiday;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 
-/**
- * Holidays are operational data edited by admins (TD-045), but the calendar consults them on every
- * SLA calculation, so they are cached forever and flushed explicitly on change (TD-101).
- */
 final class HolidayRepository
 {
     private const CACHE_KEY = 'sla.holidays';
@@ -772,6 +755,8 @@ final class HolidayRepository
 
 - [ ] **Step 1: Write the failing test.** Create `tests/Unit/Sla/SlaCalculatorTest.php`:
 
+The application is booted (Eloquent casts need the connection's grammar, factories need Faker) but no query may run, because `SlaCalculator` works on unsaved tickets and never saves. 2026-11-01 is a Sunday (a working day), so Critical from Sun 09:00 gives warning 10:30 and due 11:00. Overriding every foreign key stops the factory from `create()`-ing parent rows during `make()`.
+
 ```php
 <?php
 
@@ -789,11 +774,6 @@ use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\Event;
 use Tests\TestCase;
 
-/*
- * The application is booted (Eloquent casts need the connection's grammar, factories need Faker),
- * but no query may run: SlaCalculator works on unsaved tickets and never saves.
- * Dates: 2026-11-01 is a Sunday (a working day); Critical from Sun 09:00 -> warning 10:30, due 11:00.
- */
 uses(TestCase::class);
 
 beforeEach(function (): void {
@@ -834,7 +814,6 @@ function slaLocal(?CarbonImmutable $instant): ?string
 /** @param array<string, mixed> $attributes */
 function slaMake(array $attributes = []): Ticket
 {
-    // Overriding every foreign key stops the factory from create()-ing parent rows during make().
     return Ticket::factory()->make(array_merge([
         'category_id' => 1,
         'customer_id' => 1,
@@ -1081,6 +1060,8 @@ final readonly class SlaDeadlines
 
 - [ ] **Step 4: Implement the calculator.** Create `app/Services/Sla/SlaCalculator.php`:
 
+`SlaCalculator` is the only reader of the SLA rules (TD-045) and the only writer of `sla_*` columns besides `sla:scan`. It never saves: the calling Action owns persistence and the transaction (TD-001, TD-053). Dates are converted before assignment because Eloquent formats dates in their own timezone. Recalculation runs from the original start so re-prioritising can't quietly extend the deadline (TD-043), and `sla_paused_at` is kept so `resume()` credits the ongoing pause against the new deadlines. While paused the clock is frozen at the moment of the pause, and `businessMinutesBetween` floors at zero, so a threshold already passed at the pause lands on "now". `levelFor` only ever lowers the level, because raising it here would mark the ticket escalated without `sla:scan` dispatching `TicketSlaApproaching`/`TicketSlaBreached`, so nobody would be notified.
+
 ```php
 <?php
 
@@ -1094,16 +1075,12 @@ use App\Models\Ticket;
 use Carbon\CarbonImmutable;
 use InvalidArgumentException;
 
-/**
- * The only reader of the SLA rules (TD-045) and the only writer of sla_* columns besides sla:scan.
- * Never saves: the calling Action owns persistence and the transaction (TD-001, TD-053).
- */
 final class SlaCalculator
 {
     /** @var array<string, int> */
     private readonly array $resolutionMinutes;
 
-    /** @param array<string,int> $resolutionMinutes keyed by TicketPriority value */
+    /** @param array<string,int> $resolutionMinutes */
     public function __construct(
         private readonly BusinessCalendar $calendar,
         array $resolutionMinutes,
@@ -1137,7 +1114,6 @@ final class SlaCalculator
 
     public function applyInitial(Ticket $ticket, CarbonImmutable $start): void
     {
-        // Eloquent formats dates in their own timezone, so convert before assigning.
         $start = $start->utc()->startOfSecond();
         $deadlines = $this->deadlinesFor($ticket->priority, $start);
 
@@ -1148,13 +1124,11 @@ final class SlaCalculator
 
     public function recalculateForPriority(Ticket $ticket, CarbonImmutable $now): void
     {
-        // From the original start, so re-prioritising can't quietly extend the deadline (TD-043).
         $deadlines = $this->deadlinesFor($ticket->priority, $ticket->sla_started_at);
 
         $ticket->sla_due_at = $deadlines->dueAt;
         $ticket->sla_warning_at = $deadlines->warningAt;
 
-        // sla_paused_at is kept: resume() will credit the ongoing pause against these new deadlines.
         $this->lowerEscalation($ticket, $now);
     }
 
@@ -1176,7 +1150,6 @@ final class SlaCalculator
         }
 
         $now = $now->utc()->startOfSecond();
-        // businessMinutesBetween floors at zero, so a threshold already passed at the pause lands on "now".
         $remainingToDue = $this->calendar->businessMinutesBetween($pausedAt, $ticket->sla_due_at);
         $remainingToWarning = $this->calendar->businessMinutesBetween($pausedAt, $ticket->sla_warning_at);
 
@@ -1189,7 +1162,6 @@ final class SlaCalculator
 
     public function levelFor(Ticket $ticket, CarbonImmutable $now): EscalationLevel
     {
-        // While paused the SLA clock is frozen at the moment of the pause.
         $at = $ticket->sla_paused_at ?? $now;
 
         if ($at->greaterThanOrEqualTo($ticket->sla_due_at)) {
@@ -1203,10 +1175,6 @@ final class SlaCalculator
         return EscalationLevel::None;
     }
 
-    /**
-     * Only ever lowers the level. Raising it here would mark the ticket escalated without
-     * sla:scan dispatching TicketSlaApproaching/TicketSlaBreached, so nobody would be notified.
-     */
     private function lowerEscalation(Ticket $ticket, CarbonImmutable $now): void
     {
         $current = $ticket->getAttribute('escalation_level');
@@ -1299,6 +1267,8 @@ it('reads changed SLA rules on the next resolution', function (): void {
 
 - [ ] **Step 3: Create the SLA config.** Create `config/sla.php`:
 
+These are the resolution SLA rules (TD-045), read only by `App\Services\Sla\SlaCalculator`. Existing tickets keep their stored deadlines, and a change applies to new or recalculated tickets. Minutes are business minutes keyed by `TicketPriority` value, and "approaching" starts once the configured share of the business time has elapsed.
+
 ```php
 <?php
 
@@ -1306,12 +1276,7 @@ declare(strict_types=1);
 
 use App\Enums\TicketPriority;
 
-/*
- * Resolution SLA rules (TD-045). Read only by App\Services\Sla\SlaCalculator.
- * Existing tickets keep their stored deadlines; a change applies to new or recalculated tickets.
- */
 return [
-    // Business minutes per priority, keyed by TicketPriority value.
     'resolution_minutes' => [
         TicketPriority::Low->value => (int) env('SLA_MINUTES_LOW', 2880),
         TicketPriority::Medium->value => (int) env('SLA_MINUTES_MEDIUM', 1440),
@@ -1319,23 +1284,19 @@ return [
         TicketPriority::Critical->value => (int) env('SLA_MINUTES_CRITICAL', 120),
     ],
 
-    // "Approaching" starts once this share of the business time has elapsed.
     'warning_threshold_percent' => (int) env('SLA_WARNING_THRESHOLD_PERCENT', 75),
 ];
 ```
 
 - [ ] **Step 4: Create the business-hours config.** Create `config/business_hours.php`:
 
+This is the company-wide business calendar (TD-041). Windows are local wall-clock times in `timezone`, 'HH:MM' from 00:00 to 23:59 with the end exclusive. Several windows per day are allowed (for example a lunch break), an empty list closes the day, and holidays live in the `holidays` table.
+
 ```php
 <?php
 
 declare(strict_types=1);
 
-/*
- * Company-wide business calendar (TD-041). Windows are local wall-clock times in `timezone`,
- * 'HH:MM' from 00:00 to 23:59, end exclusive. Several windows per day are allowed (e.g. a lunch
- * break). An empty list closes the day. Holidays live in the `holidays` table.
- */
 return [
     'timezone' => env('BUSINESS_TIMEZONE', 'Asia/Dhaka'),
 
@@ -1353,6 +1314,8 @@ return [
 
 - [ ] **Step 5: Create the provider.** Create `app/Providers/SlaServiceProvider.php`:
 
+Both bindings are scoped, so a long-running queue worker picks up holiday changes on the next job instead of keeping a stale calendar.
+
 ```php
 <?php
 
@@ -1367,10 +1330,6 @@ use Illuminate\Contracts\Config\Repository as Config;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
 
-/**
- * Builds the pure calendar from config + cached holidays. Both bindings are scoped, so a
- * long-running queue worker picks up holiday changes on the next job instead of keeping a stale calendar.
- */
 final class SlaServiceProvider extends ServiceProvider
 {
     public function register(): void

@@ -79,11 +79,13 @@
 **Consumes:** nothing (greenfield).
 
 **Produces** (README §3, exact names)
+
+`DomainException` lives in `app/Exceptions/Domain` (§3.2). `status()` is the HTTP status and `errorCode()` is a stable snake_case code.
+
 ```php
-// app/Exceptions/Domain/DomainException.php  (§3.2)
 abstract class DomainException extends \RuntimeException {
-    abstract public function status(): int;        // HTTP status
-    abstract public function errorCode(): string;  // stable snake_case code
+    abstract public function status(): int;
+    abstract public function errorCode(): string;
 }
 ```
 - **Renderer** (`bootstrap/app.php`, §3.2): `expectsJson()` → `{"message": ..., "code": ...}` with `status()`; otherwise `back()->with('error', $message)`. Domain exceptions are not reported to the log (`dontReport`). Every `/api/*` request is forced to `Accept: application/json` by `ForceJsonResponse` (prepended to the `api` group), so API callers always get JSON.
@@ -346,6 +348,8 @@ Steps 17–18 don't exist (they were the Sail compose steps); the numbering is k
 
 - [ ] **Step 19: Replace `.env.example` with the local profile (TD-005)**
 
+The local runtime (TD-005) is the owner's MySQL 8 at 127.0.0.1:3306 with Apache 2.4 and PHP 8.3-FPM at http://techzu.test, database queue/cache/session and the log mailer. Fill `DB_USERNAME` and `DB_PASSWORD` from `prompts/local.env` (owner) or with your own MySQL user that has ALL PRIVILEGES on `techzu%` (`docs/DEVELOPMENT.md`). Tests always use the MySQL database `techzu_testing` (`phpunit.xml`), and workers are run by hand (`php artisan queue:work --queue=default,notifications,imports` and `php artisan schedule:work`, see `docs/DEVELOPMENT.md` §Workers). The domain configuration values are read only inside `config/*.php` (TD-130), and their defaults are the global constraints.
+
 ```dotenv
 APP_NAME="Techzu Support"
 APP_ENV=local
@@ -369,17 +373,6 @@ LOG_STACK=single
 LOG_DEPRECATIONS_CHANNEL=null
 LOG_LEVEL=debug
 
-# -----------------------------------------------------------------------------
-# Local runtime (TD-005): the owner's MySQL 8 at 127.0.0.1:3306, Apache 2.4 +
-# PHP 8.3-FPM at http://techzu.test, database queue/cache/session, log mailer.
-# Fill DB_USERNAME / DB_PASSWORD from prompts/local.env (owner) or with your own
-# MySQL user that has ALL PRIVILEGES on `techzu%` (docs/DEVELOPMENT.md).
-# Tests always use MySQL database techzu_testing (phpunit.xml).
-# Workers are run by hand (docs/DEVELOPMENT.md §Workers):
-#   php artisan queue:work --queue=default,notifications,imports
-#   php artisan schedule:work
-# -----------------------------------------------------------------------------
-
 DB_CONNECTION=mysql
 DB_HOST=127.0.0.1
 DB_PORT=3306
@@ -390,7 +383,6 @@ DB_PASSWORD=
 QUEUE_CONNECTION=database
 
 CACHE_STORE=database
-# CACHE_PREFIX=
 
 REDIS_CLIENT=phpredis
 REDIS_HOST=127.0.0.1
@@ -415,10 +407,6 @@ SESSION_DOMAIN=null
 BROADCAST_CONNECTION=log
 FILESYSTEM_DISK=local
 
-# -----------------------------------------------------------------------------
-# Domain configuration (TD-130). Read only inside config/*.php.
-# -----------------------------------------------------------------------------
-# The defaults are the global constraints.
 BUSINESS_TIMEZONE=Asia/Dhaka
 TICKET_NUMBER_PREFIX=TKT
 TICKETS_PER_PAGE=20
@@ -465,6 +453,8 @@ Expected: `2`. If it prints `0` or `1`, set the missing values in `.env` by hand
   - the kit's `MustVerifyEmail` and `PasskeyUser` contracts, the `PasskeyAuthenticatable`/`TwoFactorAuthenticatable` traits and its `@property` block stay;
   - `HasApiTokens` gets its own `@use` tag, because Sanctum 4.3's trait is generic (`TToken`, defaulting to `PersonalAccessToken`). Without it Larastan types `currentAccessToken()` as `PersonalAccessToken` only and rejects the `TransientToken` check in 0.5's `RevokeCurrentApiToken` (`instanceof.alwaysTrue`).
 
+Session-authenticated requests carry a `TransientToken` and API requests a `PersonalAccessToken`, hence the `@use` union.
+
 ```php
 <?php
 
@@ -501,7 +491,6 @@ use Spatie\Permission\Traits\HasRoles;
  */
 class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
 {
-    // Session-authenticated requests carry a TransientToken, API requests a PersonalAccessToken.
     /** @use HasApiTokens<PersonalAccessToken|TransientToken> */
     use HasApiTokens;
 
@@ -624,6 +613,8 @@ Expected: `PASS`.
 
 - [ ] **Step 4: Replace the kit's `phpstan.neon`.** The kit ships `level: 7`; TD-030 and CLAUDE.md fix the project at level 6, and every later plan is written for level 6. The kit's Carbon extension include and its paths are kept.
 
+`parseModelCastsMethod: true` makes Larastan read `casts()`, so enum and datetime casts aren't typed as `string` from the `array<string, string>` docblock.
+
 ```neon
 includes:
     - vendor/larastan/larastan/extension.neon
@@ -631,7 +622,6 @@ includes:
 
 parameters:
     level: 6
-    # Read casts() so enum and datetime casts aren't typed from the array<string,string> docblock as string.
     parseModelCastsMethod: true
     paths:
         - app
@@ -1098,6 +1088,8 @@ Expected: **FAIL**:
 
 - [ ] **Step 5: Create `app/Exceptions/Domain/DomainException.php`**
 
+`DomainException` covers business-rule failures. `bootstrap/app.php` renders every subclass in one place, so Actions throw instead of calling `abort()` and API clients branch on `errorCode()`.
+
 ```php
 <?php
 
@@ -1107,10 +1099,6 @@ namespace App\Exceptions\Domain;
 
 use RuntimeException;
 
-/**
- * Business-rule failures. bootstrap/app.php renders every subclass in one place, so
- * Actions throw instead of calling abort() and API clients branch on errorCode().
- */
 abstract class DomainException extends RuntimeException
 {
     abstract public function status(): int;
@@ -1120,6 +1108,8 @@ abstract class DomainException extends RuntimeException
 ```
 
 - [ ] **Step 6: Create `app/Http/Middleware/ForceJsonResponse.php`**
+
+API clients that forget the Accept header would otherwise receive redirects and HTML error pages, so forcing it makes `expectsJson()` true for every `/api` route.
 
 ```php
 <?php
@@ -1132,10 +1122,6 @@ use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-/**
- * API clients that forget the Accept header would otherwise receive redirects and HTML
- * error pages; forcing it makes expectsJson() true for every /api route.
- */
 final class ForceJsonResponse
 {
     /** @param Closure(Request): Response $next */
@@ -1149,6 +1135,8 @@ final class ForceJsonResponse
 ```
 
 - [ ] **Step 7: Replace `bootstrap/app.php`.** The Laravel 13 kit's file is the same `Application::configure()` chain with `web`/`commands`/`health` routing, the `appearance`/`sidebar_state` cookie exceptions, the three `web` middleware and `shouldRenderJsonWhen`; this version keeps all of that verbatim and adds the route globs, the `api/v1` group, `ForceJsonResponse`, `throttleApi()`, `dontReport` and the domain-exception renderer. (Laravel 13 renamed the CSRF middleware to `PreventRequestForgery`; nothing here references it.)
+
+One route file per feature (TD-140): new features add a file and never edit a shared one. Domain exceptions are expected outcomes (a lost claim race), not incidents, so they are not reported.
 
 ```php
 <?php
@@ -1170,7 +1158,6 @@ use Illuminate\Support\Facades\Route;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
-        // One route file per feature (TD-140): new features add a file, never edit a shared one.
         web: array_merge(
             [__DIR__.'/../routes/web.php'],
             glob(__DIR__.'/../routes/web/*.php') ?: [],
@@ -1202,7 +1189,6 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->throttleApi();
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        // Domain exceptions are expected outcomes (a lost claim race), not incidents.
         $exceptions->dontReport(DomainException::class);
 
         $exceptions->shouldRenderJsonWhen(
@@ -1233,6 +1219,8 @@ Check with `grep -c "name('dashboard')" routes/web.php`. Expected: `0`.
 
 - [ ] **Step 9: Create the placeholder `routes/web/dashboard.php`**
 
+This keeps the starter kit's post-login redirect target alive until T12 replaces this file with the real dashboard route (same name and URI). `Dashboard.vue` sets its own breadcrumbs as layout props, and `AppLayout` is applied by `app.ts`.
+
 ```php
 <?php
 
@@ -1242,9 +1230,6 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Inertia\Response;
 
-// Keeps the starter kit's post-login redirect target alive until T12 replaces this file
-// with the real dashboard route (same name and URI). Dashboard.vue sets its own breadcrumbs as
-// layout props; AppLayout is applied by app.ts.
 Route::get('dashboard', fn (): Response => Inertia::render('Dashboard'))
     ->middleware(['auth', 'verified'])
     ->name('dashboard');
@@ -1252,13 +1237,12 @@ Route::get('dashboard', fn (): Response => Inertia::render('Dashboard'))
 
 - [ ] **Step 10: Replace `routes/console.php`**
 
+Scheduled tasks are registered in this file with the Schedule facade. Each line belongs to the task that introduces its command (T09 adds `sla:scan`), so features never edit each other's entries.
+
 ```php
 <?php
 
 declare(strict_types=1);
-
-// Scheduled tasks are registered here with the Schedule facade. Each line belongs to the task
-// that introduces its command (T09 adds sla:scan), so features never edit each other's entries.
 ```
 
 - [ ] **Step 11: Run the new tests and confirm they pass**
@@ -1358,12 +1342,14 @@ it('prevents lazy loading outside production', function (): void {
 ```
 Expected: **FAIL**. The limiter rows fail with `Failed asserting that null is not null.` and the lazy-loading test with `Failed asserting that false is true.`
 
-- [ ] **Step 3: Rewrite `app/Providers/AppServiceProvider.php`, keeping the kit's defaults.** The Laravel 13 kit's provider has an empty `register()` and a `boot()` that calls `configureDefaults()` (`Date::use(CarbonImmutable::class)`, `DB::prohibitDestructiveCommands()` in production, production `Password::defaults()`). That method is kept verbatim: `Date::use(CarbonImmutable::class)` is what makes `now()` and Eloquent dates immutable (CLAUDE.md §Code style). Check first:
+- [ ] **Step 3: Rewrite `app/Providers/AppServiceProvider.php`, keeping the kit's defaults.** The Laravel 13 kit's provider has a `boot()` that calls `configureDefaults()` (`Date::use(CarbonImmutable::class)`, `DB::prohibitDestructiveCommands()` in production, production `Password::defaults()`). That method is kept verbatim: `Date::use(CarbonImmutable::class)` is what makes `now()` and Eloquent dates immutable (CLAUDE.md §Code style). Check first:
 
 ```bash
 grep -nE "function (register|boot|configureDefaults)|Date::use|prohibitDestructiveCommands|Password::defaults" app/Providers/AppServiceProvider.php
 ```
 Expected: exactly those six matches. **STOP and report** if the kit's provider contains anything else.
+
+The N+1 guard makes lazy loading fail tests and local requests immediately instead of degrading production (TD-101). Uploads are the most expensive writes (disk and MIME sniffing), so they get a tighter rate limit (TD-120).
 
 ```php
 <?php
@@ -1384,30 +1370,15 @@ use Illuminate\Validation\Rules\Password;
 
 class AppServiceProvider extends ServiceProvider
 {
-    /**
-     * Register any application services.
-     */
-    public function register(): void
-    {
-        //
-    }
-
-    /**
-     * Bootstrap any application services.
-     */
     public function boot(): void
     {
         $this->configureDefaults();
 
-        // N+1 queries fail tests and local requests immediately instead of degrading production (TD-101).
         Model::preventLazyLoading(! $this->app->isProduction());
 
         $this->configureRateLimiting();
     }
 
-    /**
-     * Configure default behaviors for production-ready applications.
-     */
     protected function configureDefaults(): void
     {
         Date::use(CarbonImmutable::class);
@@ -1431,7 +1402,6 @@ class AppServiceProvider extends ServiceProvider
     {
         RateLimiter::for('api', fn (Request $request): Limit => Limit::perMinute(60)->by(self::throttleKey($request)));
 
-        // Uploads are the most expensive writes (disk + MIME sniffing), so they get a tighter budget (TD-120).
         RateLimiter::for('uploads', fn (Request $request): Limit => Limit::perMinute(20)->by(self::throttleKey($request)));
     }
 
@@ -1443,7 +1413,7 @@ class AppServiceProvider extends ServiceProvider
     }
 }
 ```
-The empty `register()` body keeps the kit's structure for T04, which adds the `viewDashboard` gate in `boot()`.
+The kit's empty `register()` is dropped; T04 adds the `viewDashboard` gate in `boot()`.
 
 - [ ] **Step 4: Run it and confirm it passes**
 
@@ -1471,6 +1441,8 @@ git commit -m "feat(core): add API and upload rate limiters and lazy-loading gua
 
 - [ ] **Step 1: Write `tests/Feature/Api/V1/AuthTokenTest.php`**
 
+The Permission enum arrives in T01, so neutral fixture names keep this test independent. The auth guard caches the resolved user per application instance, so the test forgets it to simulate a new request.
+
 ```php
 <?php
 
@@ -1484,7 +1456,6 @@ use Spatie\Permission\Models\Role as RoleModel;
 
 it('issues a token whose abilities mirror the user permission names', function (): void {
     $user = User::factory()->create(['email' => 'agent@example.com']);
-    // The real names arrive with the Permission enum in T01; neutral fixture names keep this test independent.
     PermissionModel::findOrCreate('example.read');
     PermissionModel::findOrCreate('example.write');
     $role = RoleModel::findOrCreate('example-role');
@@ -1546,7 +1517,6 @@ it('revokes only the current token', function (): void {
 
     expect($user->tokens()->pluck('name')->all())->toBe(['phone']);
 
-    // The guard caches the resolved user per application instance; forget it to simulate a new request.
     app('auth')->forgetGuards();
 
     $this->withToken($current->plainTextToken)
@@ -1620,6 +1590,8 @@ final class LoginTokenRequest extends FormRequest
 
 - [ ] **Step 4: Create `app/Actions/Auth/IssueApiToken.php`**
 
+Abilities mirror the permission names (TD-010) so a token never claims more than its user holds. Policies remain the authorization decision point.
+
 ```php
 <?php
 
@@ -1642,8 +1614,6 @@ final class IssueApiToken
             throw ValidationException::withMessages(['email' => __('auth.failed')]);
         }
 
-        // Abilities mirror the permission names (TD-010) so a token never claims more than its user holds;
-        // Policies remain the authorization decision point.
         $abilities = $user->getAllPermissions()->pluck('name')->values()->all();
 
         return $user->createToken($deviceName, $abilities);
@@ -1652,6 +1622,8 @@ final class IssueApiToken
 ```
 
 - [ ] **Step 5: Create `app/Actions/Auth/RevokeCurrentApiToken.php`**
+
+A session-authenticated request carries a `TransientToken`, which has nothing to revoke.
 
 ```php
 <?php
@@ -1669,7 +1641,6 @@ final class RevokeCurrentApiToken
     {
         $token = $user->currentAccessToken();
 
-        // A session-authenticated request carries a TransientToken, which has nothing to revoke.
         if ($token instanceof PersonalAccessToken) {
             $token->delete();
         }
@@ -1809,6 +1780,8 @@ final class CurrentUserController extends Controller
 
 - [ ] **Step 10: Create `routes/api/v1/auth.php`** (`bootstrap/app.php` adds the `api/v1` prefix, the `api.v1.` names and the `api` group)
 
+Credential guessing is the main abuse vector, so token issuance gets 5 per minute on top of `throttle:api` (TD-120).
+
 ```php
 <?php
 
@@ -1818,7 +1791,6 @@ use App\Http\Controllers\Api\V1\AuthTokenController;
 use App\Http\Controllers\Api\V1\CurrentUserController;
 use Illuminate\Support\Facades\Route;
 
-// Credential guessing is the main abuse vector, so issuance gets 5/min on top of throttle:api (TD-120).
 Route::post('auth/tokens', [AuthTokenController::class, 'store'])
     ->middleware('throttle:5,1')
     ->name('auth.tokens.store');
@@ -1854,6 +1826,8 @@ git commit -m "feat(auth): add Sanctum token issue, revoke and /me endpoints" --
 ## Subtask 0.6 — Inertia shared props, layout, navigation registry
 
 - [ ] **Step 1: Write `tests/Feature/App/InertiaSharedPropsTest.php`**
+
+The Role enum arrives in T01, so a neutral fixture role keeps this test independent.
 
 ```php
 <?php
@@ -1893,7 +1867,6 @@ it('shares only whitelisted user fields, placeholder abilities, flash and the un
 
 it('shares the role names of the user', function (): void {
     $user = User::factory()->create();
-    // Real roles arrive with the Role enum in T01; a neutral fixture keeps this test independent.
     $user->assignRole(RoleModel::findOrCreate('example-role'));
 
     $this->actingAs($user)
@@ -1932,6 +1905,8 @@ Expected: only the keys `name`, `auth`, `user` and `sidebarOpen` (the Laravel 13
 
 - [ ] **Step 4: Replace `app/Http/Middleware/HandleInertiaRequests.php`**
 
+Only explicitly selected fields reach the browser, never whole models (TD-120). The unread-count prop is lazy so the count query runs only for full page loads, and T10 replaces that closure. The `can` abilities are placeholders until T04 replaces the body with Gate/Policy checks (README §3.13).
+
 ```php
 <?php
 
@@ -1945,11 +1920,7 @@ use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
 {
-    /**
-     * The root template that's loaded on the first page visit.
-     *
-     * @var string
-     */
+    /** @var string */
     protected $rootView = 'app';
 
     public function version(Request $request): ?string
@@ -1957,11 +1928,7 @@ class HandleInertiaRequests extends Middleware
         return parent::version($request);
     }
 
-    /**
-     * Only explicitly selected fields reach the browser, never whole models (TD-120).
-     *
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function share(Request $request): array
     {
         /** @var User|null $user */
@@ -1985,18 +1952,13 @@ class HandleInertiaRequests extends Middleware
                 'error' => $request->session()->get('error'),
             ],
             'notifications' => [
-                // Lazy so the count query runs only for full page loads; T10 replaces this closure.
                 'unread_count' => fn (): int => 0,
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }
 
-    /**
-     * Placeholders until T04 replaces this body with Gate/Policy checks (README §3.13).
-     *
-     * @return array<string, bool>
-     */
+    /** @return array<string, bool> */
     private function abilities(?User $user): array
     {
         return [
@@ -2020,10 +1982,9 @@ Expected: **PASS** (4 tests).
 
 - [ ] **Step 6: Replace `resources/js/types/auth.ts`.** The kit's `User` type describes the whole user model it used to share (`email_verified_at`, `created_at`, `[key: string]: unknown`, …). It now describes the whitelisted `auth.user`, and `Auth` gains `can`. `Passkey` and `TwoFactorConfigContent` are the kit's, unchanged. Kit components that take a `User` (`UserInfo`, `UserMenuContent`, `NavUser`, `AppHeader`) keep compiling: they read only `name`, `email` and the optional `avatar`.
 
+This type mirrors `auth.user` in `HandleInertiaRequests::share()` (README §3.13): only whitelisted fields reach the browser (TD-120). `email_verified_at` is shared so the kit's profile page shows the unverified notice correctly (T00 Contract note 11), and `avatar` is never shared and stays optional for the kit's fallback. `user` is typed non-null, as in the kit, because it is null only on guest pages (Welcome, `auth/*`), which test it for truthiness and never read its fields.
+
 ```ts
-// Mirrors auth.user in HandleInertiaRequests::share() (README §3.13): only whitelisted fields reach
-// the browser (TD-120). email_verified_at is shared so the kit's profile page shows the unverified
-// notice correctly (T00 Contract note 11); avatar is never shared and stays optional for the kit's fallback.
 export type User = {
     id: number;
     name: string;
@@ -2042,8 +2003,6 @@ export type AuthCan = {
     createOnBehalf: boolean;
 };
 
-// user is typed non-null, as in the kit: it is null only on guest pages (Welcome, auth/*), which
-// test it for truthiness and never read its fields.
 export type Auth = {
     user: User;
     can: AuthCan;
@@ -2066,14 +2025,14 @@ export type TwoFactorConfigContent = {
 
 - [ ] **Step 7: Create `resources/js/types/shared.ts`** (`SharedProps`, `AuthUser`, `AuthCan`; README §3.13)
 
+This is the one declaration of the shared props. `global.d.ts` registers it as Inertia's `sharedPageProps`, so `usePage()` is typed everywhere without a generic.
+
 ```ts
 import type { Auth, AuthCan, User } from '@/types/auth';
 
 export type { AuthCan };
 export type AuthUser = User;
 
-// The one declaration of the shared props. global.d.ts registers it as Inertia's sharedPageProps,
-// so usePage() is typed everywhere without a generic.
 export type SharedProps = {
     name: string;
     auth: Auth;
@@ -2091,11 +2050,12 @@ export type SharedProps = {
 
 - [ ] **Step 7a: Register `SharedProps` as Inertia 3's shared page props.** The kit's `resources/js/types/global.d.ts` declares its own inline `sharedPageProps` (`name`, `auth: Auth`, `sidebarOpen`). Replace that declaration with `SharedProps`, so there is one shape: Inertia's `usePage<T>()` returns `Page<T & SharedPageProps>`, so a second, different declaration would be intersected with it. Replace the whole file:
 
+The kit's `global.d.ts` also extends `ImportMeta` for Vite, and that part is kept as is.
+
 ```ts
 import type { Directive } from 'vue';
 import type { SharedProps } from '@/types/shared';
 
-// Extend ImportMeta interface for Vite...
 declare module 'vite/client' {
     interface ImportMetaEnv {
         readonly VITE_APP_NAME: string;
@@ -2130,12 +2090,12 @@ declare module 'vue' {
 
 - [ ] **Step 8: Create `resources/js/config/navigation.ts`.** It defines the registry `NavItem` itself, so the kit's `resources/js/types/navigation.ts` (with `BreadcrumbItem` and the kit's own link type, also named `NavItem`) stays untouched.
 
+This is the README §3.13 registry entry. It is named `NavItem` by the contract; the kit's own link type of the same name (`types/navigation.ts`, used by the settings tabs and header) is a different, unrelated shape. Each feature owns `resources/js/config/navigation/<feature>.ts`, so features never edit this file.
+
 ```ts
 import type { Component } from 'vue';
 import type { SharedProps } from '@/types/shared';
 
-// README §3.13 registry entry. Named NavItem by the contract; the kit's own link type of the same
-// name (types/navigation.ts, used by the settings tabs and header) is a different, unrelated shape.
 export type NavItem = {
     title: string;
     href: string;
@@ -2144,7 +2104,6 @@ export type NavItem = {
     visible: (page: SharedProps) => boolean;
 };
 
-// Each feature owns resources/js/config/navigation/<feature>.ts, so features never edit this file.
 const modules = import.meta.glob<{ default: NavItem[] }>('./navigation/*.ts', {
     eager: true,
 });
@@ -2160,6 +2119,8 @@ export function navigationFor(props: SharedProps): NavItem[] {
 
 - [ ] **Step 9: Replace `resources/js/layouts/AppLayout.vue`** (it adds the flash banner that domain-exception redirects rely on). The kit's `resources/js/app.ts` applies `AppLayout` to every page outside `auth/` (and `[AppLayout, SettingsLayout]` to `settings/`), so it keeps the kit's `breadcrumbs` layout prop and never wraps pages itself.
 
+`app.ts` applies this layout to every page. Pages pass breadcrumbs as layout props (`defineOptions({ layout: { breadcrumbs } })` or `setLayoutProps()`) and never wrap themselves.
+
 ```vue
 <script setup lang="ts">
 import { usePage } from '@inertiajs/vue3';
@@ -2167,8 +2128,6 @@ import { computed } from 'vue';
 import AppSidebarLayout from '@/layouts/app/AppSidebarLayout.vue';
 import type { BreadcrumbItem } from '@/types';
 
-// app.ts applies this layout to every page; pages pass breadcrumbs as layout props
-// (defineOptions({ layout: { breadcrumbs } }) or setLayoutProps()), never by wrapping themselves.
 const { breadcrumbs = [] } = defineProps<{
     breadcrumbs?: BreadcrumbItem[];
 }>();
@@ -2311,6 +2270,8 @@ Expected: exactly one `require __DIR__.'/settings.php';` line and one `'home' =>
 
 - [ ] **Step 2: Write `tests/Feature/App/HomeRedirectTest.php`**
 
+T05 owns `tickets.index`, so registering a stand-in only when it is missing keeps this test valid before and after T05. Each test defines the Gate itself, so the outcome doesn't depend on whether T04 has merged.
+
 ```php
 <?php
 
@@ -2320,7 +2281,6 @@ use App\Models\User;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 
-// T05 owns tickets.index. Registering a stand-in only when it's missing keeps this test valid before and after T05.
 function ensureTicketsIndexRoute(): void
 {
     if (Route::has('tickets.index')) {
@@ -2335,7 +2295,6 @@ it('sends guests to the login page', function (): void {
     $this->get('/')->assertRedirect(route('login'));
 });
 
-// Each test defines the Gate itself, so the outcome doesn't depend on whether T04 has merged.
 it('sends users who may view the dashboard to it', function (): void {
     Gate::define('viewDashboard', fn (User $user): bool => true);
 
@@ -2365,6 +2324,8 @@ Expected: **FAIL**. `/` still renders the Welcome page through the kit's `Route:
 
 - [ ] **Step 4: Create `app/Http/Controllers/HomeController.php`**
 
+The Gate (T04) and the ticket list (T05) arrive in later waves, so the guards keep `/` working before then by sending everyone to the placeholder dashboard.
+
 ```php
 <?php
 
@@ -2385,8 +2346,6 @@ final class HomeController extends Controller
             return redirect()->route('login');
         }
 
-        // The Gate (T04) and the ticket list (T05) arrive in later waves; the guards keep `/` working before
-        // then, sending everyone to the placeholder dashboard.
         if (Gate::has('viewDashboard') && Gate::allows('viewDashboard')) {
             return redirect()->route('dashboard');
         }
@@ -2400,6 +2359,8 @@ final class HomeController extends Controller
 
 - [ ] **Step 5: Replace `routes/web.php`**
 
+The landing route is role-aware: staff go to the dashboard and customers to their tickets (`HomeController`).
+
 ```php
 <?php
 
@@ -2408,7 +2369,6 @@ declare(strict_types=1);
 use App\Http\Controllers\HomeController;
 use Illuminate\Support\Facades\Route;
 
-// Role-aware landing: staff go to the dashboard, customers to their tickets (HomeController).
 Route::get('/', HomeController::class)->name('home');
 
 require __DIR__.'/settings.php';

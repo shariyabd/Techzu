@@ -79,7 +79,7 @@ namespace App\Services\Tickets;
 
 final class TicketFilter
 {
-    /** @param array<string,mixed> $filters validated */
+    /** @param array<string,mixed> $filters */
     public function apply(Builder $query, array $filters, User $viewer, CarbonImmutable $now): Builder;
 }
 ```
@@ -172,6 +172,8 @@ Expected: FAIL with `Error: Class "App\Services\Tickets\FulltextSearchTerm" not 
 
 - [ ] **Step 3: Implement** `app/Services/Tickets/FulltextSearchTerm.php`
 
+FulltextSearchTerm strips every InnoDB boolean-mode operator because user input must never carry query semantics (TD-120), drops words shorter than `innodb_ft_min_token_size` since a short word with `*` would match almost everything, and caps length to bound the cost of one MATCH.
+
 ```php
 <?php
 
@@ -181,13 +183,10 @@ namespace App\Services\Tickets;
 
 final class FulltextSearchTerm
 {
-    /** Every InnoDB boolean-mode operator; user input must never carry query semantics (TD-120). */
     private const OPERATORS = ['+', '-', '<', '>', '(', ')', '~', '*', '"', '@'];
 
-    /** Matches innodb_ft_min_token_size: a shorter word with `*` would match almost everything. */
     private const MIN_PREFIX_LENGTH = 3;
 
-    /** Bounds the cost of one MATCH and keeps pasted paragraphs from producing huge expressions. */
     private const MAX_TERMS = 10;
 
     public static function toBooleanMode(string $input): string
@@ -283,7 +282,6 @@ beforeEach(function (): void {
         ]);
     };
 
-    // Created at 12:00 Asia/Dhaka on each day.
     $this->tickets = [
         't1' => $make('TKT-2026-000101', TicketStatus::Open, TicketPriority::Low, 'c1', 'cat1', 'a1', '2026-10-01 06:00:00', '2026-10-28 06:00:00', '2026-11-04 06:00:00'),
         't2' => $make('TKT-2026-000102', TicketStatus::InProgress, TicketPriority::High, 'c1', 'cat2', null, '2026-10-10 06:00:00', '2026-10-05 06:00:00', '2026-11-01 06:00:00'),
@@ -346,7 +344,6 @@ it('sorts by whitelisted columns', function (string $sort, array $expected): voi
 ]);
 
 it('treats created dates as whole days in the business timezone', function (): void {
-    // 2026-10-09 19:00 UTC is 2026-10-10 01:00 in Asia/Dhaka.
     $late = Ticket::factory()->create([
         'number' => 'TKT-2026-000199',
         'created_at' => CarbonImmutable::parse('2026-10-09 19:00:00', 'UTC'),
@@ -411,9 +408,7 @@ beforeEach(function (): void {
         'within' => $make('TKT-2026-000201', TicketStatus::InProgress, '+2 hours', '+4 hours'),
         'approaching' => $make('TKT-2026-000202', TicketStatus::InProgress, '-1 hour', '+1 hour'),
         'breached' => $make('TKT-2026-000203', TicketStatus::Open, '-3 hours', '-1 hour'),
-        // Past its due time, but paused: paused wins, so it isn't reported as breached.
         'paused' => $make('TKT-2026-000204', TicketStatus::WaitingForCustomer, '-3 hours', '-1 hour', '-30 minutes'),
-        // Past its due time, but finished: stopped wins.
         'stopped' => $make('TKT-2026-000205', TicketStatus::Resolved, '-3 hours', '-1 hour'),
     ];
 });
@@ -437,6 +432,8 @@ Expected: FAIL with `Illuminate\Contracts\Container\BindingResolutionException: 
 
 - [ ] **Step 4: Implement** `app/Services/Tickets/TicketFilter.php`
 
+TicketFilter applies `visibleTo` first so no later filter, `customer_id` included, can widen what a customer may see (TD-012); it is idempotent when TicketListQuery already applied it. Sortable columns are a whitelist that IndexTicketsRequest enforces (TD-120). Number search is a prefix search on the unique index, date filters use business-timezone calendar days rather than UTC days, priority sorts by business rank with bound values and a fixed direction set, and a unique tie-breaker keeps offset pagination stable. Non-MySQL drivers fall back to a full scan, acceptable off the production path (TD-004).
+
 ```php
 <?php
 
@@ -455,16 +452,13 @@ use Illuminate\Support\Str;
 
 final class TicketFilter
 {
-    /** Sortable columns. Anything else is rejected by IndexTicketsRequest (TD-120). */
     public const SORTS = ['created_at', 'updated_at', 'sla_due_at', 'priority'];
 
     public const DEFAULT_SORT = '-created_at';
 
     private const FULLTEXT_DRIVERS = ['mysql', 'mariadb'];
 
-    /**
-     * @return list<string>
-     */
+    /** @return list<string> */
     public static function sortOptions(): array
     {
         $options = [];
@@ -478,13 +472,11 @@ final class TicketFilter
 
     /**
      * @param  Builder<Ticket>  $query
-     * @param  array<string,mixed>  $filters  validated (raw query-string values; normalized here)
+     * @param  array<string,mixed>  $filters
      * @return Builder<Ticket>
      */
     public function apply(Builder $query, array $filters, User $viewer, CarbonImmutable $now): Builder
     {
-        // First, so no later filter (customer_id included) can widen what a customer may see (TD-012).
-        // Idempotent when TicketListQuery already applied it; required when TicketFilter is used on its own.
         $query->visibleTo($viewer);
 
         $this->number($query, $filters['number'] ?? null);
@@ -511,22 +503,17 @@ final class TicketFilter
         return $query;
     }
 
-    /**
-     * @param  Builder<Ticket>  $query
-     */
+    /** @param  Builder<Ticket>  $query */
     private function number(Builder $query, mixed $number): void
     {
         if (! is_string($number) || trim($number) === '') {
             return;
         }
 
-        // A prefix search on the unique index; an exact number is its own prefix.
         $query->where('tickets.number', 'like', $this->escapeLike(Str::upper(trim($number))).'%');
     }
 
-    /**
-     * @param  Builder<Ticket>  $query
-     */
+    /** @param  Builder<Ticket>  $query */
     private function keyword(Builder $query, mixed $input): void
     {
         if (! is_string($input) || trim($input) === '') {
@@ -543,16 +530,13 @@ final class TicketFilter
             return;
         }
 
-        // Non-MySQL drivers (local tooling only): a full scan, acceptable off the production path (TD-004).
         $needle = '%'.$this->escapeLike(trim($input)).'%';
         $query->where(static function (Builder $where) use ($needle): void {
             $where->where('tickets.subject', 'like', $needle)->orWhere('tickets.description', 'like', $needle);
         });
     }
 
-    /**
-     * @param  Builder<Ticket>  $query
-     */
+    /** @param  Builder<Ticket>  $query */
     private function whereInList(Builder $query, string $column, mixed $values): void
     {
         if (! is_array($values)) {
@@ -566,9 +550,7 @@ final class TicketFilter
         }
     }
 
-    /**
-     * @param  Builder<Ticket>  $query
-     */
+    /** @param  Builder<Ticket>  $query */
     private function whereEquals(Builder $query, string $column, mixed $value): void
     {
         $id = match (true) {
@@ -582,12 +564,9 @@ final class TicketFilter
         }
     }
 
-    /**
-     * @param  Builder<Ticket>  $query
-     */
+    /** @param  Builder<Ticket>  $query */
     private function createdBetween(Builder $query, mixed $from, mixed $to): void
     {
-        // The user means calendar days where the business operates, not UTC days.
         $timezone = (string) config('business_hours.timezone');
 
         if (is_string($from) && $from !== '') {
@@ -599,9 +578,7 @@ final class TicketFilter
         }
     }
 
-    /**
-     * @param  Builder<Ticket>  $query
-     */
+    /** @param  Builder<Ticket>  $query */
     private function sort(Builder $query, string $sort): void
     {
         $direction = str_starts_with($sort, '-') ? 'desc' : 'asc';
@@ -612,7 +589,6 @@ final class TicketFilter
         }
 
         if ($column === 'priority') {
-            // Sort by business rank, not alphabetically; values are bound, the direction is from a fixed set.
             $cases = [];
             $bindings = [];
             foreach (TicketPriority::cases() as $priority) {
@@ -625,7 +601,6 @@ final class TicketFilter
             $query->orderBy('tickets.'.$column, $direction);
         }
 
-        // A unique tie-breaker keeps offset pagination stable.
         $query->orderBy('tickets.id', $direction);
     }
 
@@ -809,8 +784,8 @@ it('runs a constant number of queries for 5 and 50 tickets with filters active',
     };
 
     Sanctum::actingAs($this->admin, ['*']);
-    $seed(3); // plus the 2 tickets from beforeEach = 5
-    $measure(); // warm the permission cache so both measured runs start equal
+    $seed(3);
+    $measure();
     $five = $measure();
 
     $seed(45);
@@ -848,17 +823,13 @@ Expected: FAIL, in four ways:
 - [ ] **Step 3: Modify** `app/Http/Requests/Tickets/IndexTicketsRequest.php`. Replace **only** the `rules()` method. The first three entries are T05's, verbatim. Add the imports `App\Enums\SlaState`, `App\Enums\TicketPriority`, `App\Enums\TicketStatus` and `App\Services\Tickets\TicketFilter`; `Illuminate\Validation\Rule` is already imported. Update the class docblock to `TD-080 filter rules added by T08; scope, page and per_page are T05's.`
 
 ```php
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function rules(): array
     {
         return [
-            // T05, unchanged.
             'scope' => ['sometimes', 'string', Rule::in(['active', 'resolved'])],
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:'.(int) config('tickets.per_page.max', 100)],
-            // T08 (TD-080).
             'number' => ['sometimes', 'nullable', 'string', 'max:32'],
             'q' => ['sometimes', 'nullable', 'string', 'max:200'],
             'status' => ['sometimes', 'array'],
@@ -866,7 +837,6 @@ Expected: FAIL, in four ways:
             'priority' => ['sometimes', 'array'],
             'priority.*' => ['string', Rule::enum(TicketPriority::class)],
             'category_id' => ['sometimes', 'nullable', 'integer', 'min:1', Rule::exists('categories', 'id')],
-            // No `exists`: a 422 versus a 200 would let customers enumerate user ids.
             'assigned_agent_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
             'unassigned' => ['sometimes', 'boolean'],
             'customer_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
@@ -901,8 +871,6 @@ Expected: FAIL, in four ways:
   2. Replace the whole `applyFilters()` method, docblock included, with:
      ```php
          /**
-          * The TD-080 filters and the order, delegated to TicketFilter (T08).
-          *
           * @param  Builder<Ticket>  $query
           * @param  array<string, mixed>  $validated
           * @return Builder<Ticket>
@@ -918,9 +886,6 @@ Expected: FAIL, in four ways:
 
 ```php
     /**
-     * Options for the ticket list filter bar. Staff-only lists use the createOnBehalf ability as the
-     * "is staff" signal, so no role is checked here (TD-010).
-     *
      * @return array{categories: list<array{id: int, name: string}>, agents: list<array{id: int, name: string}>, showPeopleFilters: bool}
      */
     public function filterOptions(User $viewer): array
@@ -929,7 +894,6 @@ Expected: FAIL, in four ways:
 
         return [
             'categories' => $this->formOptions()['categories'],
-            // All agents, including unavailable ones: the filter is about past and present assignments.
             'agents' => $isStaff
                 ? User::query()
                     ->role(Role::Agent->value)
@@ -1016,7 +980,6 @@ beforeEach(function (): void {
             'created_by_id' => $owner?->id,
         ], static fn (mixed $value): bool => $value !== null));
 
-    // Committed immediately: there is no wrapping transaction in this file.
     $this->printer = $make('TKT-2026-000301', 'Printer jammed on floor three', 'Paper stuck in tray two.', $this->customer);
     $this->invoice = $make('TKT-2026-000302', 'Invoice duplicated', 'The printer driver also crashed after the update.');
     $this->vpn = $make('TKT-2026-000303', 'Cannot reach VPN', 'Connection drops every hour.');
@@ -1040,7 +1003,6 @@ it('matches word prefixes', function (): void {
 });
 
 it('neutralises boolean operators typed by the user', function (): void {
-    // Unsanitized, "-invoice" would exclude the invoice ticket and "+" would make terms required.
     expect(($this->search)('+printer -invoice'))->toBe([$this->printer->number, $this->invoice->number]);
 });
 
@@ -1093,7 +1055,6 @@ Expected: PASS (exit 0).
 ```ts
 import type { AgentOption, CategorySummary } from '@/types/tickets';
 
-/** TicketPageData::filterOptions(). Optional on the page until the controller passes it (Contract note 2). */
 export type TicketFilterOptions = {
     categories: CategorySummary[];
     agents: AgentOption[];
@@ -1123,7 +1084,6 @@ const props = defineProps<{
 
 const DEFAULT_SORT = '-created_at';
 
-// Mirrors the PHP enums; the server validates every value (IndexTicketsRequest).
 const STATUSES: Record<'active' | 'resolved', Option[]> = {
     active: [
         { value: 'open', label: 'Open' },
@@ -1171,7 +1131,6 @@ type FilterState = {
     sort: string;
 };
 
-// `filters` is the raw validated query: strings, string arrays, or absent.
 const text = (value: unknown): string => (typeof value === 'string' || typeof value === 'number' ? String(value) : '');
 const list = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []);
 const flag = (value: unknown): boolean => value === true || value === '1' || value === 1 || value === 'true';
@@ -1199,10 +1158,8 @@ const state = reactive<FilterState>(fromFilters(props.filters));
 const errors = computed(() => (page.props.errors ?? {}) as Record<string, string>);
 const path = computed(() => page.url.split('?')[0]);
 const statuses = computed(() => STATUSES[props.scope]);
-// The createOnBehalf ability is the shared "staff" signal (T04); options refine it when present.
 const isStaff = computed(() => props.options?.showPeopleFilters ?? page.props.auth.can.createOnBehalf);
 
-// Only non-empty values go into the URL, so links stay short and shareable; scope is always kept.
 function toQuery(s: FilterState): Record<string, string | string[]> {
     const query: Record<string, string | string[]> = { scope: props.scope };
     const scalar: (keyof FilterState)[] = ['number', 'q', 'category_id', 'assigned_agent_id', 'customer_id', 'created_from', 'created_to', 'sla_state'];
@@ -1239,7 +1196,6 @@ function visit(): void {
     });
 }
 
-// One debounced visit per burst of typing or clicking; `page` is not carried, so results restart at page 1.
 watch(
     state,
     () => {

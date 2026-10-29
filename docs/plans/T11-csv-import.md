@@ -227,7 +227,7 @@ it('yields only the requested record range, keyed by record index', function ():
   `./vendor/bin/pest tests/Unit/Imports/TicketCsvReaderTest.php`
   Expected: FAIL with `Error: Class "App\Services\Imports\TicketCsvReader" not found`.
 
-- [ ] **Step 3: Create** `config/imports.php`.
+- [ ] **Step 3: Create** `config/imports.php`. The disk must have a local filesystem path because the jobs read the file with `SplFileObject`; the 50 MB upload limit is validated by `StoreTicketImportRequest` (`max:` is in kilobytes); the chunk size is records per `ImportTicketsChunk` job; and imports use their own queue so a large import never delays notifications (TD-072).
 
 ```php
 <?php
@@ -235,23 +235,19 @@ it('yields only the requested record range, keyed by record index', function ():
 declare(strict_types=1);
 
 return [
-    // Must be a disk with a local filesystem path: the jobs read the file with SplFileObject.
     'disk' => env('IMPORTS_DISK', 'local'),
 
     'directory' => env('IMPORTS_DIRECTORY', 'imports'),
 
-    // 50 MB. Validated by StoreTicketImportRequest (`max:` is in kilobytes).
     'max_upload_kb' => (int) env('IMPORTS_MAX_UPLOAD_KB', 51200),
 
-    // Records per ImportTicketsChunk job.
     'chunk_size' => (int) env('IMPORTS_CHUNK_SIZE', 500),
 
-    // Separate queue so a large import never delays notifications (TD-072).
     'queue' => env('IMPORTS_QUEUE', 'imports'),
 ];
 ```
 
-- [ ] **Step 4: Create** `app/Services/Imports/TicketCsvReader.php`.
+- [ ] **Step 4: Create** `app/Services/Imports/TicketCsvReader.php`. The reader holds at most one record in memory, which keeps a 50 MB import at constant memory (TD-090). Keys are `SplFileObject` record indices (header = 0); with `READ_CSV` a quoted field spanning several physical lines is still one record, so indices stay stable between the counting pass in `PrepareTicketImport` and the seek in `ImportTicketsChunk`. Quotes are escaped by doubling (RFC 4180), with no backslash escape character.
 
 ```php
 <?php
@@ -264,17 +260,8 @@ use App\Exceptions\Domain\ImportHeaderInvalid;
 use Illuminate\Support\LazyCollection;
 use SplFileObject;
 
-/**
- * Streams a ticket CSV record by record. Nothing here holds more than one record in memory,
- * which is what keeps a 50 MB import at constant memory (TD-090).
- *
- * Keys are SplFileObject record indices (header = 0). With READ_CSV a quoted field that spans
- * several physical lines is still one record, so indices stay stable between the counting pass
- * in PrepareTicketImport and the seek in ImportTicketsChunk.
- */
 final class TicketCsvReader
 {
-    /** Canonical column order, also used for the errors CSV export. */
     public const COLUMNS = [
         'external_reference',
         'subject',
@@ -290,7 +277,6 @@ final class TicketCsvReader
 
     /**
      * @return list<string>
-     *
      * @throws ImportHeaderInvalid
      */
     public function header(string $path): array
@@ -335,11 +321,7 @@ final class TicketCsvReader
         return $columns;
     }
 
-    /**
-     * One streaming pass over the data records.
-     *
-     * @return array{rows: int, last_line: int}
-     */
+    /** @return array{rows: int, last_line: int} */
     public function scan(string $path): array
     {
         $rows = 0;
@@ -353,11 +335,7 @@ final class TicketCsvReader
         return ['rows' => $rows, 'last_line' => $lastLine];
     }
 
-    /**
-     * Non-blank records with index in [$startLine, $endLine], keyed by record index.
-     *
-     * @return LazyCollection<int, list<string|null>>
-     */
+    /** @return LazyCollection<int, list<string|null>> */
     public function records(string $path, int $startLine, int $endLine): LazyCollection
     {
         return LazyCollection::make(function () use ($path, $startLine, $endLine) {
@@ -383,7 +361,6 @@ final class TicketCsvReader
     {
         $file = new SplFileObject($path, 'r');
         $file->setFlags(SplFileObject::READ_CSV);
-        // RFC 4180: quotes are escaped by doubling; no backslash escape character.
         $file->setCsvControl(',', '"', '');
 
         return $file;
@@ -421,7 +398,7 @@ git commit -m "feat(import): add imports config and streaming CSV reader" --trai
 ---
 ### T11.2 — Row rules and `ImportTicketRow`
 
-- [ ] **Step 1: Create the shared test fixture** `tests/Support/Imports/ImportCsvFixture.php`. T11.3 adds `run()` to it.
+- [ ] **Step 1: Create the shared test fixture** `tests/Support/Imports/ImportCsvFixture.php`. T11.3 adds `run()` to it. The fixture has nine data rows (CSV rows 2–10): two importable, seven rejected for different reasons. It expects category slug `hardware`, customer `customer@example.com`, agent `agent@example.com` and an existing ticket with external_reference `EXT-OLD`.
 
 ```php
 <?php
@@ -436,11 +413,6 @@ use App\Models\User;
 
 final class ImportCsvFixture
 {
-    /**
-     * Nine data rows (CSV rows 2–10): two importable, seven rejected for different reasons.
-     * Expects: category slug `hardware`, customer `customer@example.com`, agent `agent@example.com`,
-     * and an existing ticket with external_reference `EXT-OLD`.
-     */
     public static function mixed(): string
     {
         return implode("\n", [
@@ -458,8 +430,6 @@ final class ImportCsvFixture
     }
 
     /**
-     * A validated row as ImportTicketsChunk hands it to ImportTicketRow.
-     *
      * @param  array<string, string|null>  $overrides
      * @return array<string, string|null>
      */
@@ -559,7 +529,7 @@ it('reads created_at without an offset in the business timezone', function (): v
 });
 ```
 
-- [ ] **Step 3: Write the failing action test** `tests/Feature/Imports/ImportTicketRowTest.php`.
+- [ ] **Step 3: Write the failing action test** `tests/Feature/Imports/ImportTicketRowTest.php`. One test uses the PRD example (Critical, Thursday 17:00 Asia/Dhaka, due Sunday 10:00, which is 04:00 UTC); another simulates the race where the validation pre-check passed but another chunk committed the same reference first.
 
 ```php
 <?php
@@ -592,7 +562,6 @@ it('creates a numbered ticket whose SLA clock starts at the CSV created_at', fun
     expect($ticket)->toBeInstanceOf(Ticket::class);
     $ticket = $ticket->fresh();
 
-    // PRD example: Critical, Thursday 17:00 Asia/Dhaka → due Sunday 10:00 (04:00 UTC).
     expect($ticket->number)->toMatch('/^TKT-2026-\d{6}$/')
         ->and($ticket->status)->toBe(TicketStatus::Open)
         ->and($ticket->external_reference)->toBe('EXT-ROW')
@@ -650,7 +619,6 @@ it('fires TicketCreated flagged as imported, with the importing admin as actor',
 });
 
 it('turns a unique-index violation on external_reference into a duplicate error row', function (): void {
-    // Simulates the race: the validation pre-check passed, but another chunk committed the same reference first.
     Ticket::factory()->create(['external_reference' => 'EXT-RACE']);
     $ticketsBefore = Ticket::query()->count();
     $sequenceBefore = (int) DB::table('ticket_sequences')->sum('last_number');
@@ -673,7 +641,7 @@ it('turns a unique-index violation on external_reference into a duplicate error 
   `./vendor/bin/pest tests/Feature/Imports/ImportTicketRowRulesTest.php tests/Feature/Imports/ImportTicketRowTest.php`
   Expected: FAIL with `Error: Class "App\Services\Imports\ImportTicketRowRules" not found` and `Class "App\Actions\Imports\ImportTicketRow" not found`.
 
-- [ ] **Step 5: Create** `app/Services/Imports/ImportTicketRowRules.php`.
+- [ ] **Step 5: Create** `app/Services/Imports/ImportTicketRowRules.php`. The rules are built once per chunk with the active category slugs preloaded, so the category check costs no query per row. The unique rule is a pre-check only: the unique index is the real guard and `ImportTicketRow` handles the race. CSV dates are read in the business timezone unless they carry their own offset, and returned as UTC.
 
 ```php
 <?php
@@ -691,10 +659,6 @@ use Carbon\Exceptions\InvalidFormatException;
 use Closure;
 use Illuminate\Validation\Rule;
 
-/**
- * Validation for one normalised CSV row. Built once per chunk, with the active category slugs
- * preloaded, so the category check costs no query per row.
- */
 final class ImportTicketRowRules
 {
     /** @param list<string> $activeCategorySlugs */
@@ -708,7 +672,6 @@ final class ImportTicketRowRules
     public function rules(): array
     {
         return [
-            // Pre-check only. The unique index is the real guard; ImportTicketRow handles the race.
             'external_reference' => ['nullable', 'string', 'max:64', Rule::unique('tickets', 'external_reference')],
             'subject' => ['required', 'string', 'max:255'],
             'description' => ['required', 'string', 'max:65535'],
@@ -720,7 +683,6 @@ final class ImportTicketRowRules
         ];
     }
 
-    /** Reads a CSV date in the business timezone unless it carries its own offset; returns UTC. */
     public static function parseCreatedAt(?string $value, string $timezone): ?CarbonImmutable
     {
         if ($value === null || trim($value) === '') {
@@ -763,7 +725,7 @@ final class ImportTicketRowRules
 }
 ```
 
-- [ ] **Step 6: Create** `app/Actions/Imports/ImportTicketRow.php`.
+- [ ] **Step 6: Create** `app/Actions/Imports/ImportTicketRow.php`. Each row is imported in its own transaction (TD-053), so a bad row never rolls back its neighbours, and a duplicate returns null after the error row is recorded. The number year follows the ticket's own creation date so historic tickets keep their year; `imported=true` makes T06 skip auto-assignment and T10 skip per-ticket customer notifications. The CSV gives an initial status, not a transition, so `ChangeTicketStatus` does not apply and the side effects mirror what the lifecycle would have produced.
 
 ```php
 <?php
@@ -794,12 +756,7 @@ final class ImportTicketRow
         private readonly SlaCalculator $sla,
     ) {}
 
-    /**
-     * Imports one validated row in its own transaction (TD-053), so a bad row never rolls back its neighbours.
-     * Returns null when the row turned out to be a duplicate; the error row is recorded here.
-     *
-     * @param  array<string, string|null>  $row  validated by ImportTicketRowRules
-     */
+    /** @param  array<string, string|null>  $row  validated by ImportTicketRowRules */
     public function handle(TicketImport $import, array $row, int $rowNumber): ?Ticket
     {
         $now = CarbonImmutable::now();
@@ -825,7 +782,6 @@ final class ImportTicketRow
                     'created_by_id' => $import->user_id,
                     'external_reference' => $row['external_reference'] ?? null,
                 ]);
-                // Number year follows the ticket's own creation date, so historic tickets keep their year.
                 $ticket->number = $this->numbers->next($createdAt);
                 $ticket->status = $status;
                 $ticket->created_at = $createdAt;
@@ -833,7 +789,6 @@ final class ImportTicketRow
                 $this->applyInitialStatus($ticket, $status, $now);
                 $ticket->save();
 
-                // imported=true: T06 skips auto-assignment and T10 skips per-ticket customer notifications.
                 TicketCreated::dispatch($ticket, $actor, true);
 
                 return $ticket;
@@ -849,10 +804,6 @@ final class ImportTicketRow
         }
     }
 
-    /**
-     * The CSV gives an initial status, not a transition, so ChangeTicketStatus does not apply.
-     * The side effects mirror what the lifecycle would have produced.
-     */
     private function applyInitialStatus(Ticket $ticket, TicketStatus $status, CarbonImmutable $now): void
     {
         match ($status) {
@@ -897,7 +848,7 @@ git commit -m "feat(import): validate and import single CSV rows" --trailer "Ref
 
 **Why the tests use the sync queue driver.** `phpunit.xml` (T00) sets `QUEUE_CONNECTION=sync`. On the sync driver, `PrepareTicketImport::dispatch()` runs immediately. Its `Bus::batch(...)->dispatch()` then runs every `ImportTicketsChunk` inline, in order, inside the batch repository's transaction. The batch's `finally` callback fires after the last chunk and dispatches `FinalizeTicketImport`, which also runs inline. So one call to `StartTicketImport::handle()` exercises the real batch, the real `job_batches` row and the real callbacks, with no worker, and the assertions run against the final state. Each pipeline test asserts `config('queue.default') === 'sync'` so this assumption is explicit. The memory test uses `Bus::fake()` instead, because it measures `PrepareTicketImport` on its own.
 
-- [ ] **Step 1: Add `run()` to** `tests/Support/Imports/ImportCsvFixture.php`. Add these `use` lines below the existing ones:
+- [ ] **Step 1: Add `run()` to** `tests/Support/Imports/ImportCsvFixture.php`. Add these `use` lines below the existing ones: `run()` uploads the CSV through the real action; on the sync driver the whole pipeline has finished on return.
 
 ```php
 use App\Actions\Imports\StartTicketImport;
@@ -907,7 +858,6 @@ use Illuminate\Http\UploadedFile;
   and this method inside the class, after `pendingImport()`:
 
 ```php
-    /** Uploads $csv through the real action; on the sync driver the whole pipeline has finished on return. */
     public static function run(User $admin, string $csv, string $name = 'tickets.csv'): TicketImport
     {
         return app(StartTicketImport::class)
@@ -916,7 +866,7 @@ use Illuminate\Http\UploadedFile;
     }
 ```
 
-- [ ] **Step 2: Write the failing pipeline test** `tests/Feature/Imports/TicketImportPipelineTest.php`.
+- [ ] **Step 2: Write the failing pipeline test** `tests/Feature/Imports/TicketImportPipelineTest.php`. Chunks of 3 records split the nine fixture rows into three batch jobs ([1–3], [4–6], [7–9]); `auto_assign` is on and the agent matches the category, so a missing skip would assign the ticket.
 
 ```php
 <?php
@@ -940,8 +890,6 @@ beforeEach(function (): void {
     expect(config('queue.default'))->toBe('sync');
 
     Storage::fake((string) config('imports.disk'));
-    // Chunks of 3 records split the nine fixture rows into three batch jobs: [1–3], [4–6], [7–9].
-    // auto_assign is on and the agent matches the category, so a missing skip would assign the ticket.
     config(['imports.chunk_size' => 3, 'tickets.auto_assign' => true]);
     $this->travelTo(CarbonImmutable::parse('2026-11-02 06:00:00', 'UTC'));
 
@@ -1061,7 +1009,7 @@ it('marks an import without rejected rows as completed', function (): void {
 });
 ```
 
-- [ ] **Step 3: Write the failing memory test** `tests/Feature/Imports/PrepareTicketImportMemoryTest.php`.
+- [ ] **Step 3: Write the failing memory test** `tests/Feature/Imports/PrepareTicketImportMemoryTest.php`. The fixture is about 6 MB on disk, so loading it whole (`file()`, `file_get_contents`, or an array of rows) would exceed the bound; a warm-up on a tiny file keeps autoloading the job and reader classes from counting as growth.
 
 ```php
 <?php
@@ -1085,7 +1033,6 @@ it('streams a 10,000-row file while preparing, using constant memory', function 
     $disk = Storage::disk((string) config('imports.disk'));
     $disk->makeDirectory('imports');
 
-    // About 6 MB on disk: loading it whole (file(), file_get_contents, or an array of rows) would exceed the bound.
     $description = str_repeat('The printer on floor three is jammed again. ', 13);
     $handle = fopen($disk->path('imports/big.csv'), 'wb');
     fputcsv($handle, TicketCsvReader::COLUMNS, ',', '"', '');
@@ -1095,7 +1042,6 @@ it('streams a 10,000-row file while preparing, using constant memory', function 
     fclose($handle);
     expect(filesize($disk->path('imports/big.csv')))->toBeGreaterThan(5_000_000);
 
-    // Warm-up on a tiny file, so autoloading the job and reader classes is not counted as growth.
     $disk->put('imports/warmup.csv', "subject,description,priority,category,customer_email\nA,B,low,general,c@example.com\n");
     app()->call([new PrepareTicketImport(ImportCsvFixture::pendingImport($admin, 'imports/warmup.csv')->id), 'handle']);
 
@@ -1133,7 +1079,7 @@ it('streams a 10,000-row file while preparing, using constant memory', function 
   `./vendor/bin/pest tests/Feature/Imports/TicketImportPipelineTest.php tests/Feature/Imports/PrepareTicketImportMemoryTest.php`
   Expected: FAIL with `Error: Class "App\Actions\Imports\StartTicketImport" not found` and `Class "App\Jobs\PrepareTicketImport" not found`.
 
-- [ ] **Step 5: Create** `app/Actions/Imports/StartTicketImport.php`.
+- [ ] **Step 5: Create** `app/Actions/Imports/StartTicketImport.php`. The stored filename is random and hashed on the private disk, and the client name is kept only as metadata; the import is refreshed after the pipeline because on the sync driver it has already run.
 
 ```php
 <?php
@@ -1158,7 +1104,6 @@ final class StartTicketImport
     {
         $disk = (string) config('imports.disk');
 
-        // Random hashed filename on the private disk; the client name is kept only as metadata.
         $path = $file->store((string) config('imports.directory'), $disk);
         if ($path === false) {
             throw new RuntimeException('The import file could not be stored.');
@@ -1184,13 +1129,12 @@ final class StartTicketImport
 
         PrepareTicketImport::dispatch($import->id);
 
-        // On the sync driver the pipeline already ran; refresh so callers see the current state.
         return $import->refresh();
     }
 }
 ```
 
-- [ ] **Step 6: Create** `app/Jobs/PrepareTicketImport.php`.
+- [ ] **Step 6: Create** `app/Jobs/PrepareTicketImport.php`. Only a pending import is prepared, so a retry after the batch was dispatched does nothing. The import must be Processing before dispatch, and the timestamp is stamped in the batch callback too, because on the sync driver Finalize runs inside `dispatch()`. `ticket_imports` has no message column, so a header failure's reason is the first row of the error report.
 
 ```php
 <?php
@@ -1233,7 +1177,6 @@ final class PrepareTicketImport implements ShouldQueue
     {
         $import = TicketImport::query()->find($this->importId);
 
-        // Only a pending import is prepared, so a retry after the batch was dispatched does nothing.
         if ($import === null || $import->status !== ImportStatus::Pending) {
             return;
         }
@@ -1250,7 +1193,6 @@ final class PrepareTicketImport implements ShouldQueue
 
         ['rows' => $rows, 'last_line' => $lastLine] = $reader->scan($path);
 
-        // Must be Processing before dispatch: on the sync driver Finalize runs inside dispatch().
         $import->status = ImportStatus::Processing;
         $import->total_rows = $rows;
         $import->started_at = CarbonImmutable::now();
@@ -1269,7 +1211,6 @@ final class PrepareTicketImport implements ShouldQueue
             ->onQueue((string) config('imports.queue'))
             ->allowFailures()
             ->finally(static function (Batch $batch) use ($importId): void {
-                // Stamped here too: on the sync driver this callback runs before dispatch() returns.
                 TicketImport::query()->whereKey($importId)->whereNull('batch_id')->update(['batch_id' => $batch->id]);
                 FinalizeTicketImport::dispatch($importId);
             })
@@ -1305,7 +1246,6 @@ final class PrepareTicketImport implements ShouldQueue
     /** @param array<string, list<string>> $errors */
     private function markFailed(TicketImport $import, int $rowNumber, array $errors): void
     {
-        // ticket_imports has no message column; the reason is the first row of the error report.
         DB::transaction(function () use ($import, $rowNumber, $errors): void {
             $error = new TicketImportError();
             $error->row_number = $rowNumber;
@@ -1325,7 +1265,7 @@ final class PrepareTicketImport implements ShouldQueue
 
   > The header error stores `raw = []`. The header values already appear in the message.
 
-- [ ] **Step 7: Create** `app/Jobs/ImportTicketsChunk.php`.
+- [ ] **Step 7: Create** `app/Jobs/ImportTicketsChunk.php`. The job has one attempt because rows commit one by one and a retry would re-import rows without an external_reference; per-row failures are caught, so the job itself fails only on infrastructure errors. Header values are lower-cased before validation so `High` and `CUSTOMER@x.com` are accepted, and counters use an atomic `col = col + 1` in SQL so parallel chunks never lose an update. A null ticket is a duplicate caught by the unique index, whose error row `ImportTicketRow` already wrote.
 
 ```php
 <?php
@@ -1356,11 +1296,8 @@ final class ImportTicketsChunk implements ShouldQueue
     use Batchable;
     use Queueable;
 
-    /** Values lower-cased before validation, so `High` and `CUSTOMER@x.com` are accepted. */
     private const LOWERCASE = ['priority', 'status', 'category', 'customer_email'];
 
-    // One attempt: rows commit one by one, so a retry would re-import rows without an external_reference.
-    // Per-row failures are caught below, so the job itself fails only on infrastructure errors.
     public int $tries = 1;
 
     public function __construct(
@@ -1460,7 +1397,6 @@ final class ImportTicketsChunk implements ShouldQueue
             return;
         }
 
-        // A null ticket is a duplicate caught by the unique index; ImportTicketRow already wrote its error row.
         $this->increment($import, $ticket === null ? 'failed_rows' : 'succeeded_rows');
     }
 
@@ -1503,7 +1439,6 @@ final class ImportTicketsChunk implements ShouldQueue
         });
     }
 
-    /** Atomic `col = col + 1` in SQL, so parallel chunks never lose an update. */
     private function increment(TicketImport $import, string $outcomeColumn): void
     {
         TicketImport::query()
@@ -1514,7 +1449,7 @@ final class ImportTicketsChunk implements ShouldQueue
 }
 ```
 
-- [ ] **Step 8: Create** `app/Jobs/FinalizeTicketImport.php`.
+- [ ] **Step 8: Create** `app/Jobs/FinalizeTicketImport.php`. The update is conditional, so a duplicate Finalize (retry or second worker) changes nothing and fires nothing.
 
 ```php
 <?php
@@ -1560,7 +1495,6 @@ final class FinalizeTicketImport implements ShouldQueue
             default => ImportStatus::Completed,
         };
 
-        // Conditional update: a duplicate Finalize (retry or second worker) changes nothing and fires nothing.
         $updated = TicketImport::query()
             ->whereKey($import->id)
             ->where('status', ImportStatus::Processing->value)
@@ -1768,7 +1702,7 @@ it('streams the error rows as a CSV that neutralises spreadsheet formulas', func
 });
 ```
 
-- [ ] **Step 2: Write the failing authorization test** `tests/Feature/Authorization/ImportAuthorizationTest.php`. It uses T04's `Tests\Support\AuthorizationMatrix`, which sends `/api/` URIs as JSON with Sanctum and everything else through the session.
+- [ ] **Step 2: Write the failing authorization test** `tests/Feature/Authorization/ImportAuthorizationTest.php`. It uses T04's `Tests\Support\AuthorizationMatrix`, which sends `/api/` URIs as JSON with Sanctum and everything else through the session. Each row is `[method, uri, status for an admin, status for a guest]`; the admin POSTs carry no file, so they stop at validation (the web gets a 302 with errors, the API a 422), and a 403 rather than a 422 proves the `can:` middleware runs before `StoreTicketImportRequest`.
 
 ```php
 <?php
@@ -1785,12 +1719,7 @@ beforeEach(function (): void {
     $this->import = ImportCsvFixture::pendingImport(User::factory()->admin()->create());
 });
 
-/**
- * [method, uri, status for an admin, status for a guest].
- * The admin POSTs carry no file, so they stop at validation: the web gets a 302 back with errors, the API a 422.
- *
- * @return list<array{0: string, 1: string, 2: int, 3: int}>
- */
+/** @return list<array{0: string, 1: string, 2: int, 3: int}> */
 function importAuthorizationRows(TicketImport $import): array
 {
     return [
@@ -1830,7 +1759,6 @@ it('rejects an agent POST before validation runs', function (): void {
     $matrix = AuthorizationMatrix::for($this);
     $matrix->actingAsRole(Role::Agent);
 
-    // A 403 rather than a 422 proves the `can:` middleware runs before StoreTicketImportRequest.
     $matrix->expectAccess('POST', route('api.v1.imports.store'), 403, ['file' => 'not-a-file']);
 });
 ```
@@ -1841,7 +1769,7 @@ it('rejects an agent POST before validation runs', function (): void {
   `./vendor/bin/pest tests/Feature/Imports/TicketImportHttpTest.php tests/Feature/Authorization/ImportAuthorizationTest.php`
   Expected: FAIL with `Symfony\Component\Routing\Exception\RouteNotFoundException: Route [admin.imports.store] not defined.`
 
-- [ ] **Step 4: Create** `app/Http/Requests/StoreTicketImportRequest.php`.
+- [ ] **Step 4: Create** `app/Http/Requests/StoreTicketImportRequest.php`. Authorization runs earlier, in the route's `can:create` middleware (`TicketImportPolicy`).
 
 ```php
 <?php
@@ -1856,7 +1784,6 @@ use LogicException;
 
 final class StoreTicketImportRequest extends FormRequest
 {
-    /** Authorization runs earlier, in the route's `can:create` middleware (TicketImportPolicy). */
     public function authorize(): bool
     {
         return true;
@@ -2012,7 +1939,7 @@ final class TicketImportErrorResource extends JsonResource
 }
 ```
 
-- [ ] **Step 8: Create** `app/Services/Imports/TicketImportQuery.php`.
+- [ ] **Step 8: Create** `app/Services/Imports/TicketImportQuery.php`. This service is the read side of imports, so controllers stay query-free (TD-001); the error list is served by the `(ticket_import_id, row_number)` index, and the download reads 1,000 rows at a time.
 
 ```php
 <?php
@@ -2026,7 +1953,6 @@ use App\Models\TicketImportError;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\LazyCollection;
 
-/** The read side of imports, so controllers stay query-free (TD-001). */
 final class TicketImportQuery
 {
     /** @return LengthAwarePaginator<int, TicketImport> */
@@ -2038,7 +1964,6 @@ final class TicketImportQuery
             ->paginate($perPage);
     }
 
-    /** Served by the (ticket_import_id, row_number) index. @return LengthAwarePaginator<int, TicketImportError> */
     public function errors(TicketImport $import, int $perPage): LengthAwarePaginator
     {
         return $import->errors()
@@ -2048,7 +1973,6 @@ final class TicketImportQuery
             ->withQueryString();
     }
 
-    /** All error rows, 1,000 at a time, for the streamed download. @return LazyCollection<int, TicketImportError> */
     public function allErrors(TicketImport $import): LazyCollection
     {
         return $import->errors()
@@ -2059,7 +1983,7 @@ final class TicketImportQuery
 }
 ```
 
-- [ ] **Step 9: Create** `app/Services/Imports/ImportErrorCsvWriter.php`.
+- [ ] **Step 9: Create** `app/Services/Imports/ImportErrorCsvWriter.php`. This is the CSV-injection guard: a spreadsheet must not run an uploaded value as a formula.
 
 ```php
 <?php
@@ -2095,7 +2019,6 @@ final class ImportErrorCsvWriter
         }
     }
 
-    /** CSV-injection guard: a spreadsheet must not run an uploaded value as a formula. */
     private static function cell(string $value): string
     {
         return preg_match('/^[=+\-@\t\r]/', $value) === 1 ? "'".$value : $value;
@@ -2208,7 +2131,7 @@ final class DownloadTicketImportErrorsController extends Controller
 }
 ```
 
-- [ ] **Step 12: Create** `app/Http/Controllers/Api/V1/TicketImportController.php`.
+- [ ] **Step 12: Create** `app/Http/Controllers/Api/V1/TicketImportController.php`. It returns 202 because the import continues in the background; clients poll `imports.show` for progress.
 
 ```php
 <?php
@@ -2227,7 +2150,6 @@ use Illuminate\Http\JsonResponse;
 
 final class TicketImportController extends Controller
 {
-    /** 202: the import continues in the background; poll `imports.show` for progress. */
     public function store(StoreTicketImportRequest $request, StartTicketImport $start): JsonResponse
     {
         /** @var User $admin */
@@ -2409,7 +2331,6 @@ export interface TicketImportErrorItem {
     created_at: string | null;
 }
 
-/** Laravel's paginated ResourceCollection response: { data, links, meta }. */
 export interface ResourcePage<T> {
     data: T[];
     links: {
@@ -2795,7 +2716,7 @@ function submit(): void {
 </template>
 ```
 
-- [ ] **Step 6: Create** `resources/js/pages/admin/imports/Show.vue`. It polls every 2 s with Inertia 3's `usePoll(interval, reloadOptions, { autoStart })` (`@inertiajs/vue3` `types/usePoll.d.ts`), reloading only the two props, and stops once the import has finished.
+- [ ] **Step 6: Create** `resources/js/pages/admin/imports/Show.vue`. It polls every 2 s with Inertia 3's `usePoll(interval, reloadOptions, { autoStart })` (`@inertiajs/vue3` `types/usePoll.d.ts`), reloading only the two props, and stops once the import has finished. The breadcrumbs depend on props, so they are pushed to the default AppLayout (`app.ts`) reactively.
 
 ```vue
 <script setup lang="ts">
@@ -2831,7 +2752,6 @@ const breadcrumbs = computed((): BreadcrumbItem[] => [
     },
 ]);
 
-// The breadcrumbs depend on props, so they're pushed to the default AppLayout (app.ts) reactively.
 watchEffect(() => {
     setLayoutProps({ breadcrumbs: breadcrumbs.value });
 });

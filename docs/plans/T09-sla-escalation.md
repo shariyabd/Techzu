@@ -101,8 +101,6 @@ function scanNow(): CarbonImmutable
 }
 
 /**
- * An active, unpaused, never-escalated ticket; callers override the SLA timestamps.
- *
  * @param  array<string, mixed>  $attributes
  */
 function scanTicket(array $attributes = []): Ticket
@@ -185,7 +183,6 @@ it('escalates again after the calculator lowered the level', function (): void {
     $ticket = scanTicket(['sla_warning_at' => scanNow()->subHours(2), 'sla_due_at' => scanNow()->subHour()]);
     $this->artisan('sla:scan')->assertSuccessful();
 
-    // What SlaCalculator::resume()/recalculateForPriority() leave behind when the deadline moves later (T02).
     DB::table('tickets')->where('id', $ticket->id)->update([
         'escalation_level' => EscalationLevel::None->value,
         'sla_warning_at' => scanNow()->addMinutes(30),
@@ -238,8 +235,6 @@ it('re-checks the threshold under the row lock, so a ticket paused mid-scan is n
     $ticket = scanTicket(['sla_warning_at' => scanNow()->subHours(2), 'sla_due_at' => scanNow()->subHour()]);
     $chunkQueries = 0;
 
-    // The approaching pass runs the first "limit 500" chunk query and the breached pass the second.
-    // Right after the breached pass has picked its candidates, an agent pauses the ticket.
     DB::listen(function (QueryExecuted $query) use ($ticket, &$chunkQueries): void {
         if (! str_contains($query->sql, 'limit '.ScanSlaCommand::CHUNK_SIZE)) {
             return;
@@ -387,6 +382,8 @@ it('adds the escalated entry when an approaching ticket later breaches', functio
 
 - [ ] **Step 4: Implement.** Create `app/Console/Commands/ScanSlaCommand.php`:
 
+ScanSlaCommand escalates through the query builder on purpose: escalation is bookkeeping, so `updated_at` stays untouched. Each chunk is bounded by `CHUNK_SIZE` for memory and lock time (TD-101), and `assignedAgent` is eager-loaded for the notification listeners (T10).
+
 ```php
 <?php
 
@@ -406,15 +403,8 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use LogicException;
 
-/**
- * Escalates active, unpaused tickets (TD-044). Idempotent at the database level: each chunk is
- * re-checked under FOR UPDATE and changed with a conditional UPDATE, and events are dispatched
- * after commit for exactly the rows this run changed. Overlapping runs, retries or a second server
- * therefore never send a duplicate escalation.
- */
 final class ScanSlaCommand extends Command
 {
-    /** Tickets locked and escalated per transaction; bounds memory and lock time (TD-101). */
     public const CHUNK_SIZE = 500;
 
     /** @var string */
@@ -459,9 +449,6 @@ final class ScanSlaCommand extends Command
     }
 
     /**
-     * Active, unpaused tickets below $level that have crossed its threshold. The two thresholds are
-     * disjoint (due > now vs due <= now), so a ticket already past due skips "approaching" entirely.
-     *
      * @return Builder<Ticket>
      */
     private function candidates(EscalationLevel $level, CarbonImmutable $runAt): Builder
@@ -476,11 +463,8 @@ final class ScanSlaCommand extends Command
     }
 
     /**
-     * Locks the chunk's rows that still qualify (locking reads see the latest committed data, so rows
-     * escalated, paused or resolved meanwhile drop out), then raises their level.
-     *
      * @param  array<int, mixed>  $candidateIds
-     * @return list<int> the ids this run actually escalated
+     * @return list<int>
      */
     private function claim(EscalationLevel $level, CarbonImmutable $runAt, array $candidateIds): array
     {
@@ -505,7 +489,6 @@ final class ScanSlaCommand extends Command
                 $values['escalated_at'] = $runAt;
             }
 
-            // Query builder on purpose: escalation is bookkeeping, so updated_at stays untouched.
             Ticket::query()
                 ->whereKey($ids)
                 ->where('escalation_level', '<', $level->value)
@@ -523,7 +506,6 @@ final class ScanSlaCommand extends Command
             return;
         }
 
-        // Bounded by CHUNK_SIZE. assignedAgent is eager-loaded for the notification listeners (T10).
         Ticket::query()
             ->with('assignedAgent')
             ->whereKey($ids)
@@ -570,7 +552,6 @@ use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Console\Kernel as ConsoleKernel;
 
 it('schedules sla:scan every minute, without overlapping, on one server', function (): void {
-    // Loads routes/console.php if the test bootstrap hasn't already (idempotent).
     $this->app->make(ConsoleKernel::class)->bootstrap();
 
     $events = collect($this->app->make(Schedule::class)->events())
@@ -600,7 +581,6 @@ use Illuminate\Support\Facades\Schedule;
 - [ ] **Step 4: Add the schedule line.** Put it in `routes/console.php`, not in `->withScheduling()` in `bootstrap/app.php`: T00 owns that file, and Laravel 13 defers `withScheduling()` callbacks until `Schedule` is first resolved. `routes/console.php` is loaded when the console kernel bootstraps, which the Step 1 test triggers explicitly. Append this as the last statement of `routes/console.php`:
 
 ```php
-// TD-044: every minute; idempotent, and locked against overlapping runs and multiple servers.
 Schedule::command('sla:scan')->everyMinute()->withoutOverlapping()->onOneServer();
 ```
 

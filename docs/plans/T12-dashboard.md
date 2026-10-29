@@ -115,7 +115,7 @@ Both are closures, so the 60 s poll reloads only them.
 
 So the query reads only active rows plus the last 30 days of finished ones, not the whole history. No TD-021 index serves `resolved_at`.
 
-- [ ] **Step 1: Write the failing test** `tests/Feature/Dashboard/DashboardStatsTest.php`.
+- [ ] **Step 1: Write the failing test** `tests/Feature/Dashboard/DashboardStatsTest.php`. It uses the array cache store, because a cache hit must cost zero queries and a database store would not allow that. It preloads the viewers' roles so a cold-cache query count excludes the `isStaff()` role load. The fixtures are: t1 open, unassigned, low, within SLA; t2 in progress, Alpha, critical, breached; t3 waiting, Alpha, high, past due but paused so not breached; t4 open, Bravo, medium, approaching; t5 open, Bravo, critical, within; t6 resolved 2 days ago (counted), past due but stopped; t7 closed, resolved 40 days ago (not counted); t8 closed, resolved yesterday (counted).
 
 ```php
 <?php
@@ -134,7 +134,6 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 beforeEach(function (): void {
-    // Array store: a cache hit must cost zero queries, which a database cache store would not allow.
     config(['cache.default' => 'array']);
     Cache::flush();
 
@@ -159,32 +158,23 @@ beforeEach(function (): void {
         ], $attributes));
     };
 
-    // t1: open, unassigned, low, within
     $make(['status' => TicketStatus::Open, 'priority' => TicketPriority::Low,
         'sla_warning_at' => $now->addHours(2), 'sla_due_at' => $now->addHours(4)]);
-    // t2: in progress, Alpha, critical, breached
     $make(['status' => TicketStatus::InProgress, 'priority' => TicketPriority::Critical, 'assigned_agent_id' => $this->alpha->id,
         'sla_warning_at' => $now->subHours(2), 'sla_due_at' => $now->subHour()]);
-    // t3: waiting, Alpha, high, past due but paused, so not breached
     $make(['status' => TicketStatus::WaitingForCustomer, 'priority' => TicketPriority::High, 'assigned_agent_id' => $this->alpha->id,
         'sla_warning_at' => $now->subHours(3), 'sla_due_at' => $now->subHour(), 'sla_paused_at' => $now->subHours(5)]);
-    // t4: open, Bravo, medium, approaching
     $make(['status' => TicketStatus::Open, 'priority' => TicketPriority::Medium, 'assigned_agent_id' => $this->bravo->id,
         'sla_warning_at' => $now->subMinutes(10), 'sla_due_at' => $now->addHour()]);
-    // t5: open, Bravo, critical, within
     $make(['status' => TicketStatus::Open, 'priority' => TicketPriority::Critical, 'assigned_agent_id' => $this->bravo->id,
         'sla_warning_at' => $now->addHour(), 'sla_due_at' => $now->addHours(2)]);
-    // t6: resolved 2 days ago (counted), past due but stopped
     $make(['status' => TicketStatus::Resolved, 'priority' => TicketPriority::Critical, 'assigned_agent_id' => $this->alpha->id,
         'sla_warning_at' => $now->subDays(4), 'sla_due_at' => $now->subDays(3), 'resolved_at' => $now->subDays(2)]);
-    // t7: closed, resolved 40 days ago (not counted)
     $make(['status' => TicketStatus::Closed, 'priority' => TicketPriority::Low, 'assigned_agent_id' => $this->bravo->id,
         'sla_warning_at' => $now->subDays(45), 'sla_due_at' => $now->subDays(44), 'resolved_at' => $now->subDays(40), 'closed_at' => $now->subDays(39)]);
-    // t8: closed, resolved yesterday (counted)
     $make(['status' => TicketStatus::Closed, 'priority' => TicketPriority::High, 'assigned_agent_id' => $this->alpha->id,
         'sla_warning_at' => $now->subDays(3), 'sla_due_at' => $now->subDays(2), 'resolved_at' => $now->subDay(), 'closed_at' => $now->subDay()]);
 
-    // A cold-cache query count must not include loading the viewer's roles for isStaff().
     $this->admin->load('roles');
     $this->alpha->load('roles');
     $this->customer->load('roles');
@@ -300,7 +290,7 @@ it("returns the viewer's active assigned tickets, soonest deadline first", funct
   `./vendor/bin/pest tests/Feature/Dashboard/DashboardStatsTest.php`
   Expected: FAIL with `Error: Class "App\Services\Dashboard\DashboardStats" not found`.
 
-- [ ] **Step 3: Create the migration** `database/migrations/2026_10_29_120000_add_status_resolved_at_index_to_tickets_table.php`.
+- [ ] **Step 3: Create the migration** `database/migrations/2026_10_29_120000_add_status_resolved_at_index_to_tickets_table.php`. It serves the dashboard's "resolved in the last 30 days" count (TD-021, TD-100).
 
 ```php
 <?php
@@ -313,7 +303,6 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    // Serves the dashboard's "resolved in the last 30 days" count (TD-021, TD-100).
     public function up(): void
     {
         Schema::table('tickets', function (Blueprint $table): void {
@@ -336,7 +325,7 @@ return new class extends Migration
 | `tickets(status, resolved_at)` | dashboard "resolved in the last 30 days" count (added in T12) |
 ```
 
-- [ ] **Step 5: Create** `app/Services/Dashboard/DashboardStats.php`.
+- [ ] **Step 5: Create** `app/Services/Dashboard/DashboardStats.php`. It runs three aggregate queries, cached for 60 s per scope (TD-100). The SLA predicates repeat `SlaQuery`'s semantics inside CASE expressions, because `SlaQuery` builds WHERE clauses and a single conditional aggregate cannot use them; all three queries bind the same `$now`, and the test checks they agree with `SlaQuery`. Query 1's two WHERE branches are ranges on `tickets(status, resolved_at)`, so the full history is never scanned. Query 2 is served by `tickets(priority, status)`. Query 3 starts from the agent/admin role rows so cost scales with staff, LEFT JOINs tickets through `tickets(assigned_agent_id, status)`, and always lists agents but lists admins only while they hold active tickets. `myTickets()` is uncached on purpose: it is personal and cheap (index `(assigned_agent_id, status)`, at most `$limit` rows).
 
 ```php
 <?php
@@ -357,20 +346,11 @@ use Illuminate\Database\Query\JoinClause;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
-/**
- * Three aggregate queries, cached for 60 s per scope (TD-100).
- *
- * The SLA predicates repeat SlaQuery's semantics inside CASE expressions, because SlaQuery builds
- * WHERE clauses and a single conditional aggregate cannot use them. All three queries bind the same
- * $now, so the counts agree with one another. The test checks that they agree with SlaQuery.
- */
 final class DashboardStats
 {
     public const CACHE_TTL_SECONDS = 60;
 
-    /**
-     * @return array{totals: array<string,int>, by_priority: list<array{priority:string,count:int}>, by_agent: list<array{agent_id:int,name:string,active:int,breached:int}>}
-     */
+    /** @return array{totals: array<string,int>, by_priority: list<array{priority:string,count:int}>, by_agent: list<array{agent_id:int,name:string,active:int,breached:int}>} */
     public function for(User $viewer): array
     {
         return Cache::remember(
@@ -393,7 +373,7 @@ final class DashboardStats
         return $viewer->isStaff() ? 'dashboard:staff' : 'dashboard:customer:'.$viewer->id;
     }
 
-    /** Uncached on purpose: it's personal and cheap (index (assigned_agent_id, status), at most $limit rows). @return Collection<int, Ticket> */
+    /** @return Collection<int, Ticket> */
     public function myTickets(User $viewer, int $limit = 5): Collection
     {
         return Ticket::query()
@@ -406,7 +386,7 @@ final class DashboardStats
             ->get();
     }
 
-    /** Query 1 of 3. @return array<string, int> */
+    /** @return array<string, int> */
     private function totals(User $viewer, CarbonImmutable $now): array
     {
         $active = self::values(TicketStatus::active());
@@ -421,9 +401,7 @@ final class DashboardStats
                 "SUM(CASE WHEN status IN ({$activeIn}) THEN 1 ELSE 0 END) AS total_open",
                 "SUM(CASE WHEN status IN ({$activeIn}) AND assigned_agent_id IS NULL THEN 1 ELSE 0 END) AS total_unassigned",
                 "SUM(CASE WHEN status IN ({$activeIn}) AND priority = ? THEN 1 ELSE 0 END) AS total_critical",
-                // = SlaQuery::whereBreached: active, not paused, sla_due_at <= now
                 "SUM(CASE WHEN status IN ({$activeIn}) AND sla_paused_at IS NULL AND sla_due_at <= ? THEN 1 ELSE 0 END) AS total_breached",
-                // = SlaQuery::whereApproaching: active, not paused, warning <= now < due
                 "SUM(CASE WHEN status IN ({$activeIn}) AND sla_paused_at IS NULL AND sla_warning_at <= ? AND sla_due_at > ? THEN 1 ELSE 0 END) AS total_approaching",
                 "SUM(CASE WHEN status IN ({$finishedIn}) AND resolved_at >= ? THEN 1 ELSE 0 END) AS total_resolved",
             ]), [
@@ -434,7 +412,6 @@ final class DashboardStats
                 ...$active, $now, $now,
                 ...$finished, $resolvedSince,
             ])
-            // Both branches are ranges on tickets(status, resolved_at), so the full history is never scanned.
             ->where(function ($query) use ($active, $finished, $resolvedSince): void {
                 $query->whereIn('status', $active)
                     ->orWhere(function ($query) use ($finished, $resolvedSince): void {
@@ -453,7 +430,7 @@ final class DashboardStats
         ];
     }
 
-    /** Query 2 of 3. Served by tickets(priority, status). @return list<array{priority:string,count:int}> */
+    /** @return list<array{priority:string,count:int}> */
     private function byPriority(User $viewer): array
     {
         $counts = $this->visible($viewer)
@@ -477,12 +454,7 @@ final class DashboardStats
         );
     }
 
-    /**
-     * Query 3 of 3. Starts from the agent/admin role rows, so the cost scales with staff, not users.
-     * Tickets are LEFT JOINed through tickets(assigned_agent_id, status).
-     *
-     * @return list<array{agent_id:int,name:string,active:int,breached:int}>
-     */
+    /** @return list<array{agent_id:int,name:string,active:int,breached:int}> */
     private function byAgent(CarbonImmutable $now): array
     {
         $roles = (string) config('permission.table_names.roles', 'roles');
@@ -500,7 +472,6 @@ final class DashboardStats
             ->where("{$pivot}.model_type", (new User())->getMorphClass())
             ->whereIn("{$roles}.name", [Role::Agent->value, Role::Admin->value])
             ->groupBy('users.id', 'users.name')
-            // Agents always appear; admins only while they hold active tickets.
             ->havingRaw("COUNT(tickets.id) > 0 OR MAX(CASE WHEN {$roles}.name = ? THEN 1 ELSE 0 END) = 1", [Role::Agent->value])
             ->selectRaw(
                 'users.id AS agent_id, users.name AS agent_name, COUNT(tickets.id) AS active_count, '
@@ -729,11 +700,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-/**
- * Wraps DashboardStats::for() plus the viewer's ticket strip.
- *
- * @property array{stats: array<string, mixed>, my_tickets: Collection<int, Ticket>} $resource
- */
+/** @property array{stats: array<string, mixed>, my_tickets: Collection<int, Ticket>} $resource */
 final class DashboardResource extends JsonResource
 {
     /** @return array<string, mixed> */
@@ -747,7 +714,7 @@ final class DashboardResource extends JsonResource
 }
 ```
 
-- [ ] **Step 6: Create** `app/Http/Controllers/Web/DashboardController.php`.
+- [ ] **Step 6: Create** `app/Http/Controllers/Web/DashboardController.php`. The route's `can:viewDashboard` middleware (T04 gate) authorizes it.
 
 ```php
 <?php
@@ -766,7 +733,6 @@ use Inertia\Response;
 
 final class DashboardController extends Controller
 {
-    /** Authorized by the route's `can:viewDashboard` middleware (T04 gate). */
     public function __invoke(Request $request, DashboardStats $stats): Response
     {
         /** @var User $viewer */
@@ -780,7 +746,7 @@ final class DashboardController extends Controller
 }
 ```
 
-- [ ] **Step 7: Create** `app/Http/Controllers/Api/V1/DashboardController.php`.
+- [ ] **Step 7: Create** `app/Http/Controllers/Api/V1/DashboardController.php`. The route's `can:viewDashboard` middleware authorizes it.
 
 ```php
 <?php
@@ -961,7 +927,7 @@ const valueClass = computed((): string => {
 </template>
 ```
 
-- [ ] **Step 3: Create** `resources/js/pages/dashboard/Index.vue`.
+- [ ] **Step 3: Create** `resources/js/pages/dashboard/Index.vue`. The server caches for 60 s, so polling faster would only re-read the cache.
 
 ```vue
 <script setup lang="ts">
@@ -988,7 +954,6 @@ defineOptions({
     },
 });
 
-// The server caches for 60 s, so polling faster would only re-read the cache.
 usePoll(60_000, { only: ['stats', 'myTickets'] });
 
 const cards = computed(() => [

@@ -120,8 +120,9 @@ Every assignment Action runs its transaction on `$ticket->getConnection()` and q
 
 - [ ] **Step 1: add `auto_assign` to `config/tickets.php`.** Keep the existing `number_prefix` (T03) and `per_page` (T05) entries exactly as they are, and add:
 
+`tickets.auto_assign` routes new tickets to the least-loaded available agent of their category (TD-050).
+
 ```php
-    // TD-050: route new tickets to the least-loaded available agent of their category.
     'auto_assign' => (bool) env('TICKETS_AUTO_ASSIGN', true),
 ```
 
@@ -221,6 +222,8 @@ Expected: FAIL, `Target class [App\Actions\Assignment\ClaimTicket] does not exis
 
 - [ ] **Step 4: create `app/Services/Assignment/UnassignedTicketAssigner.php`**
 
+UnassignedTicketAssigner (TD-051) is a single conditional UPDATE: InnoDB row-locks and re-evaluates `assigned_agent_id IS NULL` against the latest committed row, so exactly one concurrent caller gets an affected row. Only enum constants are interpolated into the CASE expression, never request data.
+
 ```php
 <?php
 
@@ -234,11 +237,6 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
-/**
- * TD-051: a single conditional UPDATE. InnoDB takes the row lock and re-evaluates
- * `assigned_agent_id IS NULL` against the latest committed row, so among concurrent callers
- * exactly one gets one affected row. No PHP-side read decides the outcome.
- */
 final class UnassignedTicketAssigner
 {
     public function assignIfUnassigned(Ticket $ticket, User $agent, CarbonImmutable $now): bool
@@ -249,7 +247,6 @@ final class UnassignedTicketAssigner
             ->update([
                 'assigned_agent_id' => $agent->getKey(),
                 'assigned_at' => $now,
-                // Only enum constants are interpolated, never request data.
                 'status' => DB::raw(sprintf(
                     "CASE WHEN status = '%s' THEN '%s' ELSE status END",
                     TicketStatus::Open->value,
@@ -298,7 +295,6 @@ final class ClaimTicket
     public function handle(User $agent, Ticket $ticket): Ticket
     {
         $now = CarbonImmutable::now();
-        // Snapshot only used to describe the change in the timeline; the claim itself is decided by the UPDATE.
         $before = $ticket->status;
 
         return $ticket->getConnection()->transaction(function () use ($agent, $ticket, $now, $before): Ticket {
@@ -442,7 +438,6 @@ it('lets exactly one of two connections claim the ticket', function (): void {
     [$ticketA, $agentA] = racer('race_a', $this->raceIds['ticket'], $this->raceIds['agentA']);
     [$ticketB, $agentB] = racer('race_b', $this->raceIds['ticket'], $this->raceIds['agentB']);
 
-    // Both racers loaded the ticket while it was unassigned.
     expect($ticketA->assigned_agent_id)->toBeNull()
         ->and($ticketB->assigned_agent_id)->toBeNull();
 
@@ -464,7 +459,7 @@ it('makes the second claim wait for the first one\'s row lock instead of reading
     [$ticketB, $agentB] = racer('race_b', $this->raceIds['ticket'], $this->raceIds['agentB']);
 
     DB::connection('race_b')->beginTransaction();
-    app(ClaimTicket::class)->handle($agentB, $ticketB);   // holds the row lock, not committed
+    app(ClaimTicket::class)->handle($agentB, $ticketB);
 
     DB::connection('race_a')->statement('SET SESSION innodb_lock_wait_timeout = 1');
 
@@ -473,7 +468,7 @@ it('makes the second claim wait for the first one\'s row lock instead of reading
         app(ClaimTicket::class)->handle($agentA, $ticketA);
         $this->fail('The competing claim did not block on the row lock.');
     } catch (QueryException $e) {
-        expect($e->errorInfo[1] ?? null)->toBe(1205);   // ER_LOCK_WAIT_TIMEOUT
+        expect($e->errorInfo[1] ?? null)->toBe(1205);
     }
     expect(microtime(true) - $started)->toBeGreaterThanOrEqual(0.9);
 
@@ -654,6 +649,8 @@ Expected: FAIL, `Target class [App\Services\Assignment\AgentSelector] does not e
 
 - [ ] **Step 3: create `app/Services/Assignment/AgentSelector.php`**
 
+AgentSelector (TD-050, TD-052) orders by active load, then never-assigned agents first, then the longest-waiting one, as a round-robin among equals. With `$lock = true` it locks candidate rows FOR UPDATE in id order inside the caller's transaction, so concurrent selections never deadlock.
+
 ```php
 <?php
 
@@ -668,11 +665,6 @@ use Illuminate\Database\Eloquent\Builder;
 
 final class AgentSelector
 {
-    /**
-     * TD-050 ordering. With $lock = true the caller must be inside a transaction: candidate rows are
-     * locked FOR UPDATE in id order first, so concurrent selections serialize on shared agents and
-     * always acquire locks in the same order (TD-052, no deadlocks).
-     */
     public function selectFor(Ticket $ticket, bool $lock = false): ?User
     {
         $candidates = User::query()
@@ -699,7 +691,6 @@ final class AgentSelector
             ->select('users.*')
             ->withCount(['assignedTickets as active_tickets_count' => static fn (Builder $q) => $q->whereIn('status', $active)])
             ->orderBy('active_tickets_count')
-            // Never-assigned agents first, then the longest-waiting one: a round-robin among equals.
             ->orderByRaw('users.last_assigned_at IS NOT NULL')
             ->orderBy('users.last_assigned_at')
             ->orderBy('users.id')
@@ -936,7 +927,6 @@ use Illuminate\Support\Facades\Log;
 use Spatie\Activitylog\Models\Activity;
 
 beforeEach(function (): void {
-    // phpunit.xml sets TICKETS_AUTO_ASSIGN=false; these tests exercise auto-assignment explicitly.
     config()->set('tickets.auto_assign', true);
     $this->now = CarbonImmutable::parse('2026-11-01 03:00:00', 'UTC');
     $this->travelTo($this->now);
@@ -1045,7 +1035,6 @@ use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
     Queue::fake();
-    // phpunit.xml sets TICKETS_AUTO_ASSIGN=false; this file opts in explicitly.
     config()->set('tickets.auto_assign', true);
 });
 
@@ -1138,7 +1127,6 @@ final class AssignTicketAutomatically
                 return null;
             }
 
-            // 0 rows: someone claimed it after the job started. That is a valid outcome, not an error (TD-052).
             if (! $this->assigner->assignIfUnassigned($ticket, $agent, $now)) {
                 return null;
             }
@@ -1159,6 +1147,8 @@ final class AssignTicketAutomatically
 
 - [ ] **Step 5: create `app/Jobs/AutoAssignTicket.php`.** Laravel 13 also accepts queue settings as attributes (`Illuminate\Queue\Attributes\Tries`, `Backoff`, `Queue`). Keep the `$tries` / `$backoff` properties and `onQueue()`, because the Step 1 test reads `$job->tries`, `$job->backoff` and `$job->queue`. The job carries only an id and re-reads the ticket, so Laravel 13's `#[DeleteWhenMissingModels]` handling doesn't apply to it. A missing ticket is a quiet `return`.
 
+AutoAssignTicket carries only the ticket id and re-reads the ticket when it runs, so a claim made while the job waited is seen. Zero affected rows means someone claimed it first, which is a valid outcome and not an error (TD-052). The listener skips imported tickets because they are historical data (TD-090).
+
 ```php
 <?php
 
@@ -1176,10 +1166,6 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
-/**
- * Carries only the id: the ticket is re-read when the job runs, so a claim made while the job
- * waited in the queue is seen.
- */
 final class AutoAssignTicket implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable;
@@ -1241,7 +1227,6 @@ final class QueueAutoAssignment
 
     public function handle(TicketCreated $event): void
     {
-        // Imported tickets are historical data and must not be routed to today's agents (TD-090).
         if ($event->imported || ! (bool) $this->config->get('tickets.auto_assign', false)) {
             return;
         }
@@ -1446,12 +1431,9 @@ final class AssignTicketRequest extends FormRequest
         return $view->denied() ? $view : $gate->inspect('assign', $this->ticket());
     }
 
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function rules(): array
     {
-        // Eligibility (available agent) is a domain rule enforced by AssignTicket with a stable error code.
         return [
             'agent_id' => ['required', 'integer', Rule::exists('users', 'id')],
         ];
@@ -1501,7 +1483,6 @@ final class AssignmentController extends Controller
         Gate::authorize('view', $ticket);
         Gate::authorize('claim', $ticket);
 
-        // TicketAlreadyClaimed is rendered by the global handler as back()->with('error', ...).
         $claimTicket->handle($this->user($request), $ticket);
 
         return back()->with('success', "You claimed {$ticket->number}.");
@@ -1644,7 +1625,6 @@ const selectedAgent = ref('');
 const busy = ref(false);
 const errors = ref<Record<string, string>>({});
 
-// A lost claim (409) comes back as a redirect with flash.error and fresh props showing the real owner.
 const flashError = computed<string | null>(() => {
     const flash = page.props.flash as { error?: string | null } | undefined;
     return flash?.error ?? null;
@@ -1772,7 +1752,6 @@ beforeEach(function (): void {
 
 dataset('assignment route matrix', function (): array {
     $rows = [
-        // role, ownership, action, web status, api status
         ['customer', 'own', 'claim', 403, 403],
         ['customer', 'own', 'assign', 403, 403],
         ['customer', 'other', 'claim', 404, 404],

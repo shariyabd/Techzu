@@ -424,7 +424,7 @@ final class UpdateCategory
 }
 ```
 
-- [ ] **Step 8: Create** `app/Actions/Admin/DeleteCategory.php`.
+- [ ] **Step 8: Create** `app/Actions/Admin/DeleteCategory.php`. Tickets keep their category forever (FK restrict, TD-025), so a referenced category is deactivated instead. Locking the category row blocks a concurrent ticket insert's FK check on it until the action decides.
 
 ```php
 <?php
@@ -438,12 +438,7 @@ use Illuminate\Support\Facades\DB;
 
 final class DeleteCategory
 {
-    /**
-     * Tickets keep their category forever (FK restrict, TD-025), so a referenced category is deactivated instead.
-     * Locking the category row blocks a concurrent ticket insert's FK check on it until we decide.
-     *
-     * @return bool true when deleted, false when deactivated
-     */
+    /** @return bool */
     public function handle(Category $category): bool
     {
         return DB::transaction(function () use ($category): bool {
@@ -465,7 +460,7 @@ final class DeleteCategory
 }
 ```
 
-- [ ] **Step 9: Create** `app/Actions/Admin/CreateHoliday.php`.
+- [ ] **Step 9: Create** `app/Actions/Admin/CreateHoliday.php`. The cache flush runs after commit, because flushing earlier could let a concurrent request re-cache the old list forever.
 
 ```php
 <?php
@@ -490,7 +485,6 @@ final class CreateHoliday
             $holiday->fill(['date' => $data['date'], 'name' => $data['name']]);
             $holiday->save();
 
-            // After commit: flushing earlier could let a concurrent request re-cache the old list forever.
             DB::afterCommit(fn () => $this->holidays->flush());
 
             return $holiday;
@@ -559,7 +553,7 @@ final class DeleteHoliday
 }
 ```
 
-- [ ] **Step 12: Create** `app/Actions/Admin/ChangeUserRole.php`.
+- [ ] **Step 12: Create** `app/Actions/Admin/ChangeUserRole.php`. It is the only place roles are assigned (TD-010, TD-120), and it also guarantees the last admin can never lock everyone out. Category links only mean something for agents (auto-assignment, TD-050).
 
 ```php
 <?php
@@ -575,10 +569,8 @@ use Illuminate\Support\Facades\DB;
 
 final class ChangeUserRole
 {
-    /** The only place roles are assigned (TD-010, TD-120). */
     public function handle(User $admin, User $user, Role $role): User
     {
-        // Also guarantees the last admin can never lock everyone out.
         if ($admin->is($user) && $role !== Role::Admin) {
             throw CannotChangeOwnRole::for($admin);
         }
@@ -586,7 +578,6 @@ final class ChangeUserRole
         return DB::transaction(function () use ($user, $role): User {
             $user->syncRoles([$role->value]);
 
-            // Category links only mean something for agents (auto-assignment, TD-050).
             if ($role !== Role::Agent) {
                 $user->categories()->detach();
             }
@@ -625,7 +616,7 @@ final class SyncAgentProfile
 }
 ```
 
-- [ ] **Step 14: Create** `app/Actions/Admin/CreateUser.php`.
+- [ ] **Step 14: Create** `app/Actions/Admin/CreateUser.php`. An admin vouches for the address, so the email is marked verified: there is no self-signup to verify.
 
 ```php
 <?php
@@ -659,7 +650,6 @@ final class CreateUser
                 'password' => $data['password'],
                 'is_available' => $isAvailable,
             ]);
-            // An admin vouches for the address; there is no self-signup to verify.
             $user->email_verified_at = CarbonImmutable::now();
             $user->save();
 
@@ -676,7 +666,7 @@ final class CreateUser
 }
 ```
 
-- [ ] **Step 15: Create** `app/Actions/Admin/UpdateUser.php`.
+- [ ] **Step 15: Create** `app/Actions/Admin/UpdateUser.php`. The role changes first, so a refused self-demotion aborts before any field changes.
 
 ```php
 <?php
@@ -702,7 +692,6 @@ final class UpdateUser
         return DB::transaction(function () use ($admin, $user, $data): User {
             $role = Role::from($data['role']);
 
-            // Role first: a refused self-demotion aborts before any field changes.
             $this->changeRole->handle($admin, $user, $role);
 
             $user->fill(['name' => $data['name'], 'email' => $data['email']]);
@@ -1316,7 +1305,7 @@ defineOptions({
 </template>
 ```
 
-- [ ] **Step 8: Create** `resources/js/pages/admin/categories/Edit.vue`.
+- [ ] **Step 8: Create** `resources/js/pages/admin/categories/Edit.vue`. The breadcrumbs depend on props, so they are pushed reactively to the default AppLayout (`app.ts`). The holiday and user edit pages do the same.
 
 ```vue
 <script setup lang="ts">
@@ -1337,7 +1326,6 @@ const breadcrumbs = computed((): BreadcrumbItem[] => [
     },
 ]);
 
-// The breadcrumbs depend on props, so they're pushed to the default AppLayout (app.ts) reactively.
 watchEffect(() => {
     setLayoutProps({ breadcrumbs: breadcrumbs.value });
 });
@@ -1540,7 +1528,6 @@ const breadcrumbs = computed((): BreadcrumbItem[] => [
     },
 ]);
 
-// The breadcrumbs depend on props, so they're pushed to the default AppLayout (app.ts) reactively.
 watchEffect(() => {
     setLayoutProps({ breadcrumbs: breadcrumbs.value });
 });
@@ -1765,7 +1752,6 @@ const breadcrumbs = computed((): BreadcrumbItem[] => [
     { title: props.user.name, href: `/admin/users/${props.user.id}/edit` },
 ]);
 
-// The breadcrumbs depend on props, so they're pushed to the default AppLayout (app.ts) reactively.
 watchEffect(() => {
     setLayoutProps({ breadcrumbs: breadcrumbs.value });
 });
@@ -1981,7 +1967,7 @@ it('returns only active categories from the public list, to any role that can cr
   `./vendor/bin/pest tests/Feature/Admin/CategoryManagementTest.php`
   Expected: FAIL with `RouteNotFoundException: Route [admin.categories.index] not defined.`
 
-- [ ] **Step 3: Create** `app/Services/Admin/AdminDirectory.php`.
+- [ ] **Step 3: Create** `app/Services/Admin/AdminDirectory.php`. It holds the read queries for the admin screens so controllers stay query-free (TD-001). User search is a prefix search, so the unique email index can serve email lookups.
 
 ```php
 <?php
@@ -1998,7 +1984,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 
-/** Read queries for the admin screens, so controllers stay query-free (TD-001). */
 final class AdminDirectory
 {
     /** @return LengthAwarePaginator<int, Category> */
@@ -2010,13 +1995,13 @@ final class AdminDirectory
             ->paginate($perPage);
     }
 
-    /** For the create-ticket form. @return Collection<int, Category> */
+    /** @return Collection<int, Category> */
     public function activeCategories(): Collection
     {
         return Category::query()->active()->orderBy('name')->get();
     }
 
-    /** Every category, for the agent-profile checkboxes. @return Collection<int, Category> */
+    /** @return Collection<int, Category> */
     public function categoryOptions(): Collection
     {
         return Category::query()->orderBy('name')->get(['id', 'name', 'is_active']);
@@ -2033,8 +2018,6 @@ final class AdminDirectory
     }
 
     /**
-     * Prefix search, so the unique email index can serve email lookups.
-     *
      * @param  array{q?: string|null, role?: string|null}  $filters
      * @return LengthAwarePaginator<int, User>
      */
@@ -2068,7 +2051,7 @@ final class AdminDirectory
 }
 ```
 
-- [ ] **Step 4: Create** `app/Http/Requests/Admin/StoreCategoryRequest.php`.
+- [ ] **Step 4: Create** `app/Http/Requests/Admin/StoreCategoryRequest.php`. `authorize()` returns true because the route's `can:` middleware (CategoryPolicy) already authorizes.
 
 ```php
 <?php
@@ -2084,7 +2067,6 @@ class StoreCategoryRequest extends FormRequest
 {
     public const SLUG_PATTERN = '/^[a-z0-9]+(?:-[a-z0-9]+)*$/';
 
-    /** Authorized by the route's `can:` middleware (CategoryPolicy). */
     public function authorize(): bool
     {
         return true;
@@ -2287,7 +2269,6 @@ final class CategoryController extends Controller
         return AdminCategoryResource::make($update->handle($category, $data)->loadCount('tickets'));
     }
 
-    /** 204 when deleted; 200 with the deactivated category when tickets still reference it. */
     public function destroy(Category $category, DeleteCategory $delete): Response|AdminCategoryResource
     {
         if ($delete->handle($category)) {
@@ -2299,7 +2280,7 @@ final class CategoryController extends Controller
 }
 ```
 
-- [ ] **Step 9: Create** `app/Http/Controllers/Api/V1/CategoryController.php`.
+- [ ] **Step 9: Create** `app/Http/Controllers/Api/V1/CategoryController.php`. It lists active categories for the create-ticket form and is authorized like ticket creation (`TicketPolicy::create`): anyone who may create a ticket needs the list. `destroy` in the admin controller returns 204 when deleted and 200 with the deactivated category when tickets still reference it.
 
 ```php
 <?php
@@ -2313,7 +2294,6 @@ use App\Http\Resources\V1\CategoryResource;
 use App\Services\Admin\AdminDirectory;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
-/** Active categories for the create-ticket form. Authorized like ticket creation (TicketPolicy::create). */
 final class CategoryController extends Controller
 {
     public function index(AdminDirectory $directory): AnonymousResourceCollection
@@ -2341,13 +2321,10 @@ Route::middleware(['auth', 'verified'])->prefix('admin')->name('admin.')->group(
     Route::get('categories/{category}/edit', [CategoryController::class, 'edit'])->name('categories.edit')->can('update', 'category');
     Route::patch('categories/{category}', [CategoryController::class, 'update'])->name('categories.update')->can('update', 'category');
     Route::delete('categories/{category}', [CategoryController::class, 'destroy'])->name('categories.destroy')->can('delete', 'category');
-
-    // T13.4: holiday routes
-    // T13.5: user routes
 });
 ```
 
-  > The two placeholder comments carry task references, as CLAUDE.md requires. T13.4 and T13.5 replace them.
+  > T13.4 and T13.5 append their routes inside these groups, after the last route.
 
 - [ ] **Step 11: Create** `routes/api/v1/admin.php`.
 
@@ -2363,7 +2340,6 @@ use App\Models\Ticket;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth:sanctum')->group(function (): void {
-    // Anyone who may create a ticket needs the category list for the form.
     Route::get('categories', [CategoryController::class, 'index'])->name('categories.index')->can('create', Ticket::class);
 
     Route::prefix('admin')->name('admin.')->group(function (): void {
@@ -2371,9 +2347,6 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('categories', [AdminCategoryController::class, 'store'])->name('categories.store')->can('create', Category::class);
         Route::patch('categories/{category}', [AdminCategoryController::class, 'update'])->name('categories.update')->can('update', 'category');
         Route::delete('categories/{category}', [AdminCategoryController::class, 'destroy'])->name('categories.destroy')->can('delete', 'category');
-
-        // T13.4: holiday routes
-        // T13.5: user routes
     });
 });
 ```
@@ -2400,7 +2373,7 @@ git commit -m "feat(admin): add category admin and public category list" --trail
 ---
 ### T13.4 — Holidays HTTP
 
-- [ ] **Step 1: Write the failing test** `tests/Feature/Admin/HolidayManagementTest.php`.
+- [ ] **Step 1: Write the failing test** `tests/Feature/Admin/HolidayManagementTest.php`. The SLA test warms the holiday cache as a running app would, and rebuilds the calendar from the repository to simulate the next request; Thursday 17:00 Dhaka would normally be due Sunday 10:00 Dhaka, and with 2026-11-01 a holiday it moves to Monday 10:00 Dhaka.
 
 ```php
 <?php
@@ -2493,12 +2466,11 @@ it('lets a holiday keep its own date on update', function (): void {
 });
 
 it('makes new SLA deadlines skip a holiday added through the admin screen', function (): void {
-    $start = CarbonImmutable::parse('2026-10-29 17:00', 'Asia/Dhaka'); // Thursday
+    $start = CarbonImmutable::parse('2026-10-29 17:00', 'Asia/Dhaka');
 
-    // Warm the holiday cache, as a running app would have.
     app(HolidayRepository::class)->dates();
     $before = app(SlaCalculator::class)->deadlinesFor(TicketPriority::Critical, $start);
-    expect($before->dueAt->toDateTimeString())->toBe('2026-11-01 04:00:00'); // Sunday 10:00 Dhaka
+    expect($before->dueAt->toDateTimeString())->toBe('2026-11-01 04:00:00');
 
     $this->actingAs($this->admin)
         ->post(route('admin.holidays.store'), ['date' => '2026-11-01', 'name' => 'Office closed'])
@@ -2506,13 +2478,12 @@ it('makes new SLA deadlines skip a holiday added through the admin screen', func
 
     expect(Cache::has('sla.holidays'))->toBeFalse();
 
-    // Simulate the next request: the calendar is rebuilt from the repository.
     app()->forgetScopedInstances();
     app()->forgetInstance(SlaCalculator::class);
     app()->forgetInstance(BusinessCalendar::class);
 
     $after = app(SlaCalculator::class)->deadlinesFor(TicketPriority::Critical, $start);
-    expect($after->dueAt->toDateTimeString())->toBe('2026-11-02 04:00:00'); // Monday 10:00 Dhaka
+    expect($after->dueAt->toDateTimeString())->toBe('2026-11-02 04:00:00');
 });
 
 it('manages holidays over the API', function (): void {
@@ -2598,7 +2569,7 @@ final class UpdateHolidayRequest extends StoreHolidayRequest
 }
 ```
 
-- [ ] **Step 5: Create** `app/Http/Requests/Admin/IndexHolidaysRequest.php`.
+- [ ] **Step 5: Create** `app/Http/Requests/Admin/IndexHolidaysRequest.php`. `year()` defaults to the current year in business time, because holidays are business-calendar dates.
 
 ```php
 <?php
@@ -2623,7 +2594,6 @@ final class IndexHolidaysRequest extends FormRequest
         return ['year' => ['nullable', 'integer', 'between:2000,2100']];
     }
 
-    /** Defaults to the current year in business time: holidays are business-calendar dates. */
     public function year(): int
     {
         return $this->filled('year')
@@ -2800,7 +2770,7 @@ final class HolidayController extends Controller
 }
 ```
 
-- [ ] **Step 9: Add the web holiday routes.** In `routes/web/admin.php`, add `use App\Http\Controllers\Web\Admin\HolidayController;` and `use App\Models\Holiday;` to the imports, then replace the line `    // T13.4: holiday routes` with:
+- [ ] **Step 9: Add the web holiday routes.** In `routes/web/admin.php`, add `use App\Http\Controllers\Web\Admin\HolidayController;` and `use App\Models\Holiday;` to the imports, then append inside the group, after the last route:
 
 ```php
     Route::get('holidays', [HolidayController::class, 'index'])->name('holidays.index')->can('viewAny', Holiday::class);
@@ -2811,7 +2781,7 @@ final class HolidayController extends Controller
     Route::delete('holidays/{holiday}', [HolidayController::class, 'destroy'])->name('holidays.destroy')->can('delete', 'holiday');
 ```
 
-- [ ] **Step 10: Add the API holiday routes.** In `routes/api/v1/admin.php`, add `use App\Http\Controllers\Api\V1\Admin\HolidayController as AdminHolidayController;` and `use App\Models\Holiday;`, then replace the line `        // T13.4: holiday routes` with:
+- [ ] **Step 10: Add the API holiday routes.** In `routes/api/v1/admin.php`, add `use App\Http\Controllers\Api\V1\Admin\HolidayController as AdminHolidayController;` and `use App\Models\Holiday;`, then append inside the inner `admin` group, after the last route:
 
 ```php
         Route::get('holidays', [AdminHolidayController::class, 'index'])->name('holidays.index')->can('viewAny', Holiday::class);
@@ -3081,7 +3051,7 @@ class StoreUserRequest extends FormRequest
 }
 ```
 
-- [ ] **Step 5: Create** `app/Http/Requests/Admin/UpdateUserRequest.php`.
+- [ ] **Step 5: Create** `app/Http/Requests/Admin/UpdateUserRequest.php`. The `role` rule gives a friendly field error; `ChangeUserRole` enforces the same rule for every caller.
 
 ```php
 <?php
@@ -3104,7 +3074,6 @@ final class UpdateUserRequest extends StoreUserRequest
         return array_merge(parent::rules(), [
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($this->route('user'))],
             'password' => ['nullable', 'string', Password::defaults()],
-            // A friendly field error; ChangeUserRole enforces the same rule for every caller.
             'role' => ['required', Rule::enum(Role::class), $this->notSelfDemotion(...)],
         ]);
     }
@@ -3121,7 +3090,7 @@ final class UpdateUserRequest extends StoreUserRequest
 }
 ```
 
-- [ ] **Step 6: Create** `app/Http/Resources/V1/AdminUserResource.php`.
+- [ ] **Step 6: Create** `app/Http/Resources/V1/AdminUserResource.php`. It uses an explicit field list: never the password, remember_token or raw role pivots (TD-120).
 
 ```php
 <?php
@@ -3135,11 +3104,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-/**
- * Explicit field list: never the password, remember_token or raw role pivots (TD-120).
- *
- * @mixin User
- */
+/** @mixin User */
 final class AdminUserResource extends JsonResource
 {
     /** @return array<string, mixed> */
@@ -3310,7 +3275,7 @@ final class UserController extends Controller
 }
 ```
 
-- [ ] **Step 9: Add the web user routes.** In `routes/web/admin.php`, add `use App\Http\Controllers\Web\Admin\UserController;` and `use App\Models\User;`, then replace `    // T13.5: user routes` with the block below. There is no destroy route: users are deactivated, never deleted (TD-025).
+- [ ] **Step 9: Add the web user routes.** In `routes/web/admin.php`, add `use App\Http\Controllers\Web\Admin\UserController;` and `use App\Models\User;`, then append the block below inside the group, after the last route. There is no destroy route: users are deactivated, never deleted (TD-025).
 
 ```php
     Route::get('users', [UserController::class, 'index'])->name('users.index')->can('viewAny', User::class);
@@ -3320,7 +3285,7 @@ final class UserController extends Controller
     Route::patch('users/{user}', [UserController::class, 'update'])->name('users.update')->can('update', 'user');
 ```
 
-- [ ] **Step 10: Add the API user routes.** In `routes/api/v1/admin.php`, add `use App\Http\Controllers\Api\V1\Admin\UserController as AdminUserController;` and `use App\Models\User;`, then replace `        // T13.5: user routes` with:
+- [ ] **Step 10: Add the API user routes.** In `routes/api/v1/admin.php`, add `use App\Http\Controllers\Api\V1\Admin\UserController as AdminUserController;` and `use App\Models\User;`, then append inside the inner `admin` group, after the last route:
 
 ```php
         Route::get('users', [AdminUserController::class, 'index'])->name('users.index')->can('viewAny', User::class);
@@ -3350,7 +3315,7 @@ git commit -m "feat(admin): add user admin with role changes and agent profiles"
 
 ### T13.6 — Authorization matrix
 
-- [ ] **Step 1: Write the test** `tests/Feature/Authorization/AdminAuthorizationTest.php`. It uses T04's `Tests\Support\AuthorizationMatrix`: `/api/` URIs go as JSON with Sanctum, and web URIs go through the session.
+- [ ] **Step 1: Write the test** `tests/Feature/Authorization/AdminAuthorizationTest.php`. Role-restricted POSTs expect 403, not 422, because the route's `can:` middleware runs before the FormRequest. It uses T04's `Tests\Support\AuthorizationMatrix`: `/api/` URIs go as JSON with Sanctum, and web URIs go through the session.
 
 ```php
 <?php
@@ -3369,11 +3334,7 @@ beforeEach(function (): void {
     $this->target = User::factory()->customer()->create();
 });
 
-/**
- * Every admin route, web and API: [method, uri, guest status].
- *
- * @return list<array{0: string, 1: string, 2: int}>
- */
+/** @return list<array{0: string, 1: string, 2: int}> */
 function adminAuthorizationRows(Category $category, Holiday $holiday, User $user): array
 {
     return [
@@ -3435,7 +3396,6 @@ it('rejects an agent write before validation runs', function (): void {
     $matrix = AuthorizationMatrix::for($this);
     $matrix->actingAsRole(Role::Agent);
 
-    // 403, not 422: the route's `can:` middleware runs before the FormRequest.
     $matrix->expectAccess('POST', route('api.v1.admin.users.store'), 403, ['role' => 'admin']);
 });
 

@@ -111,11 +111,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\DB;
 
-/**
- * Name of the index on $table whose columns are exactly $columns, in order.
- *
- * @param  list<string>  $columns
- */
+/** @param  list<string>  $columns */
 function indexOnColumns(string $table, array $columns): string
 {
     $rows = DB::select(
@@ -135,9 +131,7 @@ function indexOnColumns(string $table, array $columns): string
     throw new RuntimeException(sprintf('No index on %s(%s). TD-021 promises one.', $table, implode(', ', $columns)));
 }
 
-/**
- * @return array{tables: array<string, string|null>, plan: string}
- */
+/** @return array{tables: array<string, string|null>, plan: string} */
 function explainQuery(QueryBuilder $query): array
 {
     $row = (array) DB::selectOne('EXPLAIN FORMAT=JSON '.$query->toSql(), $query->getBindings());
@@ -357,7 +351,7 @@ Earlier tasks test their own slice: T04 the matrix, T07 leakage, T10 notificatio
 - token request: `email`, `password`, `device_name` (T00 `LoginTokenRequest`); wrong credentials return 422
 - reply upload: `body`, `is_internal`, `attachments[]` (T07 `StoreReplyRequest`), throttled with `throttle:20,1`
 
-- [ ] **Step 1: Write the test** `tests/Feature/Security/SecurityChecklistTest.php`.
+- [ ] **Step 1: Write the test** `tests/Feature/Security/SecurityChecklistTest.php`. The public-by-design routes are: the guest-only auth screens (Fortify registers them as `guest:web`), the landing page, the token endpoint, Sanctum's CSRF cookie, the kit's passkey discovery document, the signed-URL local file route, the health check, and the docs routes, which have their own `AuthorizeApiDocs` gate.
 
 ```php
 <?php
@@ -399,9 +393,6 @@ beforeEach(function (): void {
 
 describe('server-side authorization', function (): void {
     it('requires authentication on every route that is not public by design', function (): void {
-        // Public by design: guest-only auth screens (Fortify registers them as `guest:web`), the landing page,
-        // the token endpoint, Sanctum's CSRF cookie, the kit's passkey discovery document, the signed-URL local
-        // file route, the health check, and the docs routes, which have their own AuthorizeApiDocs gate.
         $publicNames = ['home', 'api.v1.auth.tokens.store', 'sanctum.csrf-cookie', 'well-known.passkeys'];
         $publicPrefixes = ['storage.', 'scramble.'];
         $publicUris = ['up', '/'];
@@ -729,7 +720,7 @@ it('has an exported OpenAPI document covering the v1 endpoints', function (): vo
   - The first test fails with `Expected response status code [200] but received 403.` (Scramble's default denies non-local requests without a gate.)
   - The third fails at `is_file`: `Failed asserting that false is true.`
 
-- [ ] **Step 3: Create** `app/Http/Middleware/AuthorizeApiDocs.php`.
+- [ ] **Step 3: Create** `app/Http/Middleware/AuthorizeApiDocs.php`. The docs are open in local development; elsewhere only for users the `UserPolicy` treats as admins.
 
 ```php
 <?php
@@ -743,7 +734,6 @@ use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-/** Open in local development; elsewhere only for users the UserPolicy treats as admins. */
 final class AuthorizeApiDocs
 {
     public function handle(Request $request, Closure $next): Response
@@ -763,7 +753,11 @@ final class AuthorizeApiDocs
 
 - [ ] **Step 4: Create** `config/scramble.php`. It follows the layout of Scramble 0.13's own `vendor/dedoc/scramble/config/scramble.php`. Two 0.13 details matter:
   - The OpenAPI `info.title` comes from `ui.title` (falling back to `app.name`); there is no `info.title` key.
+  - `api_path` limits documentation to routes under that prefix, so servers become `{APP_URL}/api/v1`.
+  - `ui.title` is used as the document's `info.title` and the docs page `<title>`.
   - The Stoplight Elements options (`theme`, `hideTryIt`, `logo`, `tryItCredentialsPolicy`) live under `renderers.elements`, not under `ui`.
+
+  The `web` middleware gives the docs session auth, so an admin signed in to the app can open them. The `security_strategy` key adds the bearer securityScheme to every route behind `auth`/`auth:*` (auth:sanctum) and marks the rest (POST auth/tokens) as public, without a `Scramble::configure()` call in a provider.
 
   Laravel merges a package config only at the top level, so every key left out here (`cache`, `openapi_version`, `dev_tools`, the enum strategies, `flatten_deep_query_parameters`) keeps Scramble's default.
 
@@ -776,7 +770,6 @@ use App\Http\Middleware\AuthorizeApiDocs;
 use Dedoc\Scramble\SecurityDocumentation\MiddlewareAuthSecurityStrategy;
 
 return [
-    // Only routes under this prefix are documented; servers become {APP_URL}/api/v1.
     'api_path' => 'api/v1',
 
     'api_domain' => null,
@@ -789,7 +782,6 @@ return [
             .'`POST /api/v1/auth/tokens`. The narrative guide (auth flow, error codes, examples) is docs/API.md.',
     ],
 
-    // Scramble 0.13 uses this as the document's info.title and the docs page <title>.
     'ui' => [
         'title' => env('APP_NAME', 'Laravel').' API',
     ],
@@ -811,7 +803,6 @@ return [
 
     'servers' => null,
 
-    // `web` gives the docs session auth, so an admin signed in to the app can open them.
     'middleware' => [
         'web',
         AuthorizeApiDocs::class,
@@ -819,8 +810,6 @@ return [
 
     'extensions' => [],
 
-    // Adds the bearer securityScheme to every route behind `auth`/`auth:*` (auth:sanctum) and marks the
-    // rest (POST auth/tokens) as public, without a Scramble::configure() call in a provider.
     'security_strategy' => MiddlewareAuthSecurityStrategy::class,
 ];
 ```

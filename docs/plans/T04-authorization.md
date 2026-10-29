@@ -68,9 +68,9 @@
 
 ### Produces
 
+Every ticket-scoped method returns `Illuminate\Auth\Access\Response` (README §3.11): allow, deny (403), or `denyAsNotFound` (404) when the user can't see the ticket. `AttachmentPolicy::view` is the download check, and `UserPolicy::delete` denies deleting oneself.
+
 ```php
-// README §3.11. Every ticket-scoped method returns Illuminate\Auth\Access\Response:
-// allow, deny (403), or denyAsNotFound (404) when the user can't see the ticket.
 final class TicketPolicy {
     public function viewAny(User $user): bool;
     public function view(User $user, Ticket $ticket): Response;
@@ -86,14 +86,15 @@ final class TicketPolicy {
     public function viewInternal(User $user, Ticket $ticket): Response;
 }
 final class TicketReplyPolicy { public function view(User $user, TicketReply $reply): Response; }
-final class AttachmentPolicy  { public function view(User $user, Attachment $attachment): Response; } // download
+final class AttachmentPolicy  { public function view(User $user, Attachment $attachment): Response; }
 final class CategoryPolicy    { viewAny(User): bool; create(User): bool; update(User, Category): bool; delete(User, Category): bool; }
 final class HolidayPolicy     { viewAny(User): bool; create(User): bool; update(User, Holiday): bool; delete(User, Holiday): bool; }
-final class UserPolicy        { viewAny(User): bool; create(User): bool; update(User, User): bool; delete(User, User): bool; } // delete denies self
-final class TicketImportPolicy{ viewAny(User): bool; view(User, TicketImport): bool; create(User): bool; update(User, TicketImport): bool; delete(User, TicketImport): bool; } // view: see Contract notes
+final class UserPolicy        { viewAny(User): bool; create(User): bool; update(User, User): bool; delete(User, User): bool; }
+final class TicketImportPolicy{ viewAny(User): bool; view(User, TicketImport): bool; create(User): bool; update(User, TicketImport): bool; delete(User, TicketImport): bool; }
 final class DashboardPolicy   { public function view(User $user): bool; }
-// AppServiceProvider::boot(): Gate::define('viewDashboard', [DashboardPolicy::class, 'view']);
 ```
+
+The `viewDashboard` Gate is defined in `AppServiceProvider::boot()` as `Gate::define('viewDashboard', [DashboardPolicy::class, 'view'])`.
 
 Usage from later tasks: `$this->authorize('changeStatus', [$ticket, $to])`, `Gate::authorize('view', $attachment)`, `$user->can('reply', $ticket)`, `$request->user()->can('viewDashboard')`.
 
@@ -116,18 +117,21 @@ enum TicketRelation: string { case Own = 'own'; case Assigned = 'assigned'; case
 
 final class AuthorizationMatrix {
     public static function for(\Tests\TestCase $test): self;
-    public function actingAsRole(Role $role, array $attributes = []): User;      // creates the user; HTTP calls act as them
+    public function actingAsRole(Role $role, array $attributes = []): User;
     public function asGuest(): self;
     public function user(): User;
-    public function ticketFor(TicketRelation $relation, array $attributes = []): Ticket; // ownership setup hook
+    public function ticketFor(TicketRelation $relation, array $attributes = []): Ticket;
     public function expectAccess(string $method, string $uri, int $status, array $payload = []): TestResponse;
     public function expectAccessAs(Role $role, string $method, string|\Closure $uri, int $status, array $payload = [],
                                    ?TicketRelation $relation = null, array $ticketAttributes = []): TestResponse;
-    public static function statusOf(Response $response): int;                    // 200 allowed, else 403/404
-    /** @return array<string, array{0: Role}> */ public static function roles(): array;
-    public static function ticketCases(array $rows): array;                      // labelled dataset builder
+    public static function statusOf(Response $response): int;
+    /** @return array<string, array{0: Role}> */
+    public static function roles(): array;
+    public static function ticketCases(array $rows): array;
 }
 ```
+
+`actingAsRole()` creates the user and later HTTP calls act as them. `ticketFor()` is the ownership setup hook: it creates a ticket related to the acting user as described by the `TicketRelation`, with factory overrides in `$attributes`. `statusOf()` maps a `Response` to 200 (allowed) or 403/404. `ticketCases()` builds a labelled dataset, labelling each row "role · relation · status · ability(args) → status" for readable Pest output. `expectAccessAs()` accepts a closure for `$uri`, which receives the ticket built by `ticketFor()`. The helper is used at policy level in T04 and at HTTP level by each later task's `tests/Feature/Authorization/<Feature>AuthorizationTest.php` (TD-010, TD-011, TD-012). Example at policy level: `AuthorizationMatrix::statusOf(Gate::forUser($user)->inspect('update', $ticket))` should be `200`. Example at HTTP level: `AuthorizationMatrix::for($this)->expectAccessAs(Role::Customer, 'GET', fn (Ticket $t) => route('tickets.show', $t), 404, relation: TicketRelation::Others)`.
 
 URIs whose path starts with `/api/` are sent as JSON with `Sanctum::actingAs($user, ['*'])`. Other URIs go through the `web` guard.
 
@@ -147,7 +151,7 @@ Mini-waves: **A** = 4.1 → **B** = 4.2 ∥ 4.4 → **C** = 4.3 ∥ 4.5.
 
 ### 4.1 AuthorizationMatrix helper
 
-- [ ] **Step 1: Write the failing self-test.** Create `tests/Feature/Authorization/AuthorizationMatrixTest.php`. It uses a test-only Gate ability and test-only routes, so it doesn't depend on any policy or on routes from later tasks.
+- [ ] **Step 1: Write the failing self-test.** Create `tests/Feature/Authorization/AuthorizationMatrixTest.php`. It uses a test-only Gate ability and test-only routes, so it doesn't depend on any policy or on routes from later tasks. The ability lets owners see their ticket and gives everyone else 404.
 
 ```php
 <?php
@@ -165,7 +169,6 @@ use Tests\Support\AuthorizationMatrix;
 use Tests\Support\TicketRelation;
 
 beforeEach(function (): void {
-    // Test-only ability and routes: owners see their ticket, everyone else gets 404.
     Gate::define('matrix.view', static fn (User $user, Ticket $ticket): Response => $ticket->customer_id === $user->id
         ? Response::allow()
         : Response::denyAsNotFound());
@@ -267,19 +270,14 @@ declare(strict_types=1);
 
 namespace Tests\Support;
 
-/** How the acting user relates to the ticket under test. */
 enum TicketRelation: string
 {
-    /** The user is the ticket's customer. */
     case Own = 'own';
 
-    /** The user is the ticket's assigned agent. */
     case Assigned = 'assigned';
 
-    /** Nobody is assigned, and another customer owns the ticket. */
     case Unassigned = 'unassigned';
 
-    /** Another customer's ticket, assigned to another agent. */
     case Others = 'others';
 }
 ```
@@ -305,20 +303,6 @@ use Laravel\Sanctum\Sanctum;
 use LogicException;
 use Tests\TestCase;
 
-/**
- * Shared helper for authorization matrices (TD-010, TD-011, TD-012). Used at policy level here
- * (T04) and at HTTP level by each later task's tests/Feature/Authorization/<Feature>AuthorizationTest.php.
- *
- * Policy level:
- *   $matrix = AuthorizationMatrix::for($this);
- *   $user = $matrix->actingAsRole(Role::Agent);
- *   $ticket = $matrix->ticketFor(TicketRelation::Assigned, ['status' => TicketStatus::InProgress]);
- *   expect(AuthorizationMatrix::statusOf(Gate::forUser($user)->inspect('update', $ticket)))->toBe(200);
- *
- * HTTP level:
- *   AuthorizationMatrix::for($this)->expectAccessAs(Role::Customer, 'GET',
- *       fn (Ticket $t) => route('tickets.show', $t), 404, relation: TicketRelation::Others);
- */
 final class AuthorizationMatrix
 {
     private ?User $user = null;
@@ -357,11 +341,7 @@ final class AuthorizationMatrix
         return $this->user ?? throw new LogicException('Call actingAsRole() before using the matrix user.');
     }
 
-    /**
-     * Ownership setup hook: creates a ticket related to the acting user as described.
-     *
-     * @param  array<string, mixed>  $attributes  factory overrides, e.g. ['status' => TicketStatus::Resolved]
-     */
+    /** @param  array<string, mixed>  $attributes */
     public function ticketFor(TicketRelation $relation, array $attributes = []): Ticket
     {
         $user = $this->user();
@@ -389,7 +369,7 @@ final class AuthorizationMatrix
     }
 
     /**
-     * @param  string|Closure(Ticket): string  $uri  a closure receives the ticket built by ticketFor()
+     * @param  string|Closure(Ticket): string  $uri
      * @param  array<string, mixed>  $payload
      * @param  array<string, mixed>  $ticketAttributes
      */
@@ -431,8 +411,6 @@ final class AuthorizationMatrix
     }
 
     /**
-     * Labels each row "role · relation · status · ability(args) → status" for readable Pest output.
-     *
      * @param  list<array{0: Role, 1: TicketRelation, 2: TicketStatus, 3: string, 4: list<mixed>, 5: int}>  $rows
      * @return array<string, array{0: Role, 1: TicketRelation, 2: TicketStatus, 3: string, 4: list<mixed>, 5: int}>
      */
@@ -516,7 +494,7 @@ final class AuthorizationMatrix
 
 ### 4.2 TicketPolicy (TD-010, TD-011, TD-012)
 
-- [ ] **Step 1: Write the failing test.** Create `tests/Feature/Authorization/TicketPolicyTest.php`:
+- [ ] **Step 1: Write the failing test.** Create `tests/Feature/Authorization/TicketPolicyTest.php`. It is a policy-level matrix (routes arrive in T05+) with the columns role, relation, ticket status, ability, extra gate arguments, and expected status (200 allowed, 403 denied, 404 denied as not found). A customer sees their own ticket, may close or reopen their own Resolved ticket and nothing else, and gets 404 for every ability on someone else's. An agent has full rights on a ticket assigned to them and on the unassigned queue; on a colleague's ticket the policy allows `claim`, because `ClaimTicket` answers 409 (TD-051). An admin may do everything except converse on Closed tickets:
 
 ```php
 <?php
@@ -530,10 +508,6 @@ use Illuminate\Support\Facades\Gate;
 use Tests\Support\AuthorizationMatrix;
 use Tests\Support\TicketRelation;
 
-/*
- * Policy-level matrix (routes arrive in T05+). Columns: role, relation, ticket status, ability,
- * extra gate arguments, expected status (200 allowed, 403 denied, 404 denied as not found).
- */
 $customer = Role::Customer;
 $agent = Role::Agent;
 $admin = Role::Admin;
@@ -548,7 +522,6 @@ $resolved = TicketStatus::Resolved;
 $closed = TicketStatus::Closed;
 
 $rows = [
-    // Customer: their own ticket.
     [$customer, $own, $open, 'view', [], 200],
     [$customer, $own, $open, 'update', [], 200],
     [$customer, $own, $open, 'changeStatus', [], 403],
@@ -564,7 +537,6 @@ $rows = [
     [$customer, $own, $inProgress, 'changeStatus', [$closed], 403],
     [$customer, $own, $waiting, 'update', [], 403],
     [$customer, $own, $waiting, 'reply', [], 200],
-    // Customer special case: close or reopen their own Resolved ticket, nothing else.
     [$customer, $own, $resolved, 'changeStatus', [], 200],
     [$customer, $own, $resolved, 'changeStatus', [$closed], 200],
     [$customer, $own, $resolved, 'changeStatus', [$inProgress], 200],
@@ -576,7 +548,6 @@ $rows = [
     [$customer, $own, $closed, 'changeStatus', [], 403],
     [$customer, $own, $closed, 'changeStatus', [$inProgress], 403],
     [$customer, $own, $closed, 'reply', [], 403],
-    // Customer: someone else's ticket is never revealed (404 for every ability).
     [$customer, $others, $open, 'view', [], 404],
     [$customer, $others, $open, 'update', [], 404],
     [$customer, $others, $open, 'changeStatus', [], 404],
@@ -589,7 +560,6 @@ $rows = [
     [$customer, $others, $resolved, 'changeStatus', [$closed], 404],
     [$customer, $unassigned, $open, 'view', [], 404],
     [$customer, $unassigned, $open, 'reply', [], 404],
-    // Agent: ticket assigned to them.
     [$agent, $assigned, $inProgress, 'view', [], 200],
     [$agent, $assigned, $inProgress, 'update', [], 200],
     [$agent, $assigned, $inProgress, 'changeStatus', [], 200],
@@ -604,7 +574,6 @@ $rows = [
     [$agent, $assigned, $closed, 'reply', [], 403],
     [$agent, $assigned, $closed, 'addInternalNote', [], 403],
     [$agent, $assigned, $closed, 'viewInternal', [], 200],
-    // Agent: unassigned queue.
     [$agent, $unassigned, $open, 'view', [], 200],
     [$agent, $unassigned, $open, 'update', [], 403],
     [$agent, $unassigned, $open, 'changeStatus', [], 403],
@@ -616,7 +585,6 @@ $rows = [
     [$agent, $unassigned, $open, 'viewInternal', [], 200],
     [$agent, $unassigned, $resolved, 'claim', [], 403],
     [$agent, $unassigned, $closed, 'claim', [], 403],
-    // Agent: a colleague's ticket. Claim is allowed by the policy; ClaimTicket answers 409 (TD-051).
     [$agent, $others, $inProgress, 'view', [], 200],
     [$agent, $others, $inProgress, 'update', [], 403],
     [$agent, $others, $inProgress, 'changeStatus', [], 403],
@@ -627,7 +595,6 @@ $rows = [
     [$agent, $others, $inProgress, 'reply', [], 200],
     [$agent, $others, $inProgress, 'addInternalNote', [], 200],
     [$agent, $others, $inProgress, 'viewInternal', [], 200],
-    // Admin: everything, except conversation on Closed tickets.
     [$admin, $others, $inProgress, 'view', [], 200],
     [$admin, $others, $inProgress, 'update', [], 200],
     [$admin, $others, $inProgress, 'changeStatus', [], 200],
@@ -696,7 +663,7 @@ it('uses a 404 status for invisible tickets so authorize() renders not found', f
   Command: `./vendor/bin/pest tests/Feature/Authorization/TicketPolicyTest.php`
   Expected: FAIL. The rows expecting 200 or 404 fail with `Failed asserting that 403 is identical to 200.` (or `... to 404.`), because without a policy every ability is denied.
 
-- [ ] **Step 3: Implement.** Create `app/Policies/TicketPolicy.php`:
+- [ ] **Step 3: Implement.** Create `app/Policies/TicketPolicy.php`. The policy deliberately doesn't check `assigned_agent_id` for `claim`: a lost race must surface as 409 `TicketAlreadyClaimed` from `ClaimTicket` (TD-051), not as a 403 here. A customer may close or reopen their own Resolved ticket, and do nothing else with its status:
 
 ```php
 <?php
@@ -712,16 +679,8 @@ use App\Models\User;
 use Closure;
 use Illuminate\Auth\Access\Response;
 
-/**
- * Ticket authorization: spatie capabilities combined with ownership (TD-010, TD-011).
- *
- * Every ticket-scoped ability first checks visibility. A user who may not see the ticket gets 404,
- * never 403, so ticket numbers can't be enumerated (TD-012). Whether a transition, target agent or
- * claim is *valid* is decided by the Actions; this policy decides who may attempt it.
- */
 final class TicketPolicy
 {
-    /** A customer may close or reopen their own Resolved ticket, and do nothing else with its status. */
     private const CUSTOMER_TARGETS_FROM_RESOLVED = [TicketStatus::Closed, TicketStatus::InProgress];
 
     public function viewAny(User $user): bool
@@ -769,8 +728,6 @@ final class TicketPolicy
 
     public function claim(User $user, Ticket $ticket): Response
     {
-        // assigned_agent_id is deliberately not checked: a lost race must surface as
-        // 409 TicketAlreadyClaimed from ClaimTicket (TD-051), not as a 403 here.
         return $this->decide($user, $ticket, fn (): bool => $this->has($user, Permission::TicketsClaim)
             && $ticket->status->isActive());
     }
@@ -886,7 +843,7 @@ it('hides internal replies and invisible tickets from customers', function (Role
 ]);
 ```
 
-- [ ] **Step 2: Write the failing attachment test.** Create `tests/Feature/Authorization/AttachmentPolicyTest.php`:
+- [ ] **Step 2: Write the failing attachment test.** Create `tests/Feature/Authorization/AttachmentPolicyTest.php`. An attachment on a reply inherits the reply's `is_internal` flag at creation (TD-024):
 
 ```php
 <?php
@@ -922,7 +879,6 @@ it('never lets a customer download a file attached to an internal note on their 
     $customer = $matrix->actingAsRole(Role::Customer);
     $ticket = $matrix->ticketFor(TicketRelation::Own);
     $note = TicketReply::factory()->for($ticket)->internal()->create();
-    // TD-024: an attachment on a reply inherits the reply's is_internal flag at creation.
     $attachment = Attachment::factory()->for($ticket)->create(['reply_id' => $note->id, 'is_internal' => true]);
 
     $response = Gate::forUser($customer)->inspect('view', $attachment);
@@ -936,7 +892,7 @@ it('never lets a customer download a file attached to an internal note on their 
   Command: `./vendor/bin/pest tests/Feature/Authorization/TicketReplyPolicyTest.php tests/Feature/Authorization/AttachmentPolicyTest.php`
   Expected: FAIL. The rows expecting 200 or 404 fail with `Failed asserting that 403 is identical to 200.` (or `... to 404.`).
 
-- [ ] **Step 4: Implement the reply policy.** Create `app/Policies/TicketReplyPolicy.php`:
+- [ ] **Step 4: Implement the reply policy.** Create `app/Policies/TicketReplyPolicy.php`. Internal notes are reported to customers as not found, never as forbidden (TD-012, TD-120):
 
 ```php
 <?php
@@ -949,7 +905,6 @@ use App\Models\TicketReply;
 use App\Models\User;
 use Illuminate\Auth\Access\Response;
 
-/** Internal notes are reported to customers as not found, never as forbidden (TD-012, TD-120). */
 final class TicketReplyPolicy
 {
     public function __construct(private readonly TicketPolicy $tickets) {}
@@ -972,7 +927,7 @@ final class TicketReplyPolicy
 }
 ```
 
-- [ ] **Step 5: Implement the attachment policy.** Create `app/Policies/AttachmentPolicy.php`:
+- [ ] **Step 5: Implement the attachment policy.** Create `app/Policies/AttachmentPolicy.php`. The user must see the ticket, and internal files are staff-only. The denormalized `ticket_id` and `is_internal` make this a single check with no reply lookup (TD-024):
 
 ```php
 <?php
@@ -985,10 +940,6 @@ use App\Models\Attachment;
 use App\Models\User;
 use Illuminate\Auth\Access\Response;
 
-/**
- * Download authorization: the user must see the ticket, and internal files are staff-only.
- * The denormalized ticket_id + is_internal make this a single check with no reply lookup (TD-024).
- */
 final class AttachmentPolicy
 {
     public function __construct(private readonly TicketPolicy $tickets) {}
@@ -1027,7 +978,7 @@ final class AttachmentPolicy
 
 ### 4.4 Admin policies + viewDashboard Gate (TD-010, TD-011)
 
-- [ ] **Step 1: Write the failing admin test.** Create `tests/Feature/Authorization/AdminPoliciesTest.php`:
+- [ ] **Step 1: Write the failing admin test.** Create `tests/Feature/Authorization/AdminPoliciesTest.php`. Policies only check capabilities, so an unsaved model instance is enough for update and delete:
 
 ```php
 <?php
@@ -1044,7 +995,6 @@ use Tests\Support\AuthorizationMatrix;
 
 it('limits admin areas to admins', function (string $model, string $ability, Role $role, int $expected): void {
     $user = AuthorizationMatrix::for($this)->actingAsRole($role);
-    // Policies only check capabilities, so an unsaved instance is enough for update/delete.
     $argument = in_array($ability, ['viewAny', 'create'], true) ? $model : new $model;
 
     expect(AuthorizationMatrix::statusOf(Gate::forUser($user)->inspect($ability, $argument)))->toBe($expected);
@@ -1181,7 +1131,7 @@ final class HolidayPolicy
 }
 ```
 
-- [ ] **Step 6: Create `app/Policies/UserPolicy.php`.**
+- [ ] **Step 6: Create `app/Policies/UserPolicy.php`.** An admin can't delete themselves, because that could leave the system without an administrator.
 
 ```php
 <?php
@@ -1212,7 +1162,6 @@ final class UserPolicy
 
     public function delete(User $user, User $model): bool
     {
-        // An admin deleting themselves could leave the system without an administrator.
         return $user->can(Permission::UsersManage->value) && $model->isNot($user);
     }
 }
@@ -1260,7 +1209,7 @@ final class TicketImportPolicy
 }
 ```
 
-- [ ] **Step 8: Create `app/Policies/DashboardPolicy.php`.**
+- [ ] **Step 8: Create `app/Policies/DashboardPolicy.php`.** It isn't a model policy: it is registered as the `viewDashboard` Gate in `AppServiceProvider`.
 
 ```php
 <?php
@@ -1272,7 +1221,6 @@ namespace App\Policies;
 use App\Enums\Permission;
 use App\Models\User;
 
-/** Not a model policy: registered as the 'viewDashboard' Gate in AppServiceProvider. */
 final class DashboardPolicy
 {
     public function view(User $user): bool
@@ -1389,10 +1337,9 @@ use App\Models\User;
 use Illuminate\Http\Request;
 ```
 
-- [ ] **Step 4: Add the key list.** In the same class, add this constant directly after the class's opening brace (before `$rootView`):
+- [ ] **Step 4: Add the key list.** These are the keys of `auth.can` (README §3.13); guests get all of them as false. In the same class, add this constant directly after the class's opening brace (before `$rootView`):
 
 ```php
-    /** Keys of auth.can (README §3.13); guests get all of them as false. */
     private const AUTH_CAN_KEYS = [
         'viewDashboard',
         'manageImports',
@@ -1409,15 +1356,10 @@ use Illuminate\Http\Request;
             'auth' => $this->authProps($request),
 ```
 
-- [ ] **Step 6: Add the method.** Add this private method at the end of the class:
+- [ ] **Step 6: Add the method.** Only explicitly selected user fields and the user's own capability booleans are shared (TD-120), and the booleans go through the same Policies and Gate as the server-side checks (TD-010). Add this private method at the end of the class:
 
 ```php
-    /**
-     * Only explicitly selected fields and the user's own capability booleans are shared (TD-120).
-     * The booleans go through the same Policies and Gate as the server-side checks (TD-010).
-     *
-     * @return array{user: array{id: int, name: string, email: string, roles: list<string>}|null, can: array<string, bool>}
-     */
+    /** @return array{user: array{id: int, name: string, email: string, roles: list<string>}|null, can: array<string, bool>} */
     private function authProps(Request $request): array
     {
         $user = $request->user();

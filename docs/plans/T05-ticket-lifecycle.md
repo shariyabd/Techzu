@@ -59,10 +59,11 @@
 
 ### Produces (binding, README §3)
 
+Events live in `app/Events`: all `final`, `Dispatchable` and `SerializesModels`, implementing `ShouldDispatchAfterCommit`, with public readonly constructor properties. `TicketUpdated::$changes` has the shape `['field' => ['from' => x, 'to' => y]]`. `SlaQuery` is in `app/Services/Sla` and `AttachmentStorer` in `app/Services/Attachments`. The Actions are in `app/Actions/Tickets`, each with a single public `handle()`. `RecordTicketActivity` is in `app/Listeners`: sync, auto-discovered, one `handle*` method per event. `Ticket::activitiesVisibleTo()` is provided by T01 and consumed here (log_name 'ticket'; it excludes `internal_note` unless the user may `viewInternal`). The resources are in `app/Http/Resources/V1`.
+
 ```php
-// app/Events (all final, Dispatchable + SerializesModels, implements ShouldDispatchAfterCommit, public readonly ctor props)
 TicketCreated(Ticket $ticket, ?User $actor, bool $imported = false)
-TicketUpdated(Ticket $ticket, User $actor, array $changes)            // ['field' => ['from' => x, 'to' => y]]
+TicketUpdated(Ticket $ticket, User $actor, array $changes)
 TicketAssigned(Ticket $ticket, ?User $actor, User $agent, ?User $previousAgent, AssignmentMethod $method)
 TicketStatusChanged(Ticket $ticket, ?User $actor, TicketStatus $from, TicketStatus $to)
 TicketResolved(Ticket $ticket, ?User $actor)
@@ -72,33 +73,27 @@ TicketSlaApproaching(Ticket $ticket)
 TicketSlaBreached(Ticket $ticket)
 TicketImportFinished(TicketImport $import)
 
-// app/Services/Sla
 final class SlaQuery {
     public static function whereState(Builder $q, SlaState $state, CarbonImmutable $now): Builder;
     public static function whereBreached(Builder $q, CarbonImmutable $now): Builder;
     public static function whereApproaching(Builder $q, CarbonImmutable $now): Builder;
 }
-// app/Services/Attachments
 final class AttachmentStorer {
-    /** @param list<UploadedFile> $files @return Collection<int, Attachment> */
+    /** @param list<UploadedFile> $files */
     public function storeMany(Ticket $ticket, ?TicketReply $reply, User $uploader, array $files, bool $isInternal): Collection;
     /** @param Collection<int, Attachment> $attachments */
     public function deleteFiles(Collection $attachments): void;
 }
 
-// app/Actions/Tickets (single public handle)
 CreateTicket::handle(User $actor, array $data, array $files = []): Ticket
 UpdateTicket::handle(User $actor, Ticket $ticket, array $data): Ticket
 ChangeTicketStatus::handle(?User $actor, Ticket $ticket, TicketStatus $to): Ticket
 ChangeTicketPriority::handle(User $actor, Ticket $ticket, TicketPriority $to): Ticket
 
-// app/Listeners
-final class RecordTicketActivity   // sync, auto-discovered, one handle* method per event
+final class RecordTicketActivity
 
-// app/Models/Ticket.php (provided by T01, consumed here)
-public function activitiesVisibleTo(User $user): MorphMany   // log_name 'ticket'; excludes internal_note unless viewInternal
+public function activitiesVisibleTo(User $user): MorphMany
 
-// app/Http/Resources/V1
 TicketResource, TicketListResource, ActivityResource, AttachmentResource
 ```
 
@@ -285,9 +280,7 @@ final class TicketUpdated implements ShouldDispatchAfterCommit
     use Dispatchable;
     use SerializesModels;
 
-    /**
-     * @param  array<string, array{from: mixed, to: mixed}>  $changes
-     */
+    /** @param  array<string, array{from: mixed, to: mixed}>  $changes */
     public function __construct(
         public readonly Ticket $ticket,
         public readonly User $actor,
@@ -637,6 +630,8 @@ Expected: FAIL, `Class "App\Services\Sla\SlaQuery" not found`.
 
 - [ ] **Step 3: create `app/Services/Sla/SlaQuery.php`**
 
+`SlaQuery` is the SQL twin of `Ticket::slaState()`. Every predicate leads with `status`, so MySQL can use the `(status, sla_due_at)` and `(status, sla_warning_at)` indexes (TD-021, TD-023).
+
 ```php
 <?php
 
@@ -649,15 +644,10 @@ use App\Enums\TicketStatus;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 
-/**
- * SQL twin of Ticket::slaState(). Every predicate leads with `status` so MySQL can use the
- * (status, sla_due_at) and (status, sla_warning_at) indexes (TD-021, TD-023).
- */
 final class SlaQuery
 {
     /**
      * @template TModel of \Illuminate\Database\Eloquent\Model
-     *
      * @param  Builder<TModel>  $q
      * @return Builder<TModel>
      */
@@ -674,7 +664,6 @@ final class SlaQuery
 
     /**
      * @template TModel of \Illuminate\Database\Eloquent\Model
-     *
      * @param  Builder<TModel>  $q
      * @return Builder<TModel>
      */
@@ -685,7 +674,6 @@ final class SlaQuery
 
     /**
      * @template TModel of \Illuminate\Database\Eloquent\Model
-     *
      * @param  Builder<TModel>  $q
      * @return Builder<TModel>
      */
@@ -698,7 +686,6 @@ final class SlaQuery
 
     /**
      * @template TModel of \Illuminate\Database\Eloquent\Model
-     *
      * @param  Builder<TModel>  $q
      * @return Builder<TModel>
      */
@@ -709,7 +696,6 @@ final class SlaQuery
 
     /**
      * @template TModel of \Illuminate\Database\Eloquent\Model
-     *
      * @param  Builder<TModel>  $q
      * @return Builder<TModel>
      */
@@ -747,13 +733,14 @@ git commit -m "feat(sla): add index-backed SLA state predicates" --trailer "Refs
 
 - [ ] **Step 1: create `config/attachments.php`**
 
+Files go to the private disk only (TD-061); set `ATTACHMENTS_DISK=s3` to move storage without code changes.
+
 ```php
 <?php
 
 declare(strict_types=1);
 
 return [
-    // Private disk only (TD-061). Set ATTACHMENTS_DISK=s3 to move storage without code changes.
     'disk' => env('ATTACHMENTS_DISK', 'local'),
 
     'directory' => 'attachments',
@@ -870,6 +857,8 @@ Expected: FAIL, `Target class [App\Services\Attachments\AttachmentStorer] does n
 
 - [ ] **Step 5: create `app/Services/Attachments/AttachmentStorer.php`**
 
+Files cannot take part in a database transaction (TD-053), so every failure path deletes what was already written. Callers wrap `storeMany` in their transaction and call `deleteFiles` if the transaction fails after `storeMany` returned.
+
 ```php
 <?php
 
@@ -889,11 +878,6 @@ use Illuminate\Support\Str;
 use RuntimeException;
 use Throwable;
 
-/**
- * Files cannot take part in a database transaction (TD-053), so every failure path deletes
- * what was already written. Callers wrap storeMany in their transaction and call deleteFiles
- * if the transaction fails after storeMany returned.
- */
 final class AttachmentStorer
 {
     public function __construct(
@@ -957,9 +941,7 @@ final class AttachmentStorer
         return $attachments;
     }
 
-    /**
-     * @param  Collection<int, Attachment>  $attachments
-     */
+    /** @param  Collection<int, Attachment>  $attachments */
     public function deleteFiles(Collection $attachments): void
     {
         $attachments
@@ -1002,6 +984,8 @@ Rules applied in every Action: the Action owns the transaction (TD-053); ticket 
 #### 5.2.a ChangeTicketStatus
 
 - [ ] **Step 1: write the failing test** `tests/Feature/Actions/Tickets/ChangeTicketStatusTest.php`
+
+The pause test runs from Sunday 09:00 Dhaka to Monday 09:00 Dhaka, which is one full business day elapsed while paused.
 
 ```php
 <?php
@@ -1111,7 +1095,6 @@ it('resumes the SLA with the remaining business time when leaving waiting for cu
         'sla_paused_at' => $pausedAt,
     ]);
 
-    // Paused at Sunday 09:00 Dhaka, resumed Monday 09:00 Dhaka: one full business day elapsed while paused.
     $resumeAt = $pausedAt->addDay();
     $this->travelTo($resumeAt);
 
@@ -1193,6 +1176,8 @@ Expected: FAIL, `Target class [App\Actions\Tickets\ChangeTicketStatus] does not 
 
 - [ ] **Step 3: create `app/Actions/Tickets/ChangeTicketStatus.php`**
 
+A null actor means the system (for example a customer reply resuming a waiting ticket). The caller's instance may be stale, so the transition is decided on the locked row. Reopening keeps the original SLA deadline; only the resolution stamp is withdrawn (TD-042).
+
 ```php
 <?php
 
@@ -1216,9 +1201,6 @@ final class ChangeTicketStatus
         private readonly SlaCalculator $sla,
     ) {}
 
-    /**
-     * A null actor means the system (e.g. a customer reply resuming a waiting ticket).
-     */
     public function handle(?User $actor, Ticket $ticket, TicketStatus $to): Ticket
     {
         $now = CarbonImmutable::now();
@@ -1244,7 +1226,6 @@ final class ChangeTicketStatus
                 $ticket->resolved_at = $now;
             }
 
-            // Reopening keeps the original SLA deadline; only the resolution stamp is withdrawn (TD-042).
             if ($from === TicketStatus::Resolved && $to === TicketStatus::InProgress) {
                 $ticket->resolved_at = null;
             }
@@ -1266,9 +1247,6 @@ final class ChangeTicketStatus
         });
     }
 
-    /**
-     * The caller's instance may be stale; the transition must be decided on the locked row.
-     */
     private function lockAndRefresh(Ticket $ticket): void
     {
         $locked = Ticket::query()->whereKey($ticket->getKey())->lockForUpdate()->firstOrFail();
@@ -1295,6 +1273,8 @@ git commit -m "feat(tickets): change status via state machine with SLA pause" --
 
 - [ ] **Step 1: write the failing test** `tests/Feature/Actions/Tickets/ChangeTicketPriorityTest.php`
 
+The clock is set to Sunday 2026-11-01 12:00 Dhaka, and the ticket started at 09:00 Dhaka (3 business hours ago). Critical is 120 business minutes from 09:00, so the deadline is 11:00 Dhaka and it has already passed.
+
 ```php
 <?php
 
@@ -1312,7 +1292,6 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Event;
 
 beforeEach(function (): void {
-    // Sunday 2026-11-01 12:00 Dhaka; the ticket started at 09:00 Dhaka (3 business hours ago).
     $this->started = CarbonImmutable::parse('2026-11-01 03:00:00', 'UTC');
     $this->now = $this->started->addHours(3);
     $this->travelTo($this->now);
@@ -1351,7 +1330,6 @@ it('can make a ticket breached immediately when raised to critical', function ()
 
     app(ChangeTicketPriority::class)->handle($this->admin, $ticket, TicketPriority::Critical);
 
-    // Critical = 120 business minutes from 09:00 = 11:00 Dhaka, and it is now 12:00 Dhaka.
     expect($ticket->fresh()?->sla_due_at?->lessThanOrEqualTo($this->now))->toBeTrue();
 });
 
@@ -1411,6 +1389,8 @@ Expected: FAIL, `Target class [App\Actions\Tickets\ChangeTicketPriority] does no
 
 - [ ] **Step 3: create `app/Actions/Tickets/ChangeTicketPriority.php`**
 
+`recalculateForPriority` reads the ticket's new priority and recomputes from `sla_started_at` (TD-043).
+
 ```php
 <?php
 
@@ -1446,7 +1426,6 @@ final class ChangeTicketPriority
                 return $ticket;
             }
 
-            // recalculateForPriority reads the ticket's (new) priority and recomputes from sla_started_at (TD-043).
             $ticket->priority = $to;
             $this->sla->recalculateForPriority($ticket, $now);
             $ticket->save();
@@ -1553,6 +1532,8 @@ Expected: FAIL, `Target class [App\Actions\Tickets\UpdateTicket] does not exist.
 
 - [ ] **Step 3: create `app/Actions/Tickets/UpdateTicket.php`**
 
+The Action accepts only content fields; status, priority, assignment and SLA have their own Actions. It is a single-row write with no read-then-decide step, so no transaction is needed (TD-053).
+
 ```php
 <?php
 
@@ -1566,14 +1547,9 @@ use App\Models\User;
 
 final class UpdateTicket
 {
-    /** Only content fields; status, priority, assignment and SLA have their own Actions. */
     private const FIELDS = ['subject', 'description', 'category_id'];
 
-    /**
-     * Single-row write with no read-then-decide step, so no transaction is needed (TD-053).
-     *
-     * @param  array<string, mixed>  $data
-     */
+    /** @param  array<string, mixed>  $data */
     public function handle(User $actor, Ticket $ticket, array $data): Ticket
     {
         $changes = [];
@@ -1766,6 +1742,8 @@ Expected: FAIL, `Target class [App\Actions\Tickets\CreateTicket] does not exist.
 
 - [ ] **Step 3: create `app/Actions/Tickets/CreateTicket.php`**
 
+The ticket number shares the Action's transaction, so a rollback also rolls back the counter (TD-022). The ticket is refreshed after creation to load database defaults (`escalation_level`), so callers and resources see the stored row.
+
 ```php
 <?php
 
@@ -1817,12 +1795,10 @@ final class CreateTicket
                     'customer_id' => $this->customerId($actor, $data),
                     'created_by_id' => $actor->id,
                 ]);
-                // The number shares this transaction, so a rollback also rolls back the counter (TD-022).
                 $ticket->number = $this->numbers->next($now);
                 $ticket->status = TicketStatus::Open;
                 $this->sla->applyInitial($ticket, $now);
                 $ticket->save();
-                // Loads database defaults (escalation_level) so callers and resources see the stored row.
                 $ticket->refresh();
 
                 $stored = $this->attachments->storeMany($ticket, null, $actor, $files, false);
@@ -1838,9 +1814,7 @@ final class CreateTicket
         }
     }
 
-    /**
-     * @param  array<string, mixed>  $data
-     */
+    /** @param  array<string, mixed>  $data */
     private function customerId(User $actor, array $data): int
     {
         $requested = $data['customer_id'] ?? null;
@@ -1918,9 +1892,7 @@ beforeEach(function (): void {
     $this->customer = User::factory()->customer()->create();
 });
 
-/**
- * @return \Illuminate\Support\Collection<int, Activity>
- */
+/** @return \Illuminate\Support\Collection<int, Activity> */
 function activitiesFor(Ticket $ticket): Illuminate\Support\Collection
 {
     return Activity::query()
@@ -2076,6 +2048,8 @@ Expected: FAIL. The event-driven tests fail with `Item not found` / `[] ... toBe
 
 - [ ] **Step 3: create `app/Listeners/RecordTicketActivity.php`**
 
+This listener is the only writer of the ticket timeline (TD-026). `TicketResolved` is deliberately not handled, because the matching `status_changed` entry already records the resolution. Descriptions can be long and are not useful in a one-line timeline, so only the subject keeps its values. `performedOn()` comes first because it initialises the pending activity that `causedByAnonymous()` edits. Without `causedByAnonymous()` the package would default the causer to the logged-in user, which would misattribute system transitions made during a request. The business change is already committed, so a missing timeline entry must not fail it (TD-026).
+
 ```php
 <?php
 
@@ -2100,10 +2074,6 @@ use App\Models\Ticket;
 use App\Models\User;
 use Throwable;
 
-/**
- * The only writer of the ticket timeline (TD-026). TicketResolved is deliberately not handled:
- * the matching status_changed entry already records the resolution.
- */
 final class RecordTicketActivity
 {
     public function handleTicketCreated(TicketCreated $event): void
@@ -2147,7 +2117,6 @@ final class RecordTicketActivity
             return;
         }
 
-        // Descriptions can be long and are not useful in a one-line timeline; only the subject keeps its values.
         $properties = ['fields' => array_keys($changes), 'from' => [], 'to' => []];
         if (array_key_exists('subject', $changes)) {
             $properties['from']['subject'] = $changes['subject']['from'];
@@ -2224,32 +2193,24 @@ final class RecordTicketActivity
         ]);
     }
 
-    /**
-     * @param  array<string, mixed>  $properties
-     */
+    /** @param  array<string, mixed>  $properties */
     private function record(Ticket $ticket, ?User $actor, ActivityType $type, array $properties): void
     {
         try {
-            // performedOn() first: it initialises the pending activity that causedByAnonymous() edits.
             $logger = activity('ticket')
                 ->performedOn($ticket)
                 ->event($type->value)
                 ->withProperties($properties);
 
-            // Without causedByAnonymous() the package would default the causer to the logged-in user,
-            // which would misattribute system transitions made during a request.
             $actor === null ? $logger->causedByAnonymous() : $logger->causedBy($actor);
 
             $logger->log($type->describe($properties));
         } catch (Throwable $e) {
-            // The business change is already committed; a missing timeline entry must not fail it (TD-026).
             report($e);
         }
     }
 
-    /**
-     * @return array{id: int, name: string}
-     */
+    /** @return array{id: int, name: string} */
     private function summary(User $user): array
     {
         return ['id' => $user->id, 'name' => $user->name];
@@ -2291,6 +2252,8 @@ Authorization pattern used by every FormRequest on an existing ticket: `authoriz
 
 - [ ] **Step 1: write the failing test** `tests/Feature/Tickets/TicketReadLayerTest.php`
 
+The "resolved" scope is the finished list: resolved and closed tickets together.
+
 ```php
 <?php
 
@@ -2327,7 +2290,6 @@ it('lists only the viewer\'s visible tickets for the requested scope, newest fir
     $active = $query->paginate($this->customer, ['scope' => 'active'], $this->now);
     expect(collect($active->items())->pluck('id')->all())->toBe([$newer->id, $older->id]);
 
-    // The "resolved" scope is the finished list: resolved and closed tickets together.
     $finished = $query->paginate($this->customer, ['scope' => 'resolved'], $this->now);
     expect(collect($finished->items())->pluck('id')->all())->toBe([$closed->id, $resolved->id]);
 
@@ -2398,6 +2360,8 @@ Expected: FAIL, `Target class [App\Services\Tickets\TicketListQuery] does not ex
 
 - [ ] **Step 3: create `app/Http/Resources/V1/AttachmentResource.php`**
 
+URLs are built from paths, not route names, because the download routes belong to T07 and may not be registered yet.
+
 ```php
 <?php
 
@@ -2409,17 +2373,12 @@ use App\Models\Attachment;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-/**
- * @mixin Attachment
- */
+/** @mixin Attachment */
 final class AttachmentResource extends JsonResource
 {
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
-        // Paths, not route names: the download routes belong to T07 and may not be registered yet.
         $base = $request->is('api/*') ? '/api/v1/attachments/' : '/attachments/';
 
         return [
@@ -2449,14 +2408,10 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Spatie\Activitylog\Models\Activity;
 
-/**
- * @mixin Activity
- */
+/** @mixin Activity */
 final class ActivityResource extends JsonResource
 {
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
         $causer = $this->relationLoaded('causer') ? $this->causer : null;
@@ -2475,6 +2430,8 @@ final class ActivityResource extends JsonResource
 
 - [ ] **Step 5: create `app/Http/Resources/V1/TicketResource.php`**
 
+The `can` entry has the TicketCan shape (README §3.13). Every flag comes from `TicketPolicy`, so the UI only mirrors what the server enforces. The policy ignores the assignee on purpose (a lost race must reach the Action and get 409), so the UI offers "claim" only for tickets that are still unassigned.
+
 ```php
 <?php
 
@@ -2489,14 +2446,10 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-/**
- * @mixin Ticket
- */
+/** @mixin Ticket */
 final class TicketResource extends JsonResource
 {
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
         $state = $this->resource->slaState();
@@ -2526,12 +2479,7 @@ final class TicketResource extends JsonResource
         ];
     }
 
-    /**
-     * The TicketCan shape (README §3.13). Every flag comes from TicketPolicy, so the UI only
-     * mirrors what the server enforces.
-     *
-     * @return array{update: bool, changeStatus: bool, changePriority: bool, claim: bool, assign: bool, reply: bool, addInternalNote: bool, allowedStatuses: list<string>}
-     */
+    /** @return array{update: bool, changeStatus: bool, changePriority: bool, claim: bool, assign: bool, reply: bool, addInternalNote: bool, allowedStatuses: list<string>} */
     public static function abilities(User $user, Ticket $ticket): array
     {
         $allowed = array_values(array_filter(
@@ -2543,8 +2491,6 @@ final class TicketResource extends JsonResource
             'update' => $user->can('update', $ticket),
             'changeStatus' => $allowed !== [],
             'changePriority' => $user->can('changePriority', $ticket),
-            // The policy ignores the assignee on purpose (a lost race must reach the Action and get 409);
-            // the UI offers "claim" only for tickets that are still unassigned.
             'claim' => $user->can('claim', $ticket) && $ticket->assigned_agent_id === null,
             'assign' => $user->can('assign', $ticket),
             'reply' => $user->can('reply', $ticket),
@@ -2570,14 +2516,10 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-/**
- * @mixin Ticket
- */
+/** @mixin Ticket */
 final class TicketListResource extends JsonResource
 {
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
         $state = $this->resource->slaState();
@@ -2607,6 +2549,8 @@ final class TicketListResource extends JsonResource
 
 - [ ] **Step 7: create `app/Services/Tickets/TicketListQuery.php`**
 
+This is the single ticket-list query used by the web and API index endpoints. T08 plugs `TicketFilter` into `applyFilters()`; visibility, scope, eager loading and pagination stay here. T05 only applies the default order, and T08 replaces that body with `return $this->filter->apply($query, $validated, $viewer, $now);`. Only visible replies are counted, because a raw count would reveal internal notes to customers.
+
 ```php
 <?php
 
@@ -2622,10 +2566,6 @@ use Illuminate\Contracts\Config\Repository as Config;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 
-/**
- * The single ticket-list query used by the web and API index endpoints. T08 plugs TicketFilter
- * into applyFilters(); visibility, scope, eager loading and pagination stay here.
- */
 final class TicketListQuery
 {
     private const LIST_COLUMNS = [
@@ -2653,7 +2593,6 @@ final class TicketListQuery
             ->visibleTo($viewer)
             ->whereIn('tickets.status', array_map(static fn (TicketStatus $s): string => $s->value, $statuses))
             ->with(['category:id,name', 'customer:id,name', 'assignedAgent:id,name'])
-            // Counting only visible replies: a raw count would reveal internal notes to customers.
             ->withCount(['replies' => static fn (Builder $q) => $q->visibleTo($viewer)]);
 
         $query = $this->applyFilters($query, $validated, $viewer, $now);
@@ -2662,9 +2601,6 @@ final class TicketListQuery
     }
 
     /**
-     * T05 only applies the default order. T08 replaces this body with
-     * `return $this->filter->apply($query, $validated, $viewer, $now);`.
-     *
      * @param  Builder<Ticket>  $query
      * @param  array<string, mixed>  $validated
      * @return Builder<Ticket>
@@ -2674,9 +2610,7 @@ final class TicketListQuery
         return $query->orderByDesc('tickets.created_at')->orderByDesc('tickets.id');
     }
 
-    /**
-     * @param  array<string, mixed>  $validated
-     */
+    /** @param  array<string, mixed>  $validated */
     private function perPage(array $validated): int
     {
         $default = (int) $this->config->get('tickets.per_page.default', 20);
@@ -2689,6 +2623,8 @@ final class TicketListQuery
 ```
 
 - [ ] **Step 8: create `app/Services/Tickets/TicketPageData.php`**
+
+These are read-side helpers for the ticket pages, so controllers stay free of queries (TD-001). Every method applies the viewer's visibility rules (TD-120). The agent list is a small, admin-managed set, so its cap only guards against misuse.
 
 ```php
 <?php
@@ -2708,15 +2644,8 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Spatie\Activitylog\Models\Activity;
 
-/**
- * Read-side helpers for the ticket pages, so controllers stay free of queries (TD-001).
- * Every method applies the viewer's visibility rules (TD-120).
- */
 final class TicketPageData
 {
-    /**
-     * The relations TicketResource renders, for endpoints that return a single ticket.
-     */
     public function loadSummary(Ticket $ticket): Ticket
     {
         return $ticket->loadMissing(['category:id,name', 'customer:id,name', 'assignedAgent:id,name']);
@@ -2743,9 +2672,7 @@ final class TicketPageData
         ]);
     }
 
-    /**
-     * @return Collection<int, Activity>
-     */
+    /** @return Collection<int, Activity> */
     public function activities(Ticket $ticket, User $viewer, int $limit = 100): Collection
     {
         return $ticket->activitiesVisibleTo($viewer)
@@ -2756,9 +2683,7 @@ final class TicketPageData
             ->get();
     }
 
-    /**
-     * @return LengthAwarePaginator<int, Activity>
-     */
+    /** @return LengthAwarePaginator<int, Activity> */
     public function activitiesPage(Ticket $ticket, User $viewer, int $perPage): LengthAwarePaginator
     {
         return $ticket->activitiesVisibleTo($viewer)
@@ -2768,11 +2693,7 @@ final class TicketPageData
             ->paginate(max(1, min($perPage, (int) config('tickets.per_page.max', 100))));
     }
 
-    /**
-     * Agents are a small, admin-managed set; the cap only guards against misuse.
-     *
-     * @return list<array{id: int, name: string}>
-     */
+    /** @return list<array{id: int, name: string}> */
     public function agentOptions(): array
     {
         return User::query()
@@ -2785,9 +2706,7 @@ final class TicketPageData
             ->all();
     }
 
-    /**
-     * @return array{statuses: list<array{value: string, label: string}>, priorities: list<array{value: string, label: string}>, categories: list<array{id: int, name: string}>}
-     */
+    /** @return array{statuses: list<array{value: string, label: string}>, priorities: list<array{value: string, label: string}>, categories: list<array{id: int, name: string}>} */
     public function formOptions(): array
     {
         return [
@@ -2823,6 +2742,8 @@ Expected: PASS (5 tests). If the customer `allowedStatuses` assertion fails, T04
 
 - [ ] **Step 10: create `app/Http/Requests/Tickets/IndexTicketsRequest.php`**
 
+T08 adds the TD-080 filter rules to `rules()`; scope, page and per_page stay as defined here.
+
 ```php
 <?php
 
@@ -2836,9 +2757,6 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
-/**
- * T08 adds the TD-080 filter rules to rules(); scope, page and per_page stay as defined here.
- */
 final class IndexTicketsRequest extends FormRequest
 {
     public function authorize(): Response
@@ -2846,9 +2764,7 @@ final class IndexTicketsRequest extends FormRequest
         return Gate::forUser($this->user())->inspect('viewAny', Ticket::class);
     }
 
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function rules(): array
     {
         return [
@@ -2866,6 +2782,8 @@ final class IndexTicketsRequest extends FormRequest
 ```
 
 - [ ] **Step 11: create `app/Http/Requests/Tickets/StoreTicketRequest.php`**
+
+Staff identify the customer by email (unique, indexed); customers always create for themselves. `validated()` produces the `$data` array for `CreateTicket::handle()`.
 
 ```php
 <?php
@@ -2893,9 +2811,7 @@ final class StoreTicketRequest extends FormRequest
         return Gate::forUser($this->user())->inspect('create', Ticket::class);
     }
 
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function rules(): array
     {
         /** @var list<string> $extensions */
@@ -2906,7 +2822,6 @@ final class StoreTicketRequest extends FormRequest
             'description' => ['required', 'string', 'max:20000'],
             'priority' => ['required', Rule::enum(TicketPriority::class)],
             'category_id' => ['required', 'integer', Rule::exists('categories', 'id')->where('is_active', true)],
-            // Staff identify the customer by email (unique, indexed); customers always create for themselves.
             'customer_email' => $this->canCreateOnBehalf()
                 ? ['required', 'string', 'email', $this->mustBeCustomer()]
                 : ['prohibited'],
@@ -2915,11 +2830,7 @@ final class StoreTicketRequest extends FormRequest
         ];
     }
 
-    /**
-     * The $data array for CreateTicket::handle().
-     *
-     * @return array{subject: string, description: string, priority: string, category_id: int, customer_id?: int}
-     */
+    /** @return array{subject: string, description: string, priority: string, category_id: int, customer_id?: int} */
     public function actionData(): array
     {
         $data = [
@@ -2937,9 +2848,7 @@ final class StoreTicketRequest extends FormRequest
         return $data;
     }
 
-    /**
-     * @return list<UploadedFile>
-     */
+    /** @return list<UploadedFile> */
     public function attachmentFiles(): array
     {
         $files = $this->file('attachments', []);
@@ -2975,6 +2884,8 @@ final class StoreTicketRequest extends FormRequest
 
 - [ ] **Step 12: create `app/Http/Requests/Tickets/UpdateTicketRequest.php`**
 
+Category follows the "change status / priority / category" row of TD-011, which is the `changePriority` rule.
+
 ```php
 <?php
 
@@ -2999,12 +2910,9 @@ final class UpdateTicketRequest extends FormRequest
         return $view->denied() ? $view : $gate->inspect('update', $this->ticket());
     }
 
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function rules(): array
     {
-        // Category follows the "change status / priority / category" row of TD-011, which is the changePriority rule.
         $canChangeCategory = Gate::forUser($this->user())->allows('changePriority', $this->ticket());
 
         return [
@@ -3030,6 +2938,8 @@ final class UpdateTicketRequest extends FormRequest
 ```
 
 - [ ] **Step 13: create `app/Http/Requests/Tickets/ChangeTicketStatusRequest.php`**
+
+An unparsable status is checked without a target in `authorize()` and rejected by `rules()` with a 422.
 
 ```php
 <?php
@@ -3057,15 +2967,12 @@ final class ChangeTicketStatusRequest extends FormRequest
             return $view;
         }
 
-        // An unparsable status is checked without a target here and rejected by rules() with a 422.
         $to = TicketStatus::tryFrom((string) $this->input('status'));
 
         return $gate->inspect('changeStatus', [$this->ticket(), $to]);
     }
 
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function rules(): array
     {
         return [
@@ -3118,9 +3025,7 @@ final class ChangeTicketPriorityRequest extends FormRequest
         return $view->denied() ? $view : $gate->inspect('changePriority', $this->ticket());
     }
 
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function rules(): array
     {
         return [
@@ -3380,6 +3285,8 @@ Expected: FAIL, `Expected response status code [200] but received 404` on the fi
 
 - [ ] **Step 19: create `app/Http/Controllers/Web/TicketController.php`**
 
+The reply items have the `ReplyItem` shape (`resources/js/types/tickets.ts`), and T07's `TicketReplyResource` emits the same shape for the API.
+
 ```php
 <?php
 
@@ -3487,11 +3394,7 @@ final class TicketController extends Controller
         return back()->with('success', "Priority changed to {$ticket->priority->label()}.");
     }
 
-    /**
-     * The ReplyItem shape (resources/js/types/tickets.ts). T07's TicketReplyResource emits the same shape for the API.
-     *
-     * @return list<array<string, mixed>>
-     */
+    /** @return list<array<string, mixed>> */
     private function replyItems(Ticket $ticket, Request $request): array
     {
         return $ticket->replies
@@ -3690,6 +3593,8 @@ export type TicketFormOptions = {
 
 - [ ] **Step 25: create `resources/js/config/navigation/tickets.ts`**
 
+Every authenticated role has a ticket list (customers see their own).
+
 ```ts
 import type { NavItem } from '@/config/navigation';
 import { Ticket } from '@lucide/vue';
@@ -3700,7 +3605,6 @@ const items: NavItem[] = [
         href: '/tickets',
         icon: Ticket,
         order: 20,
-        // Every authenticated role has a ticket list (customers see their own).
         visible: () => true,
     },
 ];
@@ -3834,6 +3738,8 @@ const formatTime = (iso: string | null): string => (iso ? new Date(iso).toLocale
 
 - [ ] **Step 30: create `resources/js/components/tickets/TicketEditForm.vue`**
 
+Category changes follow the change-priority rule; the server rejects them otherwise.
+
 ```vue
 <script setup lang="ts">
 import InputError from '@/components/InputError.vue';
@@ -3856,7 +3762,6 @@ const form = useForm({
 
 const submit = (): void => {
     form.transform((data) =>
-        // Category changes follow the change-priority rule; the server rejects them otherwise.
         props.can.changePriority ? data : { subject: data.subject, description: data.description },
     ).patch(`/tickets/${props.ticket.number}`, { preserveScroll: true });
 };
@@ -4052,6 +3957,8 @@ defineProps<{ scope: 'active' | 'resolved'; filters: Record<string, unknown> }>(
 
 - [ ] **Step 36: create `resources/js/pages/tickets/Index.vue`**
 
+`app.ts` already wraps every page in `AppLayout` (the kit's default layout), so the layout object here becomes its props.
+
 ```vue
 <script setup lang="ts">
 import PriorityBadge from '@/components/tickets/PriorityBadge.vue';
@@ -4063,7 +3970,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import type { Paginated, TicketListItem } from '@/types/tickets';
 import { Head, Link } from '@inertiajs/vue3';
 
-// app.ts already wraps every page in AppLayout (the kit's default layout); this object becomes its props.
 defineOptions({
     layout: {
         breadcrumbs: [{ title: 'Tickets', href: '/tickets' }],
@@ -4277,6 +4183,8 @@ const submit = (): void => {
 
 - [ ] **Step 38: create `resources/js/pages/tickets/Show.vue`**
 
+The breadcrumb depends on a prop and `defineOptions()` is hoisted out of `setup`, so the layout is set in a way that can read that prop.
+
 ```vue
 <script setup lang="ts">
 import ActivityTimeline from '@/components/tickets/ActivityTimeline.vue';
@@ -4304,7 +4212,6 @@ const props = defineProps<{
     options: TicketFormOptions;
 }>();
 
-// The breadcrumb depends on a prop, and defineOptions() is hoisted out of setup, so it is set here.
 watchEffect(() => {
     const breadcrumbs: BreadcrumbItem[] = [
         { title: 'Tickets', href: '/tickets' },
@@ -4707,6 +4614,8 @@ The matrix uses T04's helper: `$matrix->actingAsRole(Role)` creates and authenti
 
 - [ ] **Step 1: write the matrix test** `tests/Feature/Authorization/TicketRoutesAuthorizationTest.php`
 
+Ownership: 'own' means the customer owns the ticket or the agent is assigned; 'other' means neither. Expected statuses are for an empty payload; see the 5.6 introduction for why 302/422 mean "allowed". Row columns are role, ownership, method, uri, web status, api status.
+
 ```php
 <?php
 
@@ -4718,13 +4627,8 @@ use App\Models\Ticket;
 use App\Models\User;
 use Tests\Support\AuthorizationMatrix;
 
-/**
- * Ownership: 'own' = the customer owns it / the agent is assigned; 'other' = neither.
- * Expected statuses with an empty payload; see the 5.6 introduction for why 302/422 mean "allowed".
- */
 dataset('ticket route matrix', function (): array {
     $rows = [
-        // role, ownership, method, uri, web status, api status
         ['customer', 'own', 'GET', '', 200, 200],
         ['customer', 'own', 'PATCH', '', 302, 200],
         ['customer', 'own', 'PATCH', '/status', 403, 403],
@@ -4838,6 +4742,8 @@ git commit -m "test(auth): cover ticket routes in authorization matrix" --traile
 
 - [ ] **Step 5: write the query-count test** `tests/Feature/Performance/TicketQueryCountTest.php`
 
+Every new ticket gets its own category, customer and agent, which is what an N+1 would multiply.
+
 ```php
 <?php
 
@@ -4888,7 +4794,6 @@ it('renders the web ticket index with a constant number of queries', function ()
 
     $small = ticketQueryCount(fn () => $this->get('/tickets')->assertOk());
 
-    // Every new ticket gets its own category, customer and agent, which is what an N+1 would multiply.
     Ticket::factory()->status(TicketStatus::Open)->count(15)->sequence(fn () => ['assigned_agent_id' => User::factory()->agent()->create()->id])->create();
     $large = ticketQueryCount(fn () => $this->get('/tickets')->assertOk());
 

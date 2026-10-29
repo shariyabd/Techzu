@@ -48,7 +48,12 @@ Laravel 13 · PHP 8.3 · MySQL 8 · Inertia 3 + Vue 3 (`<script setup lang="ts">
   - FormRequests use `<Verb><Noun>Request`.
 - Domain errors: throw subclasses of `App\Exceptions\Domain\DomainException`, each with a stable `code` (TD-110). No `abort()` inside Actions or Services.
 - Use `CarbonImmutable` for all time math. Store UTC, and compute in the business timezone.
-- Comments explain *why*, never *what*. No commented-out code. No TODOs without a task reference.
+- **No comments in code (strict).** This applies to every file we write or rewrite: PHP, TypeScript/JavaScript, Vue, CSS, Blade, SQL, and config files (`.env.example`, `*.neon`, `*.yml`, `vite.config.ts`, `config/*.php`).
+  - Banned: `//`, `#`, `/* … */`, `<!-- … -->`, prose in docblocks, commented-out code, TODOs.
+  - **Only exception:** PHPDoc *type tags* that Larastan level 6 needs, with no prose: `@var`, `@param`, `@return`, `@property`, `@property-read`, `@method`, `@mixin`, `@use`, `@template`, `@extends`, `@implements`, `@throws`. For example `/** @return array<string, string> */`.
+  - Explanations go in the commit body, the feature doc (`docs/features/`) or TECHNICAL_DECISIONS.md, never in the code. Names should make the intent clear.
+  - **Plan code blocks are transcribed without their comments.** Where a plan snippet still contains one, drop it. Kit files we don't edit keep their own comments; any kit file we rewrite loses its prose comments.
+  - Shell commands that an agent runs, and Markdown docs, aren't code. `#` comments are fine there.
 - Vue: Composition API with `<script setup lang="ts">`, typed props with `defineProps<...>()`. Pages go in `resources/js/pages/<feature>/`, components in `resources/js/components/<feature>/`. Use the shared types in `resources/js/types/`.
 
 ## File ownership (TD-140)

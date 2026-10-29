@@ -36,15 +36,13 @@
 
 **Produces** (README §3.4, exact)
 ```php
-// app/Services/Tickets/TicketNumberGenerator.php
 final class TicketNumberGenerator
 {
     public function __construct(ConnectionInterface $connection, \Illuminate\Config\Repository $config);
-    public function next(CarbonImmutable $at): string; // opens its own (nested) transaction
+    public function next(CarbonImmutable $at): string;
 }
 ```
 ```php
-// config/tickets.php
 return ['number_prefix' => env('TICKET_NUMBER_PREFIX', 'TKT')];
 ```
 The constructor is autowired (`ConnectionInterface` resolves to the default connection through the `db.connection` alias). Callers use `app(TicketNumberGenerator::class)` or constructor injection; tests may construct it with a second connection.
@@ -88,7 +86,6 @@ use App\Services\Tickets\TicketNumberGenerator;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
-// T02 owns config/business_hours.php; setting the key here keeps this suite independent of it.
 beforeEach(function (): void {
     config(['business_hours.timezone' => 'Asia/Dhaka']);
 });
@@ -181,7 +178,6 @@ it('rolls the counter back together with the surrounding transaction', function 
             throw new RuntimeException('ticket insert failed');
         });
     } catch (RuntimeException) {
-        // The caller's failure is the point of this test.
     }
 
     expect(sequenceValue(2026))->toBeNull()
@@ -204,19 +200,21 @@ Expected: **FAIL**. Every test fails with `Target class [App\Services\Tickets\Ti
 
 - [ ] **Step 3: Create `config/tickets.php`**
 
+A change of the prefix applies to new tickets only; existing numbers are stored, never recomputed.
+
 ```php
 <?php
 
 declare(strict_types=1);
 
 return [
-    // Prefix of the public ticket number (TKT-2026-000001). A change applies to new tickets only;
-    // existing numbers are stored, never recomputed.
     'number_prefix' => env('TICKET_NUMBER_PREFIX', 'TKT'),
 ];
 ```
 
 - [ ] **Step 4: Create `app/Services/Tickets/TicketNumberGenerator.php`**
+
+The typed config getters throw on a missing key on purpose: a silent UTC fallback would number tickets created on Dhaka's New Year's morning with the previous year. `%06d` is a minimum width, so number 1,000,000 renders as seven digits instead of wrapping.
 
 ```php
 <?php
@@ -238,17 +236,12 @@ final class TicketNumberGenerator
 
     public function next(CarbonImmutable $at): string
     {
-        // Typed getters throw on a missing key: a silent UTC fallback would number
-        // tickets created on Dhaka's New Year's morning with the previous year.
         $year = $at->setTimezone($this->config->string('business_hours.timezone'))->year;
         $prefix = $this->config->string('tickets.number_prefix');
 
         $number = $this->connection->transaction(function () use ($year): int {
             $now = CarbonImmutable::now();
 
-            // The upsert takes the row's exclusive lock immediately. INSERT IGNORE would take a
-            // shared lock on the existing row first, and two requests upgrading it to FOR UPDATE
-            // deadlock each other (see the T03 plan).
             $this->connection->affectingStatement(
                 'insert into `ticket_sequences` (`year`, `last_number`, `created_at`, `updated_at`) '
                 .'values (?, 1, ?, ?) '
@@ -256,15 +249,12 @@ final class TicketNumberGenerator
                 [$year, $now, $now, $now],
             );
 
-            // A locking read returns the row as this transaction just wrote it, never an older
-            // REPEATABLE READ snapshot; the lock is already ours, so it doesn't wait.
             return (int) $this->connection->table('ticket_sequences')
                 ->where('year', $year)
                 ->lockForUpdate()
                 ->value('last_number');
         });
 
-        // %06d is a minimum width: number 1,000,000 renders as seven digits instead of wrapping.
         return sprintf('%s-%d-%06d', $prefix, $year, $number);
     }
 }
@@ -308,6 +298,8 @@ The file lives in `tests/Concurrency`, which uses `DatabaseTruncation` instead o
 
 - [ ] **Step 1: Write the concurrency test** `tests/Concurrency/TicketNumberConcurrencyTest.php`
 
+The test cleans up connection A's lock even when an expectation fails, so it can't leak into the next test's truncation. Connection B waits only one second, which keeps the suite fast while still proving that A's lock blocked it.
+
 ```php
 <?php
 
@@ -322,7 +314,6 @@ beforeEach(function (): void {
     config(['business_hours.timezone' => 'Asia/Dhaka', 'tickets.number_prefix' => 'TKT']);
 });
 
-// A failed expectation must not leave connection A's lock behind for the next test's truncation.
 afterEach(function (): void {
     while (DB::transactionLevel() > 0) {
         DB::rollBack();
@@ -351,7 +342,6 @@ function seedSequence(?int $lastNumber): int
 function generatorOnSecondConnection(): TicketNumberGenerator
 {
     $connection = concurrentConnection();
-    // One second keeps the suite fast; any wait at all proves B was blocked by A's lock.
     $connection->statement('SET SESSION innodb_lock_wait_timeout = 1');
 
     return new TicketNumberGenerator($connection, app('config'));

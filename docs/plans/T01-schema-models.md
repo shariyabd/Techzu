@@ -86,8 +86,9 @@
 
 **Produces**: exactly README §3.1, §3.2 (subclasses), §3.3 and §3.12 (T01 rows):
 
+The enums live in `app/Enums` (full implementations below) and the exceptions in `app/Exceptions/Domain`. HTTP statuses: `InvalidStatusTransition` 422, `TicketAlreadyClaimed` 409, and `AgentNotEligible`, `TicketClosed` and `ImportHeaderInvalid` 422.
+
 ```php
-// §3.1 app/Enums — full implementations below
 enum Role: string                { Admin, Agent, Customer; label() }
 enum Permission: string          { 17 cases; static forRole(Role): list<self> }
 enum TicketStatus: string        { label(), allowedTransitions(), canTransitionTo(), isActive(), static active(), static finished() }
@@ -98,12 +99,11 @@ enum AssignmentMethod: string    { Manual, Claimed, Automatic }
 enum ActivityType: string        { 15 cases; describe(array $properties): string; isStaffOnly(): bool }
 enum ImportStatus: string        { Pending, Processing, Completed, CompletedWithErrors, Failed }
 
-// §3.2 app/Exceptions/Domain
-final class InvalidStatusTransition extends DomainException { static between(TicketStatus $from, TicketStatus $to): self }  // 422
-final class TicketAlreadyClaimed extends DomainException    { static for(string $ticketNumber): self }                        // 409
-final class AgentNotEligible extends DomainException        { __construct(string $message = default) }                        // 422
-final class TicketClosed extends DomainException            { __construct(string $message = default) }                        // 422
-final class ImportHeaderInvalid extends DomainException     { __construct(string $message = default) }                        // 422
+final class InvalidStatusTransition extends DomainException { static between(TicketStatus $from, TicketStatus $to): self }
+final class TicketAlreadyClaimed extends DomainException    { static for(string $ticketNumber): self }
+final class AgentNotEligible extends DomainException        { __construct(string $message = default) }
+final class TicketClosed extends DomainException            { __construct(string $message = default) }
+final class ImportHeaderInvalid extends DomainException     { __construct(string $message = default) }
 ```
 
 - **Models** (§3.3): `User`, `Category`, `Ticket`, `TicketReply`, `Attachment`, `Holiday`, `TicketImport`, `TicketImportError`. Each has exactly the relations, scopes, helpers, `$fillable` and casts listed in §3.3. One addition: `Ticket::activitiesVisibleTo(User $user): MorphMany` (spec §15, TD-026; see Contract notes).
@@ -166,6 +166,8 @@ Unit tests in `tests/Unit` use plain PHPUnit through Pest. They never boot Larav
 
 - [ ] **Step 1: Write `tests/Unit/Enums/TicketStatusTest.php`**
 
+The TD-040 table is written independently of the enum so the test catches an edit to either one.
+
 ```php
 <?php
 
@@ -173,7 +175,6 @@ declare(strict_types=1);
 
 use App\Enums\TicketStatus;
 
-// The TD-040 table, written independently of the enum so the test catches an edit to either one.
 dataset('every status pair', function (): iterable {
     $allowed = [
         TicketStatus::Open->value => [TicketStatus::InProgress, TicketStatus::WaitingForCustomer, TicketStatus::Resolved],
@@ -440,6 +441,8 @@ enum Role: string
 
 - [ ] **Step 8: Create `app/Enums/Permission.php`**
 
+The seeded baseline is from TD-011. Admins hold the unscoped ("any") capabilities instead of the own/assigned/hand-off variants, because the unscoped ones already cover them in every Policy.
+
 ```php
 <?php
 
@@ -467,12 +470,7 @@ enum Permission: string
     case CategoriesManage = 'categories.manage';
     case HolidaysManage = 'holidays.manage';
 
-    /**
-     * The seeded baseline from TD-011. Admins hold the unscoped ("any") capabilities instead of the
-     * own/assigned/hand-off variants, because the unscoped ones already cover them in every Policy.
-     *
-     * @return list<self>
-     */
+    /** @return list<self> */
     public static function forRole(Role $role): array
     {
         return match ($role) {
@@ -515,6 +513,8 @@ enum Permission: string
 
 - [ ] **Step 9: Create `app/Enums/TicketStatus.php`**
 
+`allowedTransitions()` is the single source of truth for the state machine (TD-040), and `ChangeTicketStatus` rejects anything else.
+
 ```php
 <?php
 
@@ -541,11 +541,7 @@ enum TicketStatus: string
         };
     }
 
-    /**
-     * Single source of truth for the state machine (TD-040); ChangeTicketStatus rejects anything else.
-     *
-     * @return list<self>
-     */
+    /** @return list<self> */
     public function allowedTransitions(): array
     {
         return match ($this) {
@@ -583,6 +579,8 @@ enum TicketStatus: string
 
 - [ ] **Step 10: Create `app/Enums/TicketPriority.php`**
 
+The column stores strings, so sorting by urgency needs the explicit `rank()` order.
+
 ```php
 <?php
 
@@ -607,7 +605,6 @@ enum TicketPriority: string
         };
     }
 
-    // The column stores strings, so sorting by urgency needs an explicit order.
     public function rank(): int
     {
         return match ($this) {
@@ -652,6 +649,8 @@ enum SlaState: string
 
 - [ ] **Step 12: Create `app/Enums/EscalationLevel.php`**
 
+The enum is int-backed so the scan's conditional UPDATE can compare levels with `<` (TD-044).
+
 ```php
 <?php
 
@@ -659,7 +658,6 @@ declare(strict_types=1);
 
 namespace App\Enums;
 
-// Int-backed so the scan's conditional UPDATE can compare levels with < (TD-044).
 enum EscalationLevel: int
 {
     case None = 0;
@@ -687,6 +685,8 @@ enum AssignmentMethod: string
 
 - [ ] **Step 14: Create `app/Enums/ActivityType.php`**
 
+`describe()` produces the timeline line for an activity. Missing keys never throw, because history written by an older listener version must still render.
+
 ```php
 <?php
 
@@ -712,12 +712,7 @@ enum ActivityType: string
     case Escalated = 'escalated';
     case Imported = 'imported';
 
-    /**
-     * The timeline line for an activity. Missing keys never throw: history written by an older
-     * listener version must still render.
-     *
-     * @param  array<string, mixed>  $properties
-     */
+    /** @param  array<string, mixed>  $properties */
     public function describe(array $properties): string
     {
         $from = $properties['from'] ?? null;
@@ -834,6 +829,8 @@ final class InvalidStatusTransition extends DomainException
 
 - [ ] **Step 17: Create `app/Exceptions/Domain/TicketAlreadyClaimed.php`**
 
+`TicketAlreadyClaimed` is 409: the request was valid, but another agent won the race (TD-051).
+
 ```php
 <?php
 
@@ -848,7 +845,6 @@ final class TicketAlreadyClaimed extends DomainException
         return new self(sprintf('Ticket %s has already been claimed by another agent.', $ticketNumber));
     }
 
-    // 409: the request was valid, but another agent won the race (TD-051).
     public function status(): int
     {
         return 409;
@@ -1115,6 +1111,8 @@ Expected: each of the three files reports `2`.
 
 - [ ] **Step 5: Create `database/migrations/2026_10_30_000110_add_subject_created_at_index_to_activity_log_table.php`**
 
+This index serves the ticket timeline query `where subject = ticket order by created_at desc` (TD-026).
+
 ```php
 <?php
 
@@ -1126,7 +1124,6 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    // Serves the ticket timeline query: where subject = ticket order by created_at desc (TD-026).
     public function up(): void
     {
         Schema::connection(config('activitylog.database_connection'))
@@ -1211,6 +1208,8 @@ return new class extends Migration
 
 - [ ] **Step 8: Create `database/migrations/2026_10_30_000310_create_agent_category_table.php`**
 
+The index for auto-assignment looks up agents by category, the reverse of the primary key's order.
+
 ```php
 <?php
 
@@ -1229,7 +1228,6 @@ return new class extends Migration
             $table->foreignId('category_id')->constrained('categories')->cascadeOnDelete();
 
             $table->primary(['user_id', 'category_id']);
-            // Auto-assignment looks up agents by category, the reverse of the primary key's order.
             $table->index(['category_id', 'user_id']);
         });
     }
@@ -1242,6 +1240,8 @@ return new class extends Migration
 ```
 
 - [ ] **Step 9: Create `database/migrations/2026_10_30_000400_create_tickets_table.php`**
+
+Each index puts the equality column first and the range column second (TD-021), and serves one named query.
 
 ```php
 <?php
@@ -1279,7 +1279,6 @@ return new class extends Migration
             $table->timestamp('closed_at')->nullable();
             $table->timestamps();
 
-            // Equality column first, range column second (TD-021); each index names the query it serves.
             $table->index(['status', 'sla_due_at']);
             $table->index(['status', 'sla_warning_at']);
             $table->index(['assigned_agent_id', 'status']);
@@ -1300,6 +1299,8 @@ return new class extends Migration
 
 - [ ] **Step 10: Create `database/migrations/2026_10_30_000410_create_ticket_sequences_table.php`**
 
+There is one row per year, and the row lock serializes number allocation (TD-022).
+
 ```php
 <?php
 
@@ -1311,7 +1312,6 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    // One row per year; the row lock serializes number allocation (TD-022).
     public function up(): void
     {
         Schema::create('ticket_sequences', function (Blueprint $table): void {
@@ -1329,6 +1329,8 @@ return new class extends Migration
 ```
 
 - [ ] **Step 11: Create `database/migrations/2026_10_30_000500_create_ticket_replies_table.php`**
+
+The index serves the conversation timeline, with internal notes filtered out for customers (TD-060).
 
 ```php
 <?php
@@ -1351,7 +1353,6 @@ return new class extends Migration
             $table->boolean('is_internal')->default(false);
             $table->timestamps();
 
-            // The conversation timeline, with internal notes filtered out for customers (TD-060).
             $table->index(['ticket_id', 'is_internal', 'created_at']);
         });
     }
@@ -1364,6 +1365,8 @@ return new class extends Migration
 ```
 
 - [ ] **Step 12: Create `database/migrations/2026_10_30_000510_create_attachments_table.php`**
+
+`ticket_id` is denormalized for reply attachments so authorization is a single check (TD-024).
 
 ```php
 <?php
@@ -1380,7 +1383,6 @@ return new class extends Migration
     {
         Schema::create('attachments', function (Blueprint $table): void {
             $table->id();
-            // ticket_id is denormalized for reply attachments so authorization is a single check (TD-024).
             $table->foreignId('ticket_id')->constrained('tickets')->cascadeOnDelete();
             $table->foreignId('reply_id')->nullable()->constrained('ticket_replies')->cascadeOnDelete();
             $table->foreignId('uploaded_by')->constrained('users')->restrictOnDelete();
@@ -1478,6 +1480,8 @@ return new class extends Migration
 
 - [ ] **Step 15: Create `database/migrations/2026_10_30_000710_create_ticket_import_errors_table.php`**
 
+`ROW_NUMBER` is reserved in MySQL 8: the schema and query builders quote it, and raw SQL must too.
+
 ```php
 <?php
 
@@ -1494,7 +1498,6 @@ return new class extends Migration
         Schema::create('ticket_import_errors', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('ticket_import_id')->constrained('ticket_imports')->cascadeOnDelete();
-            // ROW_NUMBER is reserved in MySQL 8; the schema and query builders quote it, raw SQL must too.
             $table->unsignedInteger('row_number');
             $table->json('errors');
             $table->json('raw');
@@ -1512,6 +1515,8 @@ return new class extends Migration
 ```
 
 - [ ] **Step 16: Create `database/migrations/2026_10_30_000800_create_notifications_table.php`** (the framework table, with `read_at` in the morph index for the unread count, TD-021)
+
+The leading columns also serve the plain "notifications of user X" lookup.
 
 ```php
 <?php
@@ -1535,7 +1540,6 @@ return new class extends Migration
             $table->timestamp('read_at')->nullable();
             $table->timestamps();
 
-            // Leading columns also serve the plain "notifications of user X" lookup.
             $table->index(['notifiable_type', 'notifiable_id', 'read_at']);
         });
     }
@@ -1663,6 +1667,8 @@ Expected: **FAIL** with `Target class [Database\Seeders\RolesAndPermissionsSeede
 
 - [ ] **Step 3: Create `database/seeders/RolesAndPermissionsSeeder.php`**
 
+The seeder is the single place that maps roles to permissions (TD-010). It runs on every deploy and before every test, so it syncs to the baseline instead of only adding, which resets drift from runtime edits.
+
 ```php
 <?php
 
@@ -1677,10 +1683,6 @@ use Spatie\Permission\Models\Permission as PermissionModel;
 use Spatie\Permission\Models\Role as RoleModel;
 use Spatie\Permission\PermissionRegistrar;
 
-/**
- * The single place that maps roles to permissions (TD-010). It runs on every deploy and before
- * every test, so it syncs to the baseline instead of only adding: drift from runtime edits is reset.
- */
 final class RolesAndPermissionsSeeder extends Seeder
 {
     public function run(PermissionRegistrar $registrar): void
@@ -1715,6 +1717,8 @@ Expected: **PASS** (4 tests).
 
 - [ ] **Step 5: Replace `tests/Pest.php`** (README §3.3 test bootstrap, plus the TD-032 concurrency suite and helper)
 
+Feature tests run inside a rolled-back transaction and start from the seeded role/permission baseline, because Policies check permissions and factories assign roles (TD-010). Concurrency tests need data committed on one connection to be visible to another, which a wrapping transaction would hide, so they truncate instead (TD-032). `DatabaseTruncation` only truncates before a test, so an `afterEach` truncate stops the last concurrency test's committed rows from leaking into the `RefreshDatabase` tests that run next in the same process. `tests/Unit` stays on plain PHPUnit with no application and no database (CLAUDE.md, Testing). `concurrentConnection()` opens a second MySQL session on the same database as the default connection; the config is cloned at call time, so under `--parallel` it points at this process's database (`techzu_testing_test_N`).
+
 ```php
 <?php
 
@@ -1728,10 +1732,6 @@ use Illuminate\Support\Facades\DB;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
 
-/*
- | Feature tests run inside a rolled-back transaction. Every test starts from the seeded role/permission
- | baseline, because Policies check permissions and factories assign roles (TD-010).
- */
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
     ->beforeEach(function (): void {
@@ -1740,10 +1740,6 @@ pest()->extend(TestCase::class)
     })
     ->in('Feature');
 
-/*
- | Concurrency tests need data committed on one connection to be visible to another, which a wrapping
- | transaction would hide, so they truncate instead (TD-032).
- */
 pest()->extend(TestCase::class)
     ->use(DatabaseTruncation::class)
     ->beforeEach(function (): void {
@@ -1751,18 +1747,10 @@ pest()->extend(TestCase::class)
         app(PermissionRegistrar::class)->forgetCachedPermissions();
     })
     ->afterEach(function (): void {
-        // DatabaseTruncation only truncates before a test. Without this, the last concurrency test's
-        // committed rows would leak into the RefreshDatabase tests that run next in the same process.
         $this->truncateTablesForAllConnections();
     })
     ->in('Concurrency');
 
-// tests/Unit stays on plain PHPUnit: no application, no database (CLAUDE.md, Testing).
-
-/**
- * A second MySQL session on the same database as the default connection. The config is cloned at call
- * time, so under --parallel it points at this process's database (techzu_testing_test_N).
- */
 function concurrentConnection(): Connection
 {
     $default = (string) config('database.default');
@@ -1871,6 +1859,8 @@ it('mass-assigns only profile fields', function (): void {
 
 - [ ] **Step 2: Write `tests/Feature/Models/TicketTest.php`**
 
+Factory timestamps are relative to "now", so freezing it makes the SLA dataset exact.
+
 ```php
 <?php
 
@@ -1884,7 +1874,6 @@ use App\Models\Ticket;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 
-// Factory timestamps are relative to "now"; freezing it makes the SLA dataset exact.
 beforeEach(function (): void {
     $this->travelTo(CarbonImmutable::parse('2026-10-29 10:00:00', 'UTC'));
 });
@@ -2053,6 +2042,8 @@ Expected: **FAIL** with `Class "App\Models\Category" not found` / `Class "App\Mo
 
 - [ ] **Step 7: Replace `app/Models/User.php`.** This extends T00's version (0.1 Step 22): the starter kit's `MustVerifyEmail` and `PasskeyUser` contracts, the `PasskeyAuthenticatable`/`TwoFactorAuthenticatable` traits, the `@property` block and the generic `HasApiTokens` tag all stay. The kit's `SecurityController` lists `$user->passkeys()`, and its auth routes use the `verified` middleware. T01 adds `is_available`/`last_assigned_at` to the `@property` block, `$fillable` and the casts, plus the relations and scopes.
 
+Session-authenticated requests carry a `TransientToken` and API requests a `PersonalAccessToken`, hence the `@use` union. The role helpers are used for data scoping (visibility, eager filters), and authorization decisions still go through Policies.
+
 ```php
 <?php
 
@@ -2096,7 +2087,6 @@ use Spatie\Permission\Traits\HasRoles;
  */
 class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
 {
-    // Session-authenticated requests carry a TransientToken, API requests a PersonalAccessToken.
     /** @use HasApiTokens<PersonalAccessToken|TransientToken> */
     use HasApiTokens;
 
@@ -2154,7 +2144,6 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
         return $this->hasMany(Ticket::class, 'customer_id');
     }
 
-    // Used for data scoping (visibility, eager filters); authorization decisions still go through Policies.
     public function isStaff(): bool
     {
         return $this->hasAnyRole([Role::Admin->value, Role::Agent->value]);
@@ -2243,6 +2232,8 @@ class Category extends Model
 
 - [ ] **Step 9: Create `app/Models/Ticket.php`**
 
+`number`, `status`, `assigned_agent_id`, `sla_*` and `escalation_level` are deliberately absent from `$fillable`: only Actions and `SlaCalculator` set them (TD-120). Public URLs use the human ticket number, never the internal id (TD-012). `activitiesVisibleTo()` returns the timeline as the given user may see it, so customers never receive staff-only entries (TD-026). The SLA state accessor mirrors `SlaQuery`'s SQL predicates (TD-023) so the badge and the filters always agree.
+
 ```php
 <?php
 
@@ -2270,12 +2261,7 @@ class Ticket extends Model
     /** @use HasFactory<TicketFactory> */
     use HasFactory;
 
-    /**
-     * number, status, assigned_agent_id, sla_* and escalation_level are deliberately absent:
-     * only Actions and SlaCalculator set them (TD-120).
-     *
-     * @var list<string>
-     */
+    /** @var list<string> */
     protected $fillable = [
         'subject',
         'description',
@@ -2311,7 +2297,6 @@ class Ticket extends Model
         ];
     }
 
-    // Public URLs use the human ticket number, never the internal id (TD-012).
     public function getRouteKeyName(): string
     {
         return 'number';
@@ -2359,11 +2344,7 @@ class Ticket extends Model
         return $this->morphMany(Activity::class, 'subject');
     }
 
-    /**
-     * The ticket timeline as the given user may see it: customers never receive staff-only entries (TD-026).
-     *
-     * @return MorphMany<Activity, $this>
-     */
+    /** @return MorphMany<Activity, $this> */
     public function activitiesVisibleTo(User $user): MorphMany
     {
         $activities = $this->activities()->where('log_name', 'ticket');
@@ -2396,7 +2377,6 @@ class Ticket extends Model
         return $this->sla_paused_at !== null;
     }
 
-    // Mirrors SlaQuery's SQL predicates (TD-023) so the badge and the filters always agree.
     public function slaState(?CarbonImmutable $now = null): SlaState
     {
         $now ??= CarbonImmutable::now();
@@ -2423,6 +2403,8 @@ class Ticket extends Model
 ```
 
 - [ ] **Step 10: Create `app/Models/TicketReply.php`**
+
+The customer-visible scope is the first of the three internal-note leakage layers (TD-120): customers never query internal rows.
 
 ```php
 <?php
@@ -2482,7 +2464,6 @@ class TicketReply extends Model
         return $this->hasMany(Attachment::class, 'reply_id');
     }
 
-    // First of the three internal-note leakage layers (TD-120): customers never query internal rows.
     /** @param Builder<TicketReply> $query */
     public function scopeVisibleTo(Builder $query, User $user): void
     {
@@ -2494,6 +2475,8 @@ class TicketReply extends Model
 ```
 
 - [ ] **Step 11: Create `app/Models/Attachment.php`**
+
+Attachments are immutable once stored, and every column is set by `AttachmentStorer` from the validated upload, never from request input.
 
 ```php
 <?php
@@ -2512,14 +2495,9 @@ class Attachment extends Model
     /** @use HasFactory<AttachmentFactory> */
     use HasFactory;
 
-    // Attachments are immutable once stored.
     public const UPDATED_AT = null;
 
-    /**
-     * Every column is set by AttachmentStorer from the validated upload, never from request input.
-     *
-     * @var list<string>
-     */
+    /** @var list<string> */
     protected $fillable = [];
 
     /** @return array<string, string> */
@@ -2588,6 +2566,8 @@ class Holiday extends Model
 
 - [ ] **Step 13: Create `app/Models/TicketImport.php`**
 
+The importing admin is associated by `StartTicketImport`, never mass-assigned.
+
 ```php
 <?php
 
@@ -2602,11 +2582,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class TicketImport extends Model
 {
-    /**
-     * The importing admin is associated by StartTicketImport, never mass-assigned.
-     *
-     * @var list<string>
-     */
+    /** @var list<string> */
     protected $fillable = [
         'original_name',
         'path',
@@ -2653,6 +2629,8 @@ class TicketImport extends Model
 
 - [ ] **Step 14: Create `app/Models/TicketImportError.php`**
 
+Error rows are written once by the import chunk and never edited.
+
 ```php
 <?php
 
@@ -2665,7 +2643,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class TicketImportError extends Model
 {
-    // Error rows are written once by the import chunk and never edited.
     public const UPDATED_AT = null;
 
     /** @var list<string> */
@@ -2696,6 +2673,8 @@ class TicketImportError extends Model
 
 - [ ] **Step 15: Replace `database/factories/UserFactory.php`.** As in the starter kit, two-factor columns default to null (so seeded demo users can log in) and `withTwoFactor()` turns them on; the kit's `AuthenticationTest` and `TwoFactorChallengeTest` call it.
 
+Role states assign the spatie role after creation, so `RolesAndPermissionsSeeder` must have run (`tests/Pest.php` does this before every Feature test).
+
 ```php
 <?php
 
@@ -2709,12 +2688,7 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
-/**
- * Role states assign the spatie role after creation, so RolesAndPermissionsSeeder must have run
- * (tests/Pest.php does this before every Feature test).
- *
- * @extends Factory<User>
- */
+/** @extends Factory<User> */
 class UserFactory extends Factory
 {
     protected static ?string $password;
@@ -2812,6 +2786,8 @@ class CategoryFactory extends Factory
 
 - [ ] **Step 17: Create `database/factories/TicketFactory.php`**
 
+SLA columns are fixtures relative to "now", not business-hours math; tests that need real deadlines go through `SlaCalculator` (T02). Numbers use the 900000+ range so they never collide with numbers `TicketNumberGenerator` issues in the same test.
+
 ```php
 <?php
 
@@ -2828,13 +2804,7 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
-/**
- * SLA columns are fixtures relative to "now", not business-hours math; tests that need real deadlines
- * go through SlaCalculator (T02). Numbers use the 900000+ range so they never collide with numbers
- * TicketNumberGenerator issues in the same test.
- *
- * @extends Factory<Ticket>
- */
+/** @extends Factory<Ticket> */
 class TicketFactory extends Factory
 {
     /** @return array<string, mixed> */
@@ -2932,6 +2902,8 @@ class TicketFactory extends Factory
 
 - [ ] **Step 18: Create `database/factories/TicketReplyFactory.php`**
 
+A public reply defaults to the ticket's own customer, the realistic author.
+
 ```php
 <?php
 
@@ -2952,7 +2924,6 @@ class TicketReplyFactory extends Factory
     {
         return [
             'ticket_id' => Ticket::factory(),
-            // A public reply defaults to the ticket's own customer, the realistic author.
             'author_id' => fn (array $attributes): int => Ticket::query()->findOrFail($attributes['ticket_id'])->customer_id,
             'body' => fake()->paragraph(),
             'is_internal' => false,
@@ -3216,6 +3187,8 @@ Expected: **FAIL** with `Target class [Database\Seeders\DemoSeeder] does not exi
 
 - [ ] **Step 3: Create `database/seeders/DemoSeeder.php`**
 
+Re-running on a seeded database must not duplicate the demo accounts or tickets. Agent 4 is unavailable on purpose, so the demo shows availability filtering in auto-assignment. `config/tickets.php` arrives with T03, and the fallback mirrors its default so this seeder runs in T01. Numbering continues after the demo tickets instead of colliding with them (TD-022).
+
 ```php
 <?php
 
@@ -3247,7 +3220,6 @@ final class DemoSeeder extends Seeder
 
     public function run(): void
     {
-        // Re-running on a seeded database must not duplicate the demo accounts or tickets.
         if (User::query()->where('email', 'admin@example.com')->exists()) {
             return;
         }
@@ -3273,10 +3245,8 @@ final class DemoSeeder extends Seeder
     }
 
     /**
-     * Agent 4 is unavailable on purpose, so the demo shows availability filtering in auto-assignment.
-     *
      * @param  list<Category>  $categories
-     * @return array<int, list<User>> available agents keyed by category id
+     * @return array<int, list<User>>
      */
     private function agents(array $categories): array
     {
@@ -3329,7 +3299,6 @@ final class DemoSeeder extends Seeder
      */
     private function tickets(array $categories, array $agentsByCategory, array $customers): void
     {
-        // config/tickets.php arrives with T03; the fallback mirrors its default so this seeder runs in T01.
         $prefix = (string) config('tickets.number_prefix', 'TKT');
         $now = CarbonImmutable::now();
         $priorities = TicketPriority::cases();
@@ -3364,7 +3333,6 @@ final class DemoSeeder extends Seeder
             $factory->create();
         }
 
-        // Continue numbering after the demo tickets instead of colliding with them (TD-022).
         DB::table('ticket_sequences')->updateOrInsert(
             ['year' => $now->year],
             ['last_number' => self::TICKETS, 'created_at' => $now, 'updated_at' => $now],
