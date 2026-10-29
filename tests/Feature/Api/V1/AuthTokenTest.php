@@ -46,7 +46,6 @@ it('refuses a token without creating one', function (Closure $payload): void {
 })->with([
     'unknown email' => [fn (): array => ['email' => 'nobody@example.com', 'password' => 'password']],
     'wrong password' => [fn (): array => ['email' => User::factory()->create()->email, 'password' => 'not-the-password']],
-    'unverified email' => [fn (): array => ['email' => User::factory()->unverified()->create()->email, 'password' => 'password']],
 ]);
 
 it('throttles token issuance to five attempts per minute', function (): void {

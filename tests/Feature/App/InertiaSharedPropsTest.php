@@ -20,7 +20,6 @@ it('shares only whitelisted user fields, role names, placeholder abilities, flas
                 ->where('id', $user->id)
                 ->where('name', $user->name)
                 ->where('email', $user->email)
-                ->where('email_verified_at', $user->email_verified_at?->toIso8601String())
                 ->where('roles', ['example-role']))
             ->where('auth.can', [
                 'viewDashboard' => false,

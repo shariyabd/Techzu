@@ -33,6 +33,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->encryptCookies(except: ['sidebar_state']);
+        $middleware->redirectUsersTo(fn (): string => route('home'));
 
         $middleware->web(append: [
             HandleInertiaRequests::class,

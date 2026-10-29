@@ -25,10 +25,6 @@ final class IssueApiToken
                 throw ValidationException::withMessages(['email' => __('auth.failed')]);
             }
 
-            if (! $user->hasVerifiedEmail()) {
-                throw ValidationException::withMessages(['email' => __('Verify your email address before requesting an API token.')]);
-            }
-
             $abilities = $user->getAllPermissions()->pluck('name')->values()->all();
 
             $token = $user->createToken($deviceName, $abilities);

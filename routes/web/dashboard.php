@@ -7,5 +7,5 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 Route::get('dashboard', fn (): Response => Inertia::render('Dashboard'))
-    ->middleware(['auth', 'verified'])
+    ->middleware(['auth'])
     ->name('dashboard');
