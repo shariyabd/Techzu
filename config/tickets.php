@@ -9,4 +9,6 @@ return [
         'default' => (int) env('TICKETS_PER_PAGE', 20),
         'max' => 100,
     ],
+
+    'auto_assign' => (bool) env('TICKETS_AUTO_ASSIGN', true),
 ];
