@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "deny": [
+      "mcp__claude-in-chrome",
+      "mcp__claude-in-chrome__*",
+      "mcp__Claude_Browser",
+      "mcp__Claude_Browser__*",
+      "mcp__remote-devices__Claude_Browser__*",
+      "enable__mcp__claude-in-chrome",
+      "enable__mcp__remote-devices__Claude_Browser"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "playwright",
+    "laravel-boost"
+  ]
+}
