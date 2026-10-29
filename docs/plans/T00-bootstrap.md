@@ -586,16 +586,20 @@ git commit -m "build: scaffold Laravel 13 Vue starter kit with the local env pro
 
 ## Subtask 0.2 — Tooling & CI
 
-- [ ] **Step 1: Replace the kit's `pint.json`** (it holds only `{"preset": "laravel"}`; the strict-types rule is added)
+- [ ] **Step 1: Replace the kit's `pint.json`** (it holds only `{"preset": "laravel"}`; the strict-types rule and the `.worktrees` exclusion are added)
 
 ```json
 {
     "preset": "laravel",
+    "exclude": [
+        ".worktrees"
+    ],
     "rules": {
         "declare_strict_types": true
     }
 }
 ```
+`exclude` keeps Pint out of the task worktrees, which live inside the project at `.worktrees/Txx` (README §2). Without it, `pint` in the main checkout would format and check every worktree's PHP too.
 
 - [ ] **Step 2: Apply Pint to the scaffold.** This adds `declare(strict_types=1);` everywhere, per the global constraints.
 
@@ -965,6 +969,8 @@ sed -i "/^            '.github\/\*\*',$/a\\            '.claude/**',\n          
 grep -c "'docs/\*\*'" vite.config.ts && npm run build && npm run check
 ```
 Expected: `1`, then the build, then both `pass:` lines from `vp check`. If the grep prints `0`, the kit's indentation differs. Add the five entries by hand inside `fmt.ignorePatterns`.
+
+Then stop the Vite dev server's file watcher from watching the task worktrees, which live inside the project (README §2). Add `'**/.worktrees/**'` to the kit's existing `server.watch.ignored` list in `vite.config.ts`. Then re-run `npm run build && npm run check`. `vp check`, Tailwind's source scan and `vue-tsc` already skip `.worktrees/`, because it is gitignored or outside their include paths.
 
 - [ ] **Step 13: Commit.** `git add -u` stages the files Pint rewrote (and the `tests.yml` and `tests/Unit/ExampleTest.php` deletions from Steps 11 and 8); the new files are named explicitly. Add `phpstan-baseline.neon` to the second line only if Step 6a ran.
 

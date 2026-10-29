@@ -114,6 +114,7 @@ Implements: TD-031, TD-050
 
 ## Branching (strict)
 - **`main` is the only branch on GitHub.** `task/Txx-slug` branches and their worktrees are local only and never pushed.
+- Worktrees live **inside the project** at `.worktrees/Txx`, which is gitignored and excluded from Pint and the Vite watcher, so the owner can review them in the editor. Never edit the main checkout from a worktree session, and never edit a worktree from the main session.
 - Tasks reach `main` only by `git rebase main` → gate → `git merge --ff-only`. No squash merges and no merge commits. History stays linear, with each task's commits as one unbroken block.
 - **Never rewrite or force-push `main`.** A change after a push is a new commit.
 - Only the human owner merges into `main` and pushes. Agents stop at a reviewed, rebased task branch and report.
