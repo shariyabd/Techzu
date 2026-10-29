@@ -49,7 +49,7 @@
 - **Routes:**
   - `api.v1.auth.tokens.store`, `api.v1.auth.tokens.destroy`, `api.v1.auth.me`
   - `api.v1.tickets.*`, `api.v1.tickets.replies.*`, `api.v1.attachments.download`
-  - `tickets.show`, `profile.update` (starter kit)
+  - `tickets.show`, `login`, `register` (T00a)
 - **Factories:** every factory in §3.3.
 
 ### Produces
@@ -338,11 +338,11 @@ Earlier tasks test their own slice: T04 the matrix, T07 leakage, T10 notificatio
 |---|---|---|
 | Server-side authorization | `server-side authorization` → every non-public route requires auth; every admin or import route carries `can:` | T04 `TicketPolicyTest`; T05–T13 `*AuthorizationTest.php` |
 | Internal-note leakage, 3 layers | `internal-note leakage` → scope, HTTP/Resource and Inertia props, attachment download, notifications | T07, T10 |
-| Mass assignment | `mass assignment` → protected columns not fillable; injected fields ignored by `tickets.store`; profile update can't change role | T05 |
+| Mass assignment | `mass assignment` → protected columns not fillable; injected fields ignored by `tickets.store`; registration can't choose a role | T05 |
 | File uploads | `file uploads` → PHP disguised as PDF rejected | T07 (UUID name on a private disk, download headers) |
 | Rate limiting | `rate limiting` → 6th token request is 429; every API route is in the throttled `api` group; reply upload route throttled | T00 |
 | Tokens | — (not repeated here) | T00 `AuthTokenTest`: abilities mirror permissions; `DELETE auth/tokens/current` revokes |
-| Inertia props | `inertia shared props` → `auth.user` has exactly id, name, email, email_verified_at, roles; `auth.can` holds only booleans | T04 |
+| Inertia props | `inertia shared props` → `auth.user` has exactly id, name, email, roles; `auth.can` holds only booleans | T04 |
 | Search input | `search input` → FULLTEXT operators don't 500; injection text is bound | T08 (unknown sort is 422) |
 | CSRF / XSS | `csrf and xss` → no `v-html` anywhere in `resources/js`. CSRF is the framework's `web` group default (`PreventRequestForgery`), so it isn't re-tested | — |
 | 404 not 403 (TD-012) | `foreign tickets` → web and API return 404 to another customer | T04 |
@@ -351,7 +351,7 @@ Earlier tasks test their own slice: T04 the matrix, T07 leakage, T10 notificatio
 - token request: `email`, `password`, `device_name` (T00 `LoginTokenRequest`); wrong credentials return 422
 - reply upload: `body`, `is_internal`, `attachments[]` (T07 `StoreReplyRequest`), throttled with `throttle:20,1`
 
-- [ ] **Step 1: Write the test** `tests/Feature/Security/SecurityChecklistTest.php`. The public-by-design routes are: the guest-only auth screens (Fortify registers them as `guest:web`), the landing page, the token endpoint, Sanctum's CSRF cookie, the kit's passkey discovery document, the signed-URL local file route, the health check, and the docs routes, which have their own `AuthorizeApiDocs` gate.
+- [ ] **Step 1: Write the test** `tests/Feature/Security/SecurityChecklistTest.php`. The public-by-design routes are: T00a's guest-only `login` and `register` screens (middleware `guest`), `home` (`/`), the health check `up`, the token endpoint, Sanctum's CSRF cookie, the signed-URL local file route, and the docs routes, which have their own `AuthorizeApiDocs` gate.
 
 ```php
 <?php
@@ -393,7 +393,7 @@ beforeEach(function (): void {
 
 describe('server-side authorization', function (): void {
     it('requires authentication on every route that is not public by design', function (): void {
-        $publicNames = ['home', 'api.v1.auth.tokens.store', 'sanctum.csrf-cookie', 'well-known.passkeys'];
+        $publicNames = ['login', 'register', 'home', 'api.v1.auth.tokens.store', 'sanctum.csrf-cookie'];
         $publicPrefixes = ['storage.', 'scramble.'];
         $publicUris = ['up', '/'];
 
@@ -405,7 +405,7 @@ describe('server-side authorization', function (): void {
                 return in_array($name, $publicNames, true)
                     || collect($publicPrefixes)->contains(fn (string $prefix): bool => str_starts_with($name, $prefix))
                     || in_array($route->uri(), $publicUris, true)
-                    || collect($middleware)->contains(fn (mixed $m): bool => is_string($m) && ($m === 'guest' || str_starts_with($m, 'guest:')))
+                    || collect($middleware)->contains(fn (mixed $m): bool => $m === 'guest')
                     || collect($middleware)->contains(fn (mixed $m): bool => is_string($m) && ($m === 'auth' || str_starts_with($m, 'auth:')));
             })
             ->map(fn (RoutingRoute $route): string => implode('|', $route->methods()).' '.$route->uri())
@@ -488,7 +488,7 @@ describe('mass assignment', function (): void {
             'sla_warning_at', 'sla_paused_at', 'escalation_level', 'escalated_at', 'resolved_at', 'closed_at'];
 
         expect(array_values(array_intersect((new Ticket())->getFillable(), $ticketProtected)))->toBe([])
-            ->and(array_values(array_intersect((new User())->getFillable(), ['roles', 'permissions', 'last_assigned_at', 'email_verified_at'])))->toBe([])
+            ->and(array_values(array_intersect((new User())->getFillable(), ['roles', 'permissions', 'last_assigned_at'])))->toBe([])
             ->and((new Ticket())->getGuarded())->not->toBe([]);
     });
 
@@ -519,15 +519,17 @@ describe('mass assignment', function (): void {
             ->and($ticket->sla_due_at->year)->not->toBe(2099);
     });
 
-    it('does not let a user grant themselves a role through the profile form', function (): void {
-        $this->actingAs($this->customer)->patch(route('profile.update'), [
-            'name' => $this->customer->name,
-            'email' => $this->customer->email,
+    it('does not let a user grant themselves a role through the registration form', function (): void {
+        $this->post(route('register'), [
+            'name' => 'Role Seeker',
+            'email' => 'role.seeker@example.com',
+            'password' => 'S3cure-passw0rd!',
+            'password_confirmation' => 'S3cure-passw0rd!',
             'role' => 'admin',
             'roles' => ['admin'],
         ]);
 
-        expect($this->customer->fresh()?->getRoleNames()->all())->toBe(['customer']);
+        expect(User::query()->where('email', 'role.seeker@example.com')->sole()->getRoleNames()->all())->toBe(['customer']);
     });
 });
 
@@ -589,7 +591,7 @@ describe('inertia shared props', function (): void {
             ->get(route('dashboard'))
             ->assertOk()
             ->assertInertia(fn (AssertableInertia $page) => $page
-                ->has('auth.user', fn (AssertableInertia $user) => $user->hasAll(['id', 'name', 'email', 'email_verified_at', 'roles']))
+                ->has('auth.user', fn (AssertableInertia $user) => $user->hasAll(['id', 'name', 'email', 'roles']))
                 ->has('auth.can', fn (AssertableInertia $can) => $can->whereAllType([
                     'viewDashboard' => 'boolean',
                     'manageImports' => 'boolean',
@@ -1571,7 +1573,7 @@ A Laravel 13 help desk with:
 - internal notes, private attachments and a streamed CSV import
 - an Inertia/Vue UI and a versioned REST API that share the same rules
 
-**Stack:** PHP 8.3, Laravel 13, MySQL 8, Inertia 3 + Vue 3 (TypeScript, Tailwind, shadcn-vue, `@lucide/vue` icons), built on `laravel/vue-starter-kit` (Fortify, Wayfinder, Vite+). Sanctum 4, spatie/laravel-permission 8, spatie/laravel-activitylog 4, Scramble 0.13. Tests: Pest 4 on PHPUnit 12, Larastan, Pint.
+**Stack:** PHP 8.3, Laravel 13, MySQL 8, Inertia 3 + Vue 3 (TypeScript, Tailwind, shadcn-vue, `@lucide/vue` icons), built on `laravel/vue-starter-kit` (Wayfinder, Vite+) with simple session login and registration in place of Fortify. Sanctum 4, spatie/laravel-permission 8, spatie/laravel-activitylog 4, Scramble 0.13. Tests: Pest 4 on PHPUnit 12, Larastan, Pint.
 
 | Document | What it covers |
 |---|---|

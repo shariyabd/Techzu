@@ -2,7 +2,7 @@
 
 **Objective:** Create every table from spec §4 with the TD-021 indexes, the full set of domain enums and domain exceptions, the Eloquent models, factories and seeders from README §3.1–§3.3, the shared Pest bootstrap, the two summary API resources and `docs/ERD.md`, so that wave-2 tasks can build on a stable schema.
 
-- **Depends on:** T00
+- **Depends on:** T00, T00a
 - **Wave:** 1
 - **TDs implemented:**
   - TD-010 / TD-011: `Role` and `Permission` enums, `Permission::forRole`, `RolesAndPermissionsSeeder`
@@ -49,8 +49,9 @@
 - `docs/ERD.md`
 
 **Modify**
-- `app/Models/User.php` (T00 version → full domain model)
+- `app/Models/User.php` (T00a version → full domain model)
 - `database/factories/UserFactory.php`
+- `app/Actions/Auth/RegisterCustomer.php` (T00a; T01 adds only the customer role assignment)
 - `database/seeders/DatabaseSeeder.php`
 - `tests/Pest.php`
 
@@ -68,9 +69,10 @@
 - `tests/Feature/Models/TicketReplyTest.php`
 - `tests/Feature/Models/SupportingModelsTest.php`
 - `tests/Feature/Http/Resources/V1/SummaryResourcesTest.php`
+- `tests/Feature/Auth/RegisterCustomerTest.php`
 
 **Must not touch**
-- every T00 migration (`0001_01_01_*`, starter-kit migrations, `2026_10_29_*`), `bootstrap/**`, `routes/**`, `app/Providers/**`, `app/Http/Middleware/**`
+- every T00/T00a migration (`0001_01_01_*`, starter-kit migrations, `2026_10_29_*`), `bootstrap/**`, `routes/**`, `app/Providers/**`, `app/Http/Middleware/**`
 - `config/tickets.php`, `config/sla.php`, `config/business_hours.php`, `config/attachments.php` (owned by T02, T03 and T05)
 - `app/Exceptions/Domain/DomainException.php` (T00)
 
@@ -81,6 +83,7 @@
 **Consumes (T00)**
 - `App\Exceptions\Domain\DomainException` (abstract `status()`, `errorCode()`).
 - spatie/permission tables and `config/permission.php` (published in T00), and `HasRoles` + `HasApiTokens` on `User`.
+- T00a's simple session auth: `User` without any Fortify contract or trait, a `users` table without `email_verified_at` or two-factor columns, no `passkeys` or `password_reset_tokens` tables, and `App\Actions\Auth\RegisterCustomer` (`final`, `handle(string $name, string $email, string $password): User`), which assigns no role yet.
 - The `Concurrency` PHPUnit suite directory (`tests/Concurrency`).
 - MySQL `techzu_testing`.
 
@@ -108,11 +111,12 @@ final class ImportHeaderInvalid extends DomainException     { __construct(string
 
 - **Models** (§3.3): `User`, `Category`, `Ticket`, `TicketReply`, `Attachment`, `Holiday`, `TicketImport`, `TicketImportError`. Each has exactly the relations, scopes, helpers, `$fillable` and casts listed in §3.3. One addition: `Ticket::activitiesVisibleTo(User $user): MorphMany` (spec §15, TD-026; see Contract notes).
 - **Factories** (§3.3):
-  - `UserFactory`: `admin()`, `agent(array $categoryIds = [])`, `customer()`, `unavailable()`, plus the kit's `unverified()` and `withTwoFactor()`.
+  - `UserFactory`: `admin()`, `agent(array $categoryIds = [])`, `customer()`, `unavailable()`.
   - `CategoryFactory`.
   - `TicketFactory`: `assignedTo(User)`, `status(TicketStatus)`, `priority(TicketPriority)`, `breached()`, `approaching()`, `paused()`.
   - `TicketReplyFactory`: `internal()`.
   - `AttachmentFactory`, `HolidayFactory`.
+- **Registration:** `RegisterCustomer::handle()` assigns `Role::Customer` to the user it creates.
 - **Seeders:** `RolesAndPermissionsSeeder` (idempotent, an exact sync to `Permission::forRole`), `DemoSeeder` (credentials in §3.3), and `DatabaseSeeder` calling both.
 - **Test bootstrap** `tests/Pest.php`:
   - `Feature` uses `RefreshDatabase`; `Concurrency` uses `DatabaseTruncation`. Both get a `beforeEach` that seeds `RolesAndPermissionsSeeder` and calls `app(PermissionRegistrar::class)->forgetCachedPermissions()`. `Concurrency` also truncates in `afterEach`, because its committed rows would otherwise leak into the next `RefreshDatabase` test in the same process.
@@ -150,11 +154,12 @@ final class ImportHeaderInvalid extends DomainException     { __construct(string
 | 1.4 Models, factories, resources | `app/Models/*`, `database/factories/*`, `app/Http/Resources/V1/{UserSummary,Category}Resource.php`, `tests/Feature/Models/*`, `tests/Feature/Http/Resources/V1/SummaryResourcesTest.php` | 1.1, 1.2, 1.3 | — |
 | 1.5 Demo + database seeders | `database/seeders/DemoSeeder.php`, `database/seeders/DatabaseSeeder.php`, `tests/Feature/Database/DemoSeederTest.php` | 1.4 | 1.6 |
 | 1.6 ERD | `docs/ERD.md` | 1.2 | 1.5 |
+| 1.7 Customer role on registration | `app/Actions/Auth/RegisterCustomer.php`, `tests/Feature/Auth/RegisterCustomerTest.php` | 1.3 | 1.4 |
 
 Mini-waves:
 - **A** = 1.1 ∥ 1.2
 - **B** = 1.3, which starts once 1.1 is committed and may overlap 1.2
-- **C** = 1.4
+- **C** = 1.4 ∥ 1.7
 - **D** = 1.5 ∥ 1.6
 
 Each parallel implementer runs only its own test files before committing. The full gate runs after each wave.
@@ -2040,7 +2045,7 @@ it('exposes the public category fields', function (): void {
 ```
 Expected: **FAIL** with `Class "App\Models\Category" not found` / `Class "App\Models\Ticket" not found` and `Call to undefined method Database\Factories\UserFactory::agent()`.
 
-- [ ] **Step 7: Replace `app/Models/User.php`.** This extends T00's version (0.1 Step 22): the starter kit's `MustVerifyEmail` and `PasskeyUser` contracts, the `PasskeyAuthenticatable`/`TwoFactorAuthenticatable` traits, the `@property` block and the generic `HasApiTokens` tag all stay. The kit's `SecurityController` lists `$user->passkeys()`, and its auth routes use the `verified` middleware. T01 adds `is_available`/`last_assigned_at` to the `@property` block, `$fillable` and the casts, plus the relations and scopes.
+- [ ] **Step 7: Replace `app/Models/User.php`.** This extends T00a's version: no auth contracts or Fortify traits (T00a removed them with Fortify), and the `@property` block and the generic `HasApiTokens` tag stay. T01 adds `is_available`/`last_assigned_at` to the `@property` block, `$fillable` and the casts, plus the relations and scopes.
 
 Session-authenticated requests carry a `TransientToken` and API requests a `PersonalAccessToken`, hence the `@use` union. The role helpers are used for data scoping (visibility, eager filters), and authorization decisions still go through Policies.
 
@@ -2054,7 +2059,6 @@ namespace App\Models;
 use App\Enums\Role;
 use Carbon\CarbonImmutable;
 use Database\Factories\UserFactory;
-use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -2062,9 +2066,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
-use Laravel\Fortify\Contracts\PasskeyUser;
-use Laravel\Fortify\PasskeyAuthenticatable;
-use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Sanctum\HasApiTokens;
 use Laravel\Sanctum\PersonalAccessToken;
 use Laravel\Sanctum\TransientToken;
@@ -2074,24 +2075,20 @@ use Spatie\Permission\Traits\HasRoles;
  * @property int $id
  * @property string $name
  * @property string $email
- * @property Carbon|null $email_verified_at
  * @property string $password
- * @property string|null $two_factor_secret
- * @property string|null $two_factor_recovery_codes
- * @property Carbon|null $two_factor_confirmed_at
  * @property string|null $remember_token
  * @property bool $is_available
  * @property CarbonImmutable|null $last_assigned_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
+class User extends Authenticatable
 {
     /** @use HasApiTokens<PersonalAccessToken|TransientToken> */
     use HasApiTokens;
 
     /** @use HasFactory<UserFactory> */
-    use HasFactory, HasRoles, Notifiable, PasskeyAuthenticatable, TwoFactorAuthenticatable;
+    use HasFactory, HasRoles, Notifiable;
 
     /** @var list<string> */
     protected $fillable = [
@@ -2104,8 +2101,6 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     /** @var list<string> */
     protected $hidden = [
         'password',
-        'two_factor_secret',
-        'two_factor_recovery_codes',
         'remember_token',
     ];
 
@@ -2118,9 +2113,7 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
             'password' => 'hashed',
-            'two_factor_confirmed_at' => 'datetime',
             'is_available' => 'boolean',
             'last_assigned_at' => 'immutable_datetime',
         ];
@@ -2671,7 +2664,7 @@ class TicketImportError extends Model
 }
 ```
 
-- [ ] **Step 15: Replace `database/factories/UserFactory.php`.** As in the starter kit, two-factor columns default to null (so seeded demo users can log in) and `withTwoFactor()` turns them on; the kit's `AuthenticationTest` and `TwoFactorChallengeTest` call it.
+- [ ] **Step 15: Replace `database/factories/UserFactory.php`.** T00a already removed the two-factor columns, `email_verified_at` and the `unverified()`/`withTwoFactor()` states; T01 adds the assignment columns and the role states.
 
 Role states assign the spatie role after creation, so `RolesAndPermissionsSeeder` must have run (`tests/Pest.php` does this before every Feature test).
 
@@ -2699,31 +2692,11 @@ class UserFactory extends Factory
         return [
             'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
-            'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
-            'two_factor_secret' => null,
-            'two_factor_recovery_codes' => null,
-            'two_factor_confirmed_at' => null,
             'is_available' => true,
             'last_assigned_at' => null,
         ];
-    }
-
-    public function unverified(): static
-    {
-        return $this->state(fn (array $attributes): array => [
-            'email_verified_at' => null,
-        ]);
-    }
-
-    public function withTwoFactor(): static
-    {
-        return $this->state(fn (array $attributes): array => [
-            'two_factor_secret' => encrypt('secret'),
-            'two_factor_recovery_codes' => encrypt(json_encode(['recovery-code-1'])),
-            'two_factor_confirmed_at' => now(),
-        ]);
     }
 
     public function admin(): static
@@ -3066,7 +3039,7 @@ final class CategoryResource extends JsonResource
 ```
 Expected: **PASS**, 0 failures.
 
-- [ ] **Step 24: Gate** (the T00 and starter-kit suites must still pass with the new `UserFactory`)
+- [ ] **Step 24: Gate** (the T00 and T00a suites must still pass with the new `UserFactory`)
 
 ```bash
 ./vendor/bin/pint --test && ./vendor/bin/phpstan analyse --memory-limit=1G && ./vendor/bin/pest --parallel
@@ -3411,13 +3384,9 @@ erDiagram
         bigint id PK
         varchar name
         varchar email UK
-        timestamp email_verified_at "nullable"
         varchar password
         boolean is_available "default true, indexed"
         timestamp last_assigned_at "nullable"
-        text two_factor_secret "nullable, starter kit (Fortify)"
-        text two_factor_recovery_codes "nullable, starter kit (Fortify)"
-        timestamp two_factor_confirmed_at "nullable, starter kit (Fortify)"
         varchar remember_token "nullable"
         timestamp created_at
         timestamp updated_at
@@ -3599,17 +3568,6 @@ erDiagram
         timestamp updated_at
     }
 
-    passkeys {
-        bigint id PK
-        bigint user_id FK "indexed, starter kit (Fortify passkeys)"
-        varchar name
-        varchar credential_id UK
-        json credential
-        timestamp last_used_at "nullable"
-        timestamp created_at
-        timestamp updated_at
-    }
-
     sessions {
         varchar id PK
         bigint user_id "nullable, indexed"
@@ -3617,12 +3575,6 @@ erDiagram
         text user_agent
         longtext payload
         int last_activity "indexed"
-    }
-
-    password_reset_tokens {
-        varchar email PK
-        varchar token
-        timestamp created_at
     }
 
     cache {
@@ -3681,7 +3633,6 @@ erDiagram
     tickets ||--o{ attachments : "ticket_id"
     ticket_replies |o--o{ attachments : "reply_id"
     users ||--o{ attachments : "uploaded_by"
-    users ||--o{ passkeys : "user_id (cascade)"
     users ||--o{ ticket_imports : "user_id"
     ticket_imports ||--o{ ticket_import_errors : "ticket_import_id"
     roles ||--o{ model_has_roles : "role_id"
@@ -3697,7 +3648,7 @@ erDiagram
     users |o..o{ sessions : "user_id (no FK)"
 ```
 
-`ticket_sequences` and `holidays` are standalone: the year and the date are their natural keys. `cache`, `cache_locks`, `jobs`, `job_batches`, `failed_jobs` and `password_reset_tokens` are framework infrastructure; `passkeys` belongs to the starter kit's Fortify passkey login.
+`ticket_sequences` and `holidays` are standalone: the year and the date are their natural keys. `cache`, `cache_locks`, `jobs`, `job_batches` and `failed_jobs` are framework infrastructure.
 
 ## Indexes (TD-021)
 
@@ -3741,6 +3692,88 @@ git commit -m "docs(erd): add Mermaid ERD for domain, package and framework tabl
 
 ---
 
+## Subtask 1.7 — Customer role on registration
+
+T00a created `app/Actions/Auth/RegisterCustomer.php` before the `Role` enum existed, so it assigns no role. Self-registration is customer-only (PRD), and every Policy relies on the role, so T01 adds the assignment and nothing else.
+
+- [ ] **Step 1: Write `tests/Feature/Auth/RegisterCustomerTest.php`**
+
+```php
+<?php
+
+declare(strict_types=1);
+
+use App\Actions\Auth\RegisterCustomer;
+use App\Enums\Role;
+
+it('gives a registered user the customer role', function (): void {
+    $user = app(RegisterCustomer::class)->handle('Casey Customer', 'casey@example.com', 'password');
+
+    expect($user->fresh()?->getRoleNames()->all())->toBe([Role::Customer->value]);
+});
+```
+
+- [ ] **Step 2: Run it and confirm it fails**
+
+```bash
+./vendor/bin/pest tests/Feature/Auth/RegisterCustomerTest.php
+```
+Expected: **FAIL**, the role list is `[]`.
+
+- [ ] **Step 3: Modify `app/Actions/Auth/RegisterCustomer.php`.** Keep T00a's body. Import `App\Enums\Role`, keep the created user in `$user`, call `$user->assignRole(Role::Customer);` and return `$user`. With T00a's body the file reads:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace App\Actions\Auth;
+
+use App\Enums\Role;
+use App\Models\User;
+
+final class RegisterCustomer
+{
+    public function handle(string $name, string $email, string $password): User
+    {
+        $user = User::query()->create([
+            'name' => $name,
+            'email' => $email,
+            'password' => $password,
+        ]);
+
+        $user->assignRole(Role::Customer);
+
+        return $user;
+    }
+}
+```
+
+If T00a's body differs (for example, a `DB::transaction()` wrapper), keep it and add only the import and the `assignRole` line.
+
+- [ ] **Step 4: Run it and confirm it passes**
+
+```bash
+./vendor/bin/pest tests/Feature/Auth/RegisterCustomerTest.php tests/Feature/Auth/RegisterTest.php
+```
+Expected: **PASS** (1 test, plus T00a's register tests).
+
+- [ ] **Step 5: Gate**
+
+```bash
+./vendor/bin/pint --test && ./vendor/bin/phpstan analyse --memory-limit=1G && ./vendor/bin/pest --parallel
+```
+Expected: all green.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add app/Actions/Auth/RegisterCustomer.php tests/Feature/Auth/RegisterCustomerTest.php
+git commit -m "feat(auth): give self-registered users the customer role" --trailer "Refs: T01.7" --trailer "Implements: TD-010, TD-011"
+```
+
+---
+
 ## Acceptance criteria
 
 - [ ] All nine enums exist with exactly the cases and methods in README §3.1. `TicketStatus::allowedTransitions()` matches TD-040, and the 25-pair dataset passes.
@@ -3756,6 +3789,7 @@ git commit -m "docs(erd): add Mermaid ERD for domain, package and framework tabl
   - seeds the baseline before every Feature and Concurrency test
   - uses `RefreshDatabase` for Feature and `DatabaseTruncation` for Concurrency, and truncates again after each Concurrency test
   - provides `concurrentConnection()`
+- [ ] `RegisterCustomer` gives every self-registered user the `customer` role.
 - [ ] `UserSummaryResource` → `{id, name}`; `CategoryResource` → `{id, name, slug, is_active}`.
 - [ ] `docs/ERD.md` renders and covers every table, including the package and framework tables.
 
@@ -3782,5 +3816,5 @@ Expected: Pint `PASS`, PHPStan `[OK] No errors`, all tests green (T00's included
 7. **Resolved: `ticket_imports` gets no failure-message column.** T11 stores failures as `ticket_import_errors` rows.
 8. **`Ticket::slaState()` precedence:** Stopped (Resolved/Closed) is checked before Paused. T05's `SlaQuery::whereState(Paused)` should likewise restrict to active statuses.
 9. **Exceptions without named constructors** (`AgentNotEligible`, `TicketClosed`, `ImportHeaderInvalid`) take an optional message in the constructor. §3.2 lists no factory for them.
-10. **`UserFactory`** keeps the starter kit's two-factor handling: the columns default to null (demo users must be able to log in) and the kit's `withTwoFactor()` state is kept.
+10. **`UserFactory`** has no two-factor or verification states: T00a removed Fortify, so there is nothing to verify or challenge.
 11. **Larastan must read `casts()`** (contract impact on T00's `phpstan.neon`). The models declare `/** @return array<string, string> */` on `casts()`, so with Larastan 3.13's default `parseModelCastsMethod: false` it ignores the casts and types `$ticket->status`, `sla_*` etc. as `string`. Then `Ticket::isActive()` (T01), T02's `SlaCalculator` and `HolidayRepository`, and T04's `TicketPolicy` fail level 6 (24 errors: 1 in `Ticket`, 17 in T02, 6 in T04). T00's `phpstan.neon` needs `parseModelCastsMethod: true` under `parameters`. With it, T01–T04 pass level 6 with no errors.

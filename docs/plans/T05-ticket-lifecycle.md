@@ -3430,7 +3430,7 @@ declare(strict_types=1);
 use App\Http\Controllers\Web\TicketController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['auth', 'verified'])->group(function (): void {
+Route::middleware(['auth'])->group(function (): void {
     Route::get('tickets', [TicketController::class, 'index'])->name('tickets.index');
     Route::get('tickets/create', [TicketController::class, 'create'])->name('tickets.create');
     Route::post('tickets', [TicketController::class, 'store'])->name('tickets.store');
@@ -3459,7 +3459,7 @@ Expected: FAIL only in the `assertInertia` tests, with `Inertia page component f
 
 URLs are written as plain paths (`/tickets/${number}`), as in the wave-4 components that replace the stubs. The kit's Wayfinder helpers (`@/routes/tickets`, generated at build time) would also work, but they aren't required. All components use `<script setup lang="ts">` and shadcn-vue components from `@/components/ui/*`.
 
-**Layout (Inertia 3 kit).** `resources/js/app.ts` sets a default layout in `createInertiaApp({ layout })`: every page that isn't `Welcome`, `auth/*` or `settings/*` is already rendered inside `AppLayout`. Pages therefore **don't** wrap themselves in `<AppLayout>`, because that would render two sidebars. They pass the layout's `breadcrumbs` prop instead: as a static object in `defineOptions({ layout: { breadcrumbs } })` (the kit's `pages/Dashboard.vue` pattern), or with `setLayoutProps()` from `@inertiajs/vue3` when the value depends on page props (the kit's `pages/auth/TwoFactorChallenge.vue` pattern). Inertia resets layout props on every visit that doesn't preserve state.
+**Layout (Inertia 3 kit).** `resources/js/app.ts` sets a default layout in `createInertiaApp({ layout })`: every page that isn't `auth/*` is already rendered inside `AppLayout`. Pages therefore **don't** wrap themselves in `<AppLayout>`, because that would render two sidebars. They pass the layout's `breadcrumbs` prop instead: as a static object in `defineOptions({ layout: { breadcrumbs } })` (the kit's `pages/Dashboard.vue` pattern), or with `setLayoutProps()` from `@inertiajs/vue3` when the value depends on page props. Inertia resets layout props on every visit that doesn't preserve state.
 
 - [ ] **Step 23: make sure the shadcn-vue components used below exist** (the starter kit ships `badge`, `button`, `card`, `input`, `label` and `select`; this adds `textarea` and `table` only if missing, so wave-4 tasks T06/T07 never need to add them concurrently)
 

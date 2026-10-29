@@ -786,7 +786,7 @@ declare(strict_types=1);
 use App\Http\Controllers\Web\DashboardController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['auth', 'verified'])->group(function (): void {
+Route::middleware(['auth'])->group(function (): void {
     Route::get('dashboard', DashboardController::class)
         ->name('dashboard')
         ->can('viewDashboard');

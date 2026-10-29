@@ -63,7 +63,6 @@
 - `database/seeders/*`
 - `routes/web.php`
 - `resources/js/config/navigation.ts`
-- the starter kit's `settings/*` pages
 
 ## 3. Interfaces
 
@@ -285,7 +284,7 @@ it('syncs an agent\'s categories and availability', function (): void {
         ->and($agent->is_available)->toBeFalse();
 });
 
-it('creates a verified agent with a role and categories', function (): void {
+it('creates an agent with a role and categories', function (): void {
     $user = app(CreateUser::class)->handle($this->admin, [
         'name' => 'New Agent',
         'email' => 'new.agent@example.com',
@@ -296,8 +295,7 @@ it('creates a verified agent with a role and categories', function (): void {
     ])->fresh();
 
     expect($user?->hasRole(Role::Agent->value))->toBeTrue()
-        ->and($user?->categories()->count())->toBe(2)
-        ->and($user?->email_verified_at)->not->toBeNull();
+        ->and($user?->categories()->count())->toBe(2);
 });
 
 it('updates a user, keeping the password when none is given', function (): void {
@@ -616,7 +614,7 @@ final class SyncAgentProfile
 }
 ```
 
-- [ ] **Step 14: Create** `app/Actions/Admin/CreateUser.php`. An admin vouches for the address, so the email is marked verified: there is no self-signup to verify.
+- [ ] **Step 14: Create** `app/Actions/Admin/CreateUser.php`.
 
 ```php
 <?php
@@ -627,7 +625,6 @@ namespace App\Actions\Admin;
 
 use App\Enums\Role;
 use App\Models\User;
-use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
 final class CreateUser
@@ -650,7 +647,6 @@ final class CreateUser
                 'password' => $data['password'],
                 'is_available' => $isAvailable,
             ]);
-            $user->email_verified_at = CarbonImmutable::now();
             $user->save();
 
             $role = Role::from($data['role']);
@@ -2314,7 +2310,7 @@ use App\Http\Controllers\Web\Admin\CategoryController;
 use App\Models\Category;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['auth', 'verified'])->prefix('admin')->name('admin.')->group(function (): void {
+Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function (): void {
     Route::get('categories', [CategoryController::class, 'index'])->name('categories.index')->can('viewAny', Category::class);
     Route::get('categories/create', [CategoryController::class, 'create'])->name('categories.create')->can('create', Category::class);
     Route::post('categories', [CategoryController::class, 'store'])->name('categories.store')->can('create', Category::class);

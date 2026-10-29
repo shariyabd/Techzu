@@ -17,7 +17,8 @@
 ## Global constraints
 
 - PHP `^8.3`, Laravel `^13.0`, MySQL `8.0`, Node `>=22`.
-- Starter kit: `laravel/vue-starter-kit:dev-main` (Laravel 13, Inertia 3, Fortify, Wayfinder, `@lucide/vue` icons, Vite+). The tagged kit release v1.0.2 is the old Laravel 12 kit and must not be used (TD-002).
+- Starter kit: `laravel/vue-starter-kit:dev-main` (Laravel 13, Inertia 3, Wayfinder, `@lucide/vue` icons, Vite+), without Fortify. The tagged kit release v1.0.2 is the old Laravel 12 kit and must not be used (TD-002).
+- Authentication is simple session auth: login, logout and customer self-registration (T00a), plus T00's Sanctum API tokens. T00a removes Fortify and its features (two-factor auth, passkeys, email verification, password reset, password confirmation) and every settings page. No route uses the `verified` middleware.
 - Packages, with these exact names. All of these were verified on 2026-10-29 to resolve together on PHP 8.3.17:
   - `laravel/sanctum:^4.3`
   - `spatie/laravel-permission:^8.3`
@@ -45,6 +46,8 @@
 ```
 Wave 0   T00 Bootstrap
            │
+Wave 0b  T00a Simple authentication (removes Fortify)
+           │
 Wave 1   T01 Schema, enums, models, seeders
            │
 Wave 2   ┌─ T02 Calendar & SLA ─┐
@@ -68,7 +71,8 @@ Wave 5   T14 Hardening & documentation
 | Task | File | Depends on | Wave |
 |---|---|---|---|
 | T00 | [T00-bootstrap.md](T00-bootstrap.md) | — | 0 |
-| T01 | [T01-schema-models.md](T01-schema-models.md) | T00 | 1 |
+| T00a | [T00a-simple-auth.md](T00a-simple-auth.md) | T00 | 0b (alone) |
+| T01 | [T01-schema-models.md](T01-schema-models.md) | T00a | 1 |
 | T02 | [T02-business-calendar-sla.md](T02-business-calendar-sla.md) | T01 | 2 |
 | T03 | [T03-ticket-number.md](T03-ticket-number.md) | T01 | 2 |
 | T04 | [T04-authorization.md](T04-authorization.md) | T01 | 2 |
@@ -81,7 +85,7 @@ Wave 5   T14 Hardening & documentation
 | T11 | [T11-csv-import.md](T11-csv-import.md) | T05 | 4b |
 | T12 | [T12-dashboard.md](T12-dashboard.md) | T05 | 4b |
 | T13 | [T13-admin-config.md](T13-admin-config.md) | T05 | 4b |
-| T14 | [T14-hardening-docs.md](T14-hardening-docs.md) | T00–T13 | 5 |
+| T14 | [T14-hardening-docs.md](T14-hardening-docs.md) | T00–T13 (incl. T00a) | 5 |
 | T15 | *(not written yet: Docker packaging, on request after T14; TD-005)* | T14 | 6 |
 
 Wave 4 tasks are independent of each other by construction: separate route files, separate component folders, auto-discovered listeners, and events defined in T05. If two wave-4 tasks seem to need the same file, the file-ownership table (§4) decides who owns it. The other task stops and reports.
@@ -94,7 +98,7 @@ For each task (`superpowers:subagent-driven-development`). Five subagent roles: 
    ```bash
    git worktree add .worktrees/Txx -b task/Txx-<slug> main
    ```
-   Each worktree needs its own `.env` (copied from `.env.example`) with `DB_DATABASE=techzu_wt_txx` and `APP_URL=http://127.0.0.1:80NN`, where `NN` is the task number (T06 → 8006). `phpunit.xml` values take precedence over `.env`, so tests must be run with the database on the command line: `DB_DATABASE=techzu_wt_txx_testing ./vendor/bin/pest --parallel`. That keeps parallel worktrees from sharing a database or a port.
+   Each worktree needs its own `.env` (copied from `.env.example`, then `php artisan key:generate`: the key is blank in `.env.example`, so every HTTP test fails without it) with `DB_DATABASE=techzu_wt_txx` and `APP_URL=http://127.0.0.1:80NN`, where `NN` is the task number (T06 → 8006). `phpunit.xml` values take precedence over `.env`, so tests must be run with the database on the command line: `DB_DATABASE=techzu_wt_txx_testing ./vendor/bin/pest --parallel`. That keeps parallel worktrees from sharing a database or a port.
 2. **Implementer subagent:** given its task file, CLAUDE.md, the spec and this contract.
    - Runs the subtasks in the order of the task's mini-waves.
    - Works test-first (red → green → refactor), writing only the tests that CLAUDE.md §Testing allows.
@@ -118,9 +122,9 @@ For each task (`superpowers:subagent-driven-development`). Five subagent roles: 
    - The branch is now the exact sequence of commits the reviewer will read.
 9. **Gate on every commit (controller):**
    ```bash
-   git rebase main --exec "./vendor/bin/pint --test && ./vendor/bin/phpstan analyse --memory-limit=1G && DB_DATABASE=techzu_wt_txx_testing ./vendor/bin/pest --parallel"
-   npm run build && npm run check && npx vue-tsc --noEmit   # at the tip, if resources/js changed
+   git rebase -f main --exec "composer install --no-interaction --quiet && npm ci --silent && rm -rf resources/js/actions resources/js/routes resources/js/wayfinder && npm run build --silent >/dev/null && ./vendor/bin/pint --test && ./vendor/bin/phpstan analyse --memory-limit=1G && DB_DATABASE=techzu_wt_txx_testing ./vendor/bin/pest --parallel && npm run check --silent && npx vue-tsc --noEmit"
    ```
+   Each commit gets its **own** dependencies and build. Otherwise an earlier commit is tested against the tip's `vendor/`, `node_modules/` and `public/build`, and fails for the wrong reason, such as a Vite manifest missing a page that a later commit adds or removes. `-f` makes the rebase replay, and so run `--exec`, even when the branch is already on top of `main`. If a task never touches `composer.lock`, `package-lock.json` or `resources/js`, the install and build parts may be dropped for speed.
    Each commit must pass alone, because it is reviewed alone.
 10. **Stop and report.** The controller hands the owner:
     - the commit list (`git log --oneline main..task/Txx-<slug>`)
@@ -334,6 +338,8 @@ final class DashboardStats { /** @return array{totals: array<string,int>, by_pri
 ### 3.5 Actions — `app/Actions` (single public `handle`)
 
 ```php
+// T00a (T01 adds the customer role assignment)
+Auth\RegisterCustomer::handle(string $name, string $email, string $password): User
 // T05
 Tickets\CreateTicket::handle(User $actor, array $data, array $files = []): Ticket
     // $data: subject, description, priority (string), category_id, customer_id? (staff only; else actor)
@@ -406,6 +412,7 @@ TicketImportFinished(TicketImport $import)
 | `routes/web/imports.php`, `routes/api/v1/imports.php` | T11 | `admin.imports.index/create/store/show`, `admin.imports.errors.download` | `imports.store`, `imports.show`, `imports.errors.index` |
 | `routes/web/dashboard.php`, `routes/api/v1/dashboard.php` | T12 | `dashboard` | `dashboard` |
 | `routes/web/admin.php`, `routes/api/v1/admin.php` | T13 | `admin.categories.*`, `admin.holidays.*`, `admin.users.*` (resource, without show) | `categories.index` (any authenticated user), `admin.categories.*`, `admin.holidays.*`, `admin.users.*` |
+| `routes/web/auth.php` | T00a | `login` (GET, `guest`; the POST is unnamed, `guest` + `throttle:5,1`), `logout` (POST, `auth`), `register` (GET, `guest`; the POST is unnamed, `guest`) | — |
 | `routes/api/v1/auth.php` | T00 | — | `auth.tokens.store` (POST `auth/tokens`, throttle `5,1`), `auth.tokens.destroy` (DELETE `auth/tokens/current`), `auth.me` (GET `me`) |
 
 Tickets are route-bound by `number` (`/tickets/TKT-2026-000001`). For a customer viewing a ticket they don't own, `TicketPolicy::view` returns `Response::denyAsNotFound()` → 404 (TD-012).
@@ -439,7 +446,7 @@ DashboardPolicy (Gate 'viewDashboard')            // registered as Gate::define(
 
 ### 3.13 Inertia pages & shared props
 
-- Shared (`HandleInertiaRequests`, T00, extended in T04): `auth.user{id,name,email,email_verified_at,roles[]}`, `auth.can{viewDashboard, manageImports, manageUsers, manageCategories, manageHolidays, createOnBehalf}`, `flash{success,error}`, and `notifications.unread_count`, which T10 fills in through a lazy prop. T00 defines the key as `0`, and T10 replaces the closure in `HandleInertiaRequests`. **T10 is allowed to modify that one closure.**
+- Shared (`HandleInertiaRequests`, T00, extended in T04): `auth.user{id,name,email,roles[]}`, `auth.can{viewDashboard, manageImports, manageUsers, manageCategories, manageHolidays, createOnBehalf}`, `flash{success,error}`, and `notifications.unread_count`, which T10 fills in through a lazy prop. T00 defines the key as `0`, and T10 replaces the closure in `HandleInertiaRequests`. **T10 is allowed to modify that one closure.**
 - Layout: `resources/js/layouts/AppLayout.vue` (T00). **Inertia 3: the kit's `resources/js/app.ts` applies `AppLayout` to every page by default. Pages never wrap themselves in `<AppLayout>`**, because that renders two sidebars. Pages pass breadcrumbs as layout props: static ones with `defineOptions({ layout: { breadcrumbs } })`, as in the kit's `pages/Dashboard.vue`, and prop-dependent ones with `setLayoutProps()` inside `watchEffect`. Icons come from `@lucide/vue`. Navigation is assembled by `resources/js/config/navigation.ts` (T00) from per-feature modules loaded with `import.meta.glob('./navigation/*.ts', { eager: true })`. Each module default-exports `NavItem[]`, where `type NavItem = { title: string; href: string; icon?: Component; order: number; visible: (page: SharedProps) => boolean }`. Features add **their own file**: `navigation/tickets.ts` (T05), `navigation/dashboard.ts` (T12), `navigation/imports.ts` (T11), `navigation/admin.ts` (T13). No shared file is edited.
 - `tickets/Show.vue` (T05) renders the components below, which T05 creates as **stubs**:
 
@@ -463,21 +470,25 @@ Files modified by more than one task, and who may touch what:
 
 | File | Created by | Later modifications allowed |
 |---|---|---|
-| `bootstrap/app.php` | T00 | none (route loading by glob, exception rendering) |
-| `app/Http/Middleware/HandleInertiaRequests.php` | T00 | T04 (`auth.can`), T10 (`notifications` closure) |
+| `bootstrap/app.php` | T00 | T00a only: removes `HandleAppearance` and the `appearance` cookie exception, adds `redirectUsersTo(route('home'))`. Nobody else. |
+| `app/Actions/Auth/IssueApiToken.php`, `tests/Feature/Api/V1/AuthTokenTest.php`, `tests/Feature/App/InertiaSharedPropsTest.php`, `tests/TestCase.php` | T00 | T00a (drops the email-verified check and its dataset row; four-field shared user; `TestCase` loses its Fortify helper) |
+| `app/Http/Middleware/HandleInertiaRequests.php` | T00 | T00a (drops `email_verified_at`), T04 (`auth.can`), T10 (`notifications` closure) |
 | `resources/js/config/navigation.ts` | T00 | none (features add `resources/js/config/navigation/<feature>.ts`) |
 | `routes/console.php` | T00 | T09 (schedule line) |
 | `config/tickets.php` | T03 (`number_prefix`) | T05 (`per_page`), T06 (`auto_assign`) |
 | `app/Providers/AppServiceProvider.php` | T00 | T04 (`viewDashboard` gate), T02 registers its own provider in `bootstrap/providers.php` |
-| `bootstrap/providers.php` | T00 | T02 (SlaServiceProvider) |
+| `bootstrap/providers.php` | T00 | T00a (removes `FortifyServiceProvider`), T02 (SlaServiceProvider) |
 | `components/tickets/{AssignmentPanel,ConversationPanel,AttachmentList}.vue` | T05 (stub) | T06 / T07 (replace) |
 | `database/seeders/DemoSeeder.php` | T01 | T14 (polish only) |
 | `tests/Support/AuthorizationMatrix.php` (helper: `actingAsRole(Role)`, `expectAccess(string $method, string $uri, int $status)`, and dataset builders) | T04 | none |
 | `tests/Feature/Authorization/<Feature>AuthorizationTest.php` | each task for its own routes (T04 creates `TicketPolicyTest`; T05–T13 each create their own file) | none: one file per feature, never shared |
 | `docs/API.md`, `docs/TECHNICAL.md`, `README.md` | T14 | — |
 | `app/Models/Ticket.php` | T01 (includes `activitiesVisibleTo`) | none |
-| `routes/web/dashboard.php` | T00 (placeholder, so the login redirect works) | T12 (replaces it) |
-| `routes/web.php` | T00 (includes the role-aware `home` redirect) | none |
+| `routes/web/dashboard.php` | T00 (placeholder, so the login redirect works) | T00a (`['auth']` instead of `['auth', 'verified']`), T12 (replaces it) |
+| `routes/web/auth.php` | T00a (login, logout, register) | none |
+| `app/Actions/Auth/RegisterCustomer.php` | T00a (no role) | T01 (adds the `assignRole(Role::Customer)` line only) |
+| `app/Models/User.php`, `database/factories/UserFactory.php` | starter kit (T00) | T00a (drops the Fortify contracts, traits, two-factor and `email_verified_at`), T01 (full domain model) |
+| `routes/web.php` | T00 (includes the role-aware `home` redirect) | T00a (removes the `routes/settings.php` require) |
 | spatie/permission migration | T00 (token abilities need it) | none |
 | `app/Http/Requests/Tickets/IndexTicketsRequest.php` | T05 | T08 (`rules()` only) |
 | `app/Services/Tickets/TicketListQuery.php` | T05 | T08 (inject `TicketFilter`, replace the `applyFilters()` body) |

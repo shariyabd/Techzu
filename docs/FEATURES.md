@@ -7,6 +7,9 @@ Each task's documenter replaces its own section's `Pending` line when the task i
 ## Platform foundation (T00)
 _Pending._
 
+## Authentication (T00a)
+_Pending._
+
 ## Data model (T01)
 _Pending._
 

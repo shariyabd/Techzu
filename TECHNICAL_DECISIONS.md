@@ -73,7 +73,17 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 - *Blade/Livewire.* Simpler, but the requirement asked for a modern SPA-feel UI.
 - *A standalone SPA consuming the API.* Doubles the auth surface (token storage in the browser) and the deployment pipeline.
 
-**Starter-kit dependencies (amended 2026-10-29).** The kit brings `inertia-laravel`, `laravel/fortify` (session auth: login, registration, password reset, 2FA), `laravel/wayfinder` (typed route helpers for TypeScript) and `laravel/tinker`. These are accepted as part of this decision rather than fighting the kit.
+**Starter-kit dependencies (amended 2026-10-29).** The kit brings `inertia-laravel`, `laravel/wayfinder` (typed route helpers for TypeScript) and `laravel/tinker`; these stay.
+
+**Fortify removed (amended 2026-10-29, owner decision; task T00a).**
+- The kit's `laravel/fortify` and everything that came with it are removed: two-factor auth, passkeys, email verification, password reset, password confirmation, and the profile/security/appearance settings pages. So are the validation-rule traits in `app/Concerns` that existed only to share rules with Fortify's action classes.
+- Authentication is plain Laravel:
+  - `LoginController` (`Auth::attempt`, session regenerate, logout)
+  - `RegisterController` with a `RegisterCustomer` Action
+  - one FormRequest per form, each holding its own `rules()`
+  - Sanctum tokens for the API (TD-003), unchanged
+- **Why:** the PRD asks for none of those features, and says not to use components for their own sake. Session login plus self-registration is three small classes.
+- **Alternatives rejected:** *keeping Fortify with most features disabled.* It still brings its provider, its action classes and the rule traits, which is indirection for two forms.
 
 **Moved to Laravel 13 (amended 2026-10-29, before any code was written).**
 - The only kit tag, v1.0.2 (Feb 2025), is the old Laravel 12 kit without Fortify or Wayfinder.
