@@ -163,7 +163,42 @@ Every ticket gets a unique, human-readable number. This feature produces that nu
 - When several tickets are created at the same moment, they wait their turn for the year's counter. Each gets a different number. If one has to wait too long for its turn, it fails with an error instead of receiving a duplicate number.
 
 ## Authorization (T04)
-_Pending._
+Every action is allowed or refused by a rule that combines what the user's role permits with who owns the ticket and what state it is in. The same rules are used for web pages and API requests.
+
+**Roles and what they can do**
+- Customers can create tickets, see only the tickets they opened, reply on them and edit them.
+- Agents can create tickets, including on behalf of a customer, and see every ticket. They can reply, write internal notes, claim tickets, and manage the tickets assigned to them, including handing those over. They can open the dashboard.
+- Admins can do everything an agent can, except hand over their own tickets (they can assign any ticket instead), and they can update any ticket. They alone manage categories, holidays, users and CSV imports.
+
+**Seeing tickets**
+- Staff see all tickets. A customer sees only their own.
+- When a customer asks for a ticket that is not theirs, the answer is "not found", never "forbidden", so they cannot tell whether it exists. The same applies to any other action on a ticket they cannot see.
+- Anyone who can see a ticket, customers included, but may not perform the action gets "forbidden".
+
+**Acting on a ticket**
+- Editing: staff who manage the ticket can always edit it. A customer can edit their own ticket only while it is Open.
+- Changing status: staff who manage the ticket can change it. A customer can act only on their own Resolved ticket, and only to close it or to reopen it (move it back to In Progress).
+- Changing priority: staff who manage the ticket only. Customers never can.
+- Managing a ticket means being an admin, or being the agent it is currently assigned to.
+- Claiming: any agent or admin can claim an active ticket (Open, In Progress or Waiting for customer), whether or not someone else holds it. Resolved and Closed tickets cannot be claimed.
+- Assigning: admins can assign any ticket. An agent can hand over only a ticket currently assigned to them.
+- Replying: customers on their own tickets, and staff, can reply. Nobody can reply, public or internal, on a Closed ticket.
+- Internal notes: only staff can write them, and not on a Closed ticket.
+
+**Internal replies and attachments**
+- Internal replies and internal attachments are visible to staff only.
+- A customer who asks for one gets "not found", exactly as if it did not exist. A reply or attachment of a ticket the customer cannot see is also "not found".
+
+**Admin-only areas**
+- Categories, holidays, users and CSV imports are open to admins only. Agents and customers are refused for every operation on them.
+- An admin cannot delete their own account.
+
+**Dashboard**
+- Agents and admins can open the dashboard. Customers cannot.
+
+**What the interface is told**
+- Each page receives a set of yes/no flags: may view the dashboard, manage imports, manage users, manage categories, manage holidays, and create tickets on behalf of a customer. They come from the same rules as above, so menus and buttons match what the server will allow.
+- Guests receive all of them as "no".
 
 ## Ticket lifecycle (T05)
 _Pending._

@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace App\Http\Middleware;
 
+use App\Models\Category;
+use App\Models\Holiday;
+use App\Models\Ticket;
+use App\Models\TicketImport;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -51,12 +55,12 @@ class HandleInertiaRequests extends Middleware
     private function abilities(?User $user): array
     {
         return [
-            'viewDashboard' => false,
-            'manageImports' => false,
-            'manageUsers' => false,
-            'manageCategories' => false,
-            'manageHolidays' => false,
-            'createOnBehalf' => false,
+            'viewDashboard' => $user?->can('viewDashboard') ?? false,
+            'manageImports' => $user?->can('viewAny', TicketImport::class) ?? false,
+            'manageUsers' => $user?->can('viewAny', User::class) ?? false,
+            'manageCategories' => $user?->can('viewAny', Category::class) ?? false,
+            'manageHolidays' => $user?->can('viewAny', Holiday::class) ?? false,
+            'createOnBehalf' => $user?->can('createOnBehalf', Ticket::class) ?? false,
         ];
     }
 }
