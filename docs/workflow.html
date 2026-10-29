@@ -123,6 +123,9 @@
     <div class="wave"><div class="label">Wave 0</div><div class="mode">alone</div>
       <div class="task solo"><b>T00</b><span>bootstrap, tooling, CI</span></div></div>
     <div class="arrow-col">→</div>
+    <div class="wave"><div class="label">Wave 0b</div><div class="mode">alone</div>
+      <div class="task solo"><b>T00a</b><span>simple auth (no Fortify)</span></div></div>
+    <div class="arrow-col">→</div>
     <div class="wave"><div class="label">Wave 1</div><div class="mode">alone</div>
       <div class="task solo"><b>T01</b><span>schema, models, enums</span></div></div>
     <div class="arrow-col">→</div>
@@ -166,11 +169,11 @@
       </div>
     </div>
     <div class="lane">
-      <div class="who agent">Implementer agent</div>
+      <div class="who agent">Implementer agents</div>
       <div class="steps">
-        <div class="step agent"><div class="n">2</div><h3>Subtasks by mini-wave</h3><p>For each subtask: failing test → code → green. Only tests for rules, criteria, security or real failure modes.</p></div>
+        <div class="step agent"><div class="n">2</div><h3>One per parallel subtask</h3><p>Each mini-wave runs all its subtasks at once, one implementer each. There's no fixed cap; the plan's table decides. Each works test-first, on its own files and its own test database.</p></div>
         <span class="to">→</span>
-        <div class="step agent"><div class="n">2</div><h3>Commit per subtask</h3><p><code>feat(assignment): …</code><br><code>Refs: T06.1</code></p></div>
+        <div class="step ctrl"><div class="n">2</div><h3>Controller commits + gates</h3><p>One commit per subtask (<code>feat(assignment): …</code>, <code>Refs: T06.1</code>), then the full gate before the next wave.</p></div>
       </div>
     </div>
     <div class="lane">
@@ -308,7 +311,8 @@ a 409 instead of silently overwriting.
     <table>
       <thead><tr><th>Task</th><th>Plan</th><th>Wave</th><th>Status</th></tr></thead>
       <tbody>
-        <tr><td class="mono">T00</td><td>T00-bootstrap.md</td><td>0</td><td><span class="pill next">Next</span></td></tr>
+        <tr><td class="mono">T00</td><td>T00-bootstrap.md</td><td>0</td><td><span class="pill done">Landed</span></td></tr>
+        <tr><td class="mono">T00a</td><td>T00a-simple-auth.md</td><td>0b</td><td><span class="pill next">Next</span></td></tr>
         <tr><td class="mono">T01</td><td>T01-schema-models.md</td><td>1</td><td><span class="pill todo">Not started</span></td></tr>
         <tr><td class="mono">T02</td><td>T02-business-calendar-sla.md</td><td>2</td><td><span class="pill todo">Not started</span></td></tr>
         <tr><td class="mono">T03</td><td>T03-ticket-number.md</td><td>2</td><td><span class="pill todo">Not started</span></td></tr>

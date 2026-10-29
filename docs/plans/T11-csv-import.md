@@ -2209,7 +2209,7 @@ use App\Http\Controllers\Web\Admin\TicketImportController;
 use App\Models\TicketImport;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['auth', 'verified'])
+Route::middleware(['auth'])
     ->prefix('admin/imports')
     ->name('admin.imports.')
     ->group(function (): void {

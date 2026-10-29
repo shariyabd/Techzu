@@ -9,7 +9,7 @@ Read before writing any code. Sources of truth:
 If these disagree, **stop and report**. Don't improvise.
 
 ## Stack
-Laravel 13 · PHP 8.3 · MySQL 8 · Inertia 3 + Vue 3 (`<script setup lang="ts">`) · Tailwind + shadcn-vue · Sanctum · spatie/laravel-permission · spatie/laravel-activitylog · Pest 4 · Larastan level 6 · Pint.
+Laravel 13 · PHP 8.3 · MySQL 8 · Inertia 3 + Vue 3 (`<script setup lang="ts">`) · Tailwind + shadcn-vue · Sanctum (API tokens) + plain session auth (no Fortify, TD-002) · spatie/laravel-permission · spatie/laravel-activitylog · Pest 4 · Larastan level 6 · Pint.
 
 ## Architecture rules (TD-001)
 1. **Controllers are thin.** Their only steps are `authorize` → FormRequest → one Action or Service → Inertia response or API Resource. No queries beyond route-model binding, and no business logic.
@@ -118,6 +118,7 @@ Implements: TD-031, TD-050
 - Tasks reach `main` only by `git rebase main` → gate → `git merge --ff-only`. No squash merges and no merge commits. History stays linear, with each task's commits as one unbroken block.
 - **Never rewrite or force-push `main`.** A change after a push is a new commit.
 - Only the human owner merges into `main` and pushes. Agents stop at a reviewed, rebased task branch and report.
+- **Parallel implementers** (README §2 step 2): there's one implementer per subtask of the current mini-wave, with no fixed cap. Each runs only its own tests, single-process, on its own database `techzu_wt_txx_testing_<subtask>`. Implementers sharing a wave don't commit; the controller commits each subtask in order and runs the full gate after each wave. Keep about 8 implementers running in total across all sessions (the machine has 8 cores).
 - **After a successful push, the worktree, its local branch and its two databases are deleted** (README §2 step 11, chained with `&&` so a failed push deletes nothing).
 
 ## Output rules (strict)

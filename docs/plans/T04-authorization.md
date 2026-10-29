@@ -102,7 +102,7 @@ Usage from later tasks: `$this->authorize('changeStatus', [$ticket, $to])`, `Gat
 
 ```php
 'auth' => [
-    'user' => null | ['id' => int, 'name' => string, 'email' => string, 'email_verified_at' => ?string, 'roles' => list<string>],
+    'user' => null | ['id' => int, 'name' => string, 'email' => string, 'roles' => list<string>],
     'can'  => ['viewDashboard' => bool, 'manageImports' => bool, 'manageUsers' => bool,
                'manageCategories' => bool, 'manageHolidays' => bool, 'createOnBehalf' => bool],
 ],
@@ -1287,7 +1287,6 @@ it('shares only explicit user fields plus role names', function (Role $role): vo
         'id' => $user->id,
         'name' => $user->name,
         'email' => $user->email,
-        'email_verified_at' => $user->email_verified_at?->toIso8601String(),
         'roles' => [$role->value],
     ]);
 })->with(AuthorizationMatrix::roles());
@@ -1373,7 +1372,6 @@ use Illuminate\Http\Request;
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
-                'email_verified_at' => $user->email_verified_at?->toIso8601String(),
                 'roles' => $user->getRoleNames()->values()->all(),
             ],
             'can' => [
@@ -1415,7 +1413,7 @@ use Illuminate\Http\Request;
 - [ ] The customer special case of `changeStatus` holds: own `Resolved` ticket → `Closed` or `InProgress` allowed; any other target, status or ticket denied.
 - [ ] `claim` doesn't check the current assignee (409 stays with `ClaimTicket`). `reply` and `addInternalNote` are denied on `Closed`.
 - [ ] `Gate::define('viewDashboard', [DashboardPolicy::class, 'view'])` is registered in `AppServiceProvider::boot()`. Staff are allowed, customers denied.
-- [ ] `HandleInertiaRequests` shares `auth.user{id,name,email,email_verified_at,roles[]}` and `auth.can{viewDashboard, manageImports, manageUsers, manageCategories, manageHolidays, createOnBehalf}` and nothing else from the user model. The `notifications` closure is unchanged.
+- [ ] `HandleInertiaRequests` shares `auth.user{id,name,email,roles[]}` and `auth.can{viewDashboard, manageImports, manageUsers, manageCategories, manageHolidays, createOnBehalf}` and nothing else from the user model. The `notifications` closure is unchanged.
 - [ ] `Tests\Support\AuthorizationMatrix` supports policy-level checks (`statusOf`, `ticketCases`) and HTTP-level checks (`expectAccess`, `expectAccessAs` with the `ticketFor` ownership hook, web and API), and has its own self-test.
 
 ## 7. Verification

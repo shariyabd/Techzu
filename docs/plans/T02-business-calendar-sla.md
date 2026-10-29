@@ -1363,7 +1363,7 @@ final class SlaServiceProvider extends ServiceProvider
 }
 ```
 
-- [ ] **Step 6: Register the provider.** In `bootstrap/providers.php`, import `App\Providers\SlaServiceProvider` and add `SlaServiceProvider::class,` as the last element of the returned array. Keep every entry already there (the Laravel 13 Vue starter kit ships `AppServiceProvider` and `FortifyServiceProvider`, imported with `use`). With the kit's baseline after T00's Pint pass the file reads:
+- [ ] **Step 6: Register the provider.** In `bootstrap/providers.php`, import `App\Providers\SlaServiceProvider` and add `SlaServiceProvider::class,` as the last element of the returned array. Keep every entry already there (after T00a removed `FortifyServiceProvider`, only `AppServiceProvider` remains, imported with `use`). With that baseline the file reads:
 
 ```php
 <?php
@@ -1371,12 +1371,10 @@ final class SlaServiceProvider extends ServiceProvider
 declare(strict_types=1);
 
 use App\Providers\AppServiceProvider;
-use App\Providers\FortifyServiceProvider;
 use App\Providers\SlaServiceProvider;
 
 return [
     AppServiceProvider::class,
-    FortifyServiceProvider::class,
     SlaServiceProvider::class,
 ];
 ```
