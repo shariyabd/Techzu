@@ -97,7 +97,7 @@ For each task (`superpowers:subagent-driven-development`):
 2. **Implementer subagent:** given its task file, CLAUDE.md, the spec and this contract.
    - Runs the subtasks in the order of the task's mini-waves.
    - Works test-first (red → green → refactor).
-   - Commits per subtask on the task branch (`Txx.n: ...`).
+   - Commits per subtask on the task branch, in Conventional Commits format with `Refs: Txx.n` and `Implements: TD-...` trailers (CLAUDE.md §Commits). No plan number in the subject, no co-author trailer.
 3. **Spec reviewer subagent:** has **not** seen the implementation reasoning. Checks every acceptance criterion and every "Produces" interface against this contract, and reports PASS or a list of gaps.
 4. **Code-quality reviewer subagent:** checks against CLAUDE.md (architecture, security, database, style rules), naming consistency, and missing tests for risky logic. Reports PASS or a list of findings.
 5. **Fix loop:** the implementer fixes the findings, and the reviewers re-check only those findings.
@@ -106,8 +106,22 @@ For each task (`superpowers:subagent-driven-development`):
    ./vendor/bin/pint --test && ./vendor/bin/phpstan analyse --memory-limit=1G && ./vendor/bin/pest --parallel
    npm run build && npx vue-tsc --noEmit   # if resources/js changed
    ```
-7. **Merge:** squash-merge into `main` as one commit, `Txx: <summary>`, with the TD list in the body. Then remove the worktree.
-8. **Next wave** starts only after every task in its prerequisite wave has merged.
+   Run the gate on **every** commit, not only the tip: `git rebase main --exec "<gate>"`. Each commit must pass alone because it is reviewed alone.
+7. **Clean the history:** fold every review fix into the commit it belongs to (`git commit --fixup <sha>` → `git rebase -i --autosquash main`). The branch is now the exact sequence of commits the reviewer will read.
+8. **Stop and report.** The controller hands the owner the commit list (`git log --oneline main..task/Txx`), the gate output, and any contract note that couldn't be confirmed. Agents never touch `main`.
+9. **Owner review and land** (human only):
+   ```bash
+   git log -p main..task/Txx-<slug>          # review commit by commit
+   git rebase main                           # pick up tasks landed earlier in the wave
+   # re-run the gate
+   git checkout main && git merge --ff-only task/Txx-<slug>
+   git push origin main
+   git worktree remove ../techzu-wt/Txx && git branch -d task/Txx-<slug>
+   ```
+   No squash, no merge commits, never force-push `main`. Within a wave, tasks land one at a time.
+10. **Next wave** starts only after every task in its prerequisite wave has landed on `main`.
+
+Visual overview of this workflow: [docs/workflow.html](../workflow.html).
 
 **Parallelism limit:** at most 4 implementers run concurrently. Subtasks inside a task may run in parallel *only* where the task file's mini-wave table says so, and only by separate subagents in the same worktree working on disjoint files.
 

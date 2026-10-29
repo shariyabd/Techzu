@@ -568,7 +568,7 @@ final class ScanSlaCommand extends Command
 - [ ] **Step 8: Commit.**
   ```bash
   git add app/Console/Commands/ScanSlaCommand.php tests/Feature/Sla/ScanSlaCommandTest.php tests/Feature/Sla/ScanSlaActivityTest.php
-  git commit -m "T09.1: add idempotent sla:scan escalation command (TD-044)"
+  git commit -m "feat(escalation): add idempotent sla:scan escalation command" --trailer "Refs: T09.1" --trailer "Implements: TD-044"
   ```
 
 ### 9.2 Schedule registration (TD-044)
@@ -634,7 +634,7 @@ Schedule::command('sla:scan')->everyMinute()->withoutOverlapping()->onOneServer(
 - [ ] **Step 9: Commit.**
   ```bash
   git add routes/console.php tests/Feature/Sla/ScanSlaScheduleTest.php
-  git commit -m "T09.2: schedule sla:scan every minute (TD-044)"
+  git commit -m "feat(escalation): schedule sla:scan every minute" --trailer "Refs: T09.2" --trailer "Implements: TD-044"
   ```
 
 ## 6. Acceptance criteria

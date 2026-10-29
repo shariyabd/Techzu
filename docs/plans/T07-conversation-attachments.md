@@ -403,7 +403,7 @@ Expected: Pint reports the files fixed or already clean; PHPStan `[OK] No errors
 
 ```bash
 git add app/Actions/Conversation/AddReply.php tests/Feature/Conversation/AddReplyTest.php
-git commit -m "T07.1: AddReply action with compensation and SLA resume on customer reply"
+git commit -m "feat(conversation): add replies with SLA resume on customer reply" --trailer "Refs: T07.1"
 ```
 
 ---
@@ -1002,7 +1002,7 @@ git add app/Http/Requests/StoreReplyRequest.php app/Http/Requests/IndexRepliesRe
   app/Services/Conversation/ConversationQuery.php app/Http/Resources/V1/TicketReplyResource.php \
   app/Http/Controllers/Web/TicketReplyController.php app/Http/Controllers/Api/V1/TicketReplyController.php \
   routes/web/conversation.php routes/api/v1/conversation.php tests/Feature/Conversation/ReplyEndpointsTest.php
-git commit -m "T07.2: reply endpoints (web + API), TicketReplyResource, replies index"
+git commit -m "feat(conversation): add reply endpoints and reply resource" --trailer "Refs: T07.2"
 ```
 
 ---
@@ -1223,7 +1223,7 @@ Expected: Pint clean; PHPStan `[OK] No errors`.
 ```bash
 git add app/Http/Controllers/Web/AttachmentDownloadController.php app/Http/Controllers/Api/V1/AttachmentDownloadController.php \
   routes/web/conversation.php routes/api/v1/conversation.php tests/Feature/Conversation/AttachmentDownloadTest.php
-git commit -m "T07.3: policy-checked streaming attachment download (web + API)"
+git commit -m "feat(attachments): stream attachment downloads behind policy check" --trailer "Refs: T07.3"
 ```
 
 ---
@@ -1456,7 +1456,7 @@ Expected: clean.
 
 ```bash
 git add tests/Feature/Conversation/ReplyVisibilityTest.php tests/Feature/Authorization/ConversationAuthorizationTest.php
-git commit -m "T07.4: internal-note leakage tests and conversation authorization matrix"
+git commit -m "test(conversation): cover internal-note leakage and route access" --trailer "Refs: T07.4"
 ```
 
 ---
@@ -1747,7 +1747,7 @@ Expected: `vue-tsc` exits 0; Vite prints `✓ built in …`. If `vue-tsc` report
 
 ```bash
 git add resources/js/lib/attachments.ts resources/js/components/tickets/ConversationPanel.vue resources/js/components/tickets/AttachmentList.vue
-git commit -m "T07.5: conversation timeline, reply form with internal-note toggle, attachment list"
+git commit -m "feat(conversation): add timeline, reply form and attachment list" --trailer "Refs: T07.5"
 ```
 
 ---

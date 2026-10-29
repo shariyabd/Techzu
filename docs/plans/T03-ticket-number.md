@@ -290,7 +290,7 @@ Expected: Pint `PASS`, PHPStan `[OK] No errors`, Pest all green.
 
 ```bash
 git add config/tickets.php app/Services/Tickets/TicketNumberGenerator.php tests/Feature/Services/Tickets/TicketNumberGeneratorTest.php
-git commit -m "T03.1: ticket number generator with per-year counter row (TD-022)"
+git commit -m "feat(tickets): generate ticket numbers from a per-year counter row" --trailer "Refs: T03.1" --trailer "Implements: TD-022"
 ```
 
 ---
@@ -439,7 +439,7 @@ Expected: all green. Under `--parallel`, `concurrentConnection()` points B at th
 
 ```bash
 git add tests/Concurrency/TicketNumberConcurrencyTest.php
-git commit -m "T03.2: prove ticket number row lock across two connections (TD-022, TD-032)"
+git commit -m "test(tickets): prove ticket number row lock across connections" --trailer "Refs: T03.2" --trailer "Implements: TD-022, TD-032"
 ```
 
 ---

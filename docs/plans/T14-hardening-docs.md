@@ -292,7 +292,7 @@ it('serves the activity timeline from activity_log(subject_type, subject_id, cre
 
 ```bash
 git add tests/Feature/Performance/IndexUsageTest.php
-git commit -m "T14.1: EXPLAIN audit proving the TD-021 indexes are used"
+git commit -m "test(db): verify indexes are used with an EXPLAIN audit" --trailer "Refs: T14.1" --trailer "Implements: TD-021"
 ```
 
 ---
@@ -340,7 +340,7 @@ it('allows the same access once the relation is eager-loaded', function (): void
 
 ```bash
 git add tests/Feature/Performance/LazyLoadingTest.php
-git commit -m "T14.2: confirm preventLazyLoading is active"
+git commit -m "test(core): confirm lazy-loading prevention is active" --trailer "Refs: T14.2"
 ```
 
 ---
@@ -751,7 +751,7 @@ describe('foreign tickets', function (): void {
 
 ```bash
 git add tests/Feature/Security/SecurityChecklistTest.php
-git commit -m "T14.3: TD-120 security checklist, one test per measure"
+git commit -m "test(security): add one test per security checklist measure" --trailer "Refs: T14.3" --trailer "Implements: TD-120"
 ```
 
 ---
@@ -896,7 +896,7 @@ return [
 
 ```bash
 git add app/Http/Middleware/AuthorizeApiDocs.php config/scramble.php docs/api/openapi.json tests/Feature/Docs/ApiDocsTest.php
-git commit -m "T14.4: admin-gated Scramble docs and exported OpenAPI spec"
+git commit -m "feat(docs): serve admin-gated API docs and export OpenAPI spec" --trailer "Refs: T14.4"
 ```
 
 ---
@@ -1198,7 +1198,7 @@ Throttled responses carry `X-RateLimit-Limit`, `X-RateLimit-Remaining` and, on a
 
 ```bash
 git add docs/API.md tests/Feature/Docs/ApiDocsTest.php
-git commit -m "T14.5: API reference with auth flow, error codes and a route drift test"
+git commit -m "docs(api): add API reference with auth flow and error codes" --trailer "Refs: T14.5"
 ```
 
 ---
@@ -1619,7 +1619,7 @@ Tests run on MySQL, not SQLite, because row locks, FULLTEXT and `INSERT IGNORE` 
 
 ```bash
 git add docs/TECHNICAL.md
-git commit -m "T14.6: technical overview: architecture, flows, SLA, concurrency, operations"
+git commit -m "docs: add technical overview of architecture and operations" --trailer "Refs: T14.6"
 ```
 
 ---
@@ -1798,7 +1798,7 @@ Holidays are managed in the app, under Admin → Holidays.
 
 ```bash
 git add README.md
-git commit -m "T14.7: README with Sail and local setup, demo accounts, workers and tests"
+git commit -m "docs: add README with setup, demo accounts, workers and tests" --trailer "Refs: T14.7"
 ```
 
 ---
@@ -1827,7 +1827,7 @@ git commit -m "T14.7: README with Sail and local setup, demo accounts, workers a
 
 ```bash
 git add docs/api/openapi.json
-git commit -m "T14.8: regenerate OpenAPI spec"
+git commit -m "docs(api): regenerate OpenAPI spec" --trailer "Refs: T14.8"
 ```
 
 - [ ] **Step 6: Confirm the docs are complete.**

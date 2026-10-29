@@ -519,7 +519,7 @@ Expected: PASS.
 
 ```bash
 git add config/tickets.php app/Services/Assignment/UnassignedTicketAssigner.php app/Actions/Assignment/ClaimTicket.php tests/Feature/Assignment/ClaimTicketTest.php tests/Feature/Assignment/ClaimRaceTest.php
-git commit -m "T06.1: atomic ClaimTicket with two-connection race tests"
+git commit -m "feat(assignment): add atomic ticket claim with race tests" --trailer "Refs: T06.1"
 ```
 
 ---
@@ -726,7 +726,7 @@ Expected: PASS (11 tests).
 
 ```bash
 git add app/Services/Assignment/AgentSelector.php tests/Feature/Assignment/AgentSelectorTest.php
-git commit -m "T06.2: AgentSelector (category, availability, load, round-robin tie-break)"
+git commit -m "feat(assignment): select agents by category, availability and load" --trailer "Refs: T06.2"
 ```
 
 ---
@@ -913,7 +913,7 @@ Expected: PASS (9 tests).
 
 ```bash
 git add app/Actions/Assignment/AssignTicket.php tests/Feature/Assignment/AssignTicketTest.php
-git commit -m "T06.3: AssignTicket for admin assignment and agent handoff"
+git commit -m "feat(assignment): add admin assignment and agent handoff" --trailer "Refs: T06.3"
 ```
 
 ---
@@ -1305,7 +1305,7 @@ Expected: PASS. If a T05 test fails because a ticket it created is now auto-assi
 
 ```bash
 git add app/Actions/Assignment/AssignTicketAutomatically.php app/Jobs/AutoAssignTicket.php app/Listeners/QueueAutoAssignment.php tests/Feature/Assignment/AutoAssignTicketTest.php tests/Feature/Assignment/QueueAutoAssignmentTest.php
-git commit -m "T06.4: automatic assignment job, action and TicketCreated listener"
+git commit -m "feat(assignment): auto-assign new tickets via queued job" --trailer "Refs: T06.4"
 ```
 
 ---
@@ -1793,7 +1793,7 @@ Expected: PASS (T05's page tests are unaffected; the panel's props are unchanged
 
 ```bash
 git add app/Http/Requests/Assignment/AssignTicketRequest.php app/Http/Controllers/Web/AssignmentController.php app/Http/Controllers/Api/V1/AssignmentController.php routes/web/assignment.php routes/api/v1/assignment.php resources/js/components/tickets/AssignmentPanel.vue tests/Feature/Http/AssignmentEndpointsTest.php
-git commit -m "T06.5: claim and assign endpoints (web + API) and AssignmentPanel"
+git commit -m "feat(assignment): add claim and assign endpoints and panel" --trailer "Refs: T06.5"
 ```
 
 ---
@@ -1891,7 +1891,7 @@ git checkout app/Http/Controllers/Web/AssignmentController.php app/Http/Controll
 
 ```bash
 git add tests/Feature/Authorization/AssignmentAuthorizationTest.php
-git commit -m "T06.6: assignment routes authorization matrix"
+git commit -m "test(auth): cover assignment routes in authorization matrix" --trailer "Refs: T06.6"
 ```
 
 ---
@@ -1930,7 +1930,7 @@ Expected:
 - `event:list`: `QueueAutoAssignment@handle` under `TicketCreated`.
 - `route:list`: the four claim/assign routes in addition to T05's.
 
-Squash-merge message: `T06: concurrency-safe claim, manual and automatic assignment` with body `TD-032, TD-050, TD-051, TD-052, TD-053, TD-072, TD-110, TD-130`.
+Landing: rebase and fast-forward into `main` (README §2 step 9). No squash. Across the task's commits, the `Implements:` trailers cover TD-032, TD-050, TD-051, TD-052, TD-053, TD-072, TD-110, TD-130.
 
 ## Contract notes for controller
 

@@ -1020,7 +1020,8 @@ The result is cached in `Cache::remember('dashboard:'.$scope, 60)`.
   1. An **implementer** subagent works test-first.
   2. A **spec reviewer** subagent checks the work against the acceptance criteria.
   3. A **code-quality reviewer** subagent checks it against `CLAUDE.md`.
-- Every task must pass the gate `pint --test && phpstan analyse && pest` before it's merged into `main` as one commit.
+- One Conventional Commit per subtask, with the plan subtask in a `Refs:` trailer and no co-author trailer. Every commit must pass the gate `pint --test && phpstan analyse && pest` on its own.
+- `main` is the only remote branch. Task branches are rebased and fast-forwarded into it by the owner after their review. There are no squash merges and no merge commits, so the commit-by-commit history stays linear and traceable.
 - At most 4 subagents run in parallel per wave.
 - Conflict avoidance is designed into the structure:
   - routes are split per feature (`routes/api/v1/*.php`, `routes/web/*.php`)
@@ -1030,13 +1031,15 @@ The result is cached in `Cache::remember('dashboard:'.$scope, 60)`.
   - the ticket detail page is assembled from per-feature components
 
 **Why.**
-- Each commit is independently reviewable and revertible.
+- Each commit is independently reviewable and revertible, and `git log --grep 'Refs: T06'` traces any commit back to its plan subtask.
 - Parallel work can't collide on shared files.
 - Independent reviewers catch what the implementer missed.
 
 **Alternatives rejected.**
 - *Horizontal layers (all migrations → all actions → all controllers → all UI).* Nothing is testable end to end until the end.
 - *One long-running agent.* No independent review, and its context fills up.
+- *Squash-merge per task.* One giant commit per task, which hides the subtask steps a reviewer reads commit by commit.
+- *Plan numbers in the subject (`T06.1: ...`).* Non-standard. A `Refs:` trailer keeps the traceability, and the subject stays a Conventional Commit.
 
 **Trade-offs.**
 - Coordination overhead: the plan must be precise about file ownership.

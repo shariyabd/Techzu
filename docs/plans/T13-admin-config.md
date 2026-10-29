@@ -761,7 +761,7 @@ final class UpdateUser
 ```bash
 git add app/Exceptions/Domain/CannotChangeOwnRole.php app/Actions/Admin \
   tests/Feature/Admin/CategoryActionsTest.php tests/Feature/Admin/HolidayActionsTest.php tests/Feature/Admin/UserActionsTest.php
-git commit -m "T13.1: admin actions for categories, holidays, users and roles"
+git commit -m "feat(admin): add actions for categories, holidays, users and roles" --trailer "Refs: T13.1"
 ```
 
 ---
@@ -1531,7 +1531,7 @@ export default items;
 ```bash
 git add resources/js/types/admin.ts resources/js/components/admin resources/js/pages/admin/categories \
   resources/js/pages/admin/holidays resources/js/pages/admin/users resources/js/config/navigation/admin.ts
-git commit -m "T13.2: admin pages for categories, holidays and users"
+git commit -m "feat(admin): add category, holiday and user admin pages" --trailer "Refs: T13.2"
 ```
 
 ---
@@ -2095,7 +2095,7 @@ git add app/Services/Admin/AdminDirectory.php app/Http/Requests/Admin/StoreCateg
   app/Http/Controllers/Web/Admin/CategoryController.php app/Http/Controllers/Api/V1/Admin/CategoryController.php \
   app/Http/Controllers/Api/V1/CategoryController.php routes/web/admin.php routes/api/v1/admin.php \
   tests/Feature/Admin/CategoryManagementTest.php
-git commit -m "T13.3: category administration and public category list"
+git commit -m "feat(admin): add category admin and public category list" --trailer "Refs: T13.3"
 ```
 
 ---
@@ -2536,7 +2536,7 @@ git add app/Http/Requests/Admin/StoreHolidayRequest.php app/Http/Requests/Admin/
   app/Http/Requests/Admin/IndexHolidaysRequest.php app/Http/Resources/V1/HolidayResource.php \
   app/Http/Controllers/Web/Admin/HolidayController.php app/Http/Controllers/Api/V1/Admin/HolidayController.php \
   routes/web/admin.php routes/api/v1/admin.php tests/Feature/Admin/HolidayManagementTest.php
-git commit -m "T13.4: holiday administration with SLA cache invalidation"
+git commit -m "feat(admin): add holiday admin with SLA cache invalidation" --trailer "Refs: T13.4"
 ```
 
 ---
@@ -3069,7 +3069,7 @@ git add app/Http/Requests/Admin/IndexUsersRequest.php app/Http/Requests/Admin/St
   app/Http/Requests/Admin/UpdateUserRequest.php app/Http/Resources/V1/AdminUserResource.php \
   app/Http/Controllers/Web/Admin/UserController.php app/Http/Controllers/Api/V1/Admin/UserController.php \
   routes/web/admin.php routes/api/v1/admin.php tests/Feature/Admin/UserManagementTest.php
-git commit -m "T13.5: user administration with role changes and agent profiles"
+git commit -m "feat(admin): add user admin with role changes and agent profiles" --trailer "Refs: T13.5"
 ```
 
 ---
@@ -3205,7 +3205,7 @@ it('serves the public category list to every role', function (Role $role): void 
 
 ```bash
 git add tests/Feature/Authorization/AdminAuthorizationTest.php
-git commit -m "T13.6: admin authorization matrix for web and API"
+git commit -m "test(auth): cover admin routes in authorization matrix" --trailer "Refs: T13.6"
 ```
 
 ---

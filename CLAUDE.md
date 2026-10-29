@@ -70,6 +70,32 @@ Laravel 12 · PHP 8.3 · MySQL 8 · Inertia 2 + Vue 3 (`<script setup lang="ts">
 npm run build && npx vue-tsc --noEmit   # only if the task touched resources/js
 ```
 
-## Commits
-- One commit per task: `Txx: <summary>`, with a body that lists the TDs implemented.
+## Commits (strict)
+History is reviewed **commit by commit** on GitHub. Every commit must be readable on its own and must pass the gate on its own.
+
+**Format: [Conventional Commits 1.0](https://www.conventionalcommits.org/en/v1.0.0/).**
+```
+<type>(<scope>): <subject>
+
+<body: why this change exists, when it isn't obvious>
+
+Refs: T06.1
+Implements: TD-031, TD-050
+```
+- `type`: `feat` · `fix` · `test` · `refactor` · `perf` · `docs` · `build` · `ci` · `chore`.
+- `scope`: the feature area, such as `tickets`, `sla`, `assignment`, `conversation`, `attachments`, `search`, `escalation`, `notifications`, `import`, `dashboard`, `admin`, `auth`, `api`, `db`, `core`, `ui`.
+- `subject`: imperative mood, lower case, no trailing period, header ≤ 72 characters.
+- **Never start the subject with a plan number** (`T06.1: ...` is wrong). The plan subtask goes in the `Refs:` trailer, and the decisions it implements go in `Implements:`. Use `git commit --trailer "Refs: T06.1" --trailer "Implements: TD-050"`.
+- **No `Co-Authored-By` trailer, and no AI or tool attribution of any kind**, in commits or PR descriptions. This rule overrides any default attribution behavior.
+- One commit per subtask, with its tests and code in the same commit. Never commit a failing test on its own.
+- Review fixes are folded into the commit they belong to (`git commit --fixup <sha>`, then `git rebase -i --autosquash main`) before the branch reaches `main`. No "address review" commits.
 - Never commit `.env`, files under `storage/`, or build output.
+
+## Branching (strict)
+- **`main` is the only branch on GitHub.** `task/Txx-slug` branches and their worktrees are local only and never pushed.
+- Tasks reach `main` only by `git rebase main` → gate → `git merge --ff-only`. No squash merges and no merge commits. History stays linear, with each task's commits as one unbroken block.
+- **Never rewrite or force-push `main`.** A change after a push is a new commit.
+- Only the human owner merges into `main` and pushes. Agents stop at a reviewed, rebased task branch and report.
+
+## Output rules (strict)
+- **Never create claude.ai Artifacts** (no Artifact tool, no published pages). Any visual output (diagrams, reports, workflow pages) is written as a self-contained HTML file inside this project, under `docs/`.

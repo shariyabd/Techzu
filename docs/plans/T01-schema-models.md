@@ -1027,9 +1027,7 @@ Expected: `PASS` and `[OK] No errors`.
 
 ```bash
 git add app/Enums app/Exceptions/Domain/InvalidStatusTransition.php app/Exceptions/Domain/TicketAlreadyClaimed.php app/Exceptions/Domain/AgentNotEligible.php app/Exceptions/Domain/TicketClosed.php app/Exceptions/Domain/ImportHeaderInvalid.php tests/Unit/Enums tests/Unit/Exceptions
-git commit -m "T01.1: domain enums with TD-040 transitions, TD-011 permission matrix and domain exceptions
-
-TD-010, TD-011, TD-020, TD-040, TD-110"
+git commit -m "feat(domain): add domain enums, permission matrix and domain exceptions" --trailer "Refs: T01.1" --trailer "Implements: TD-010, TD-011, TD-020, TD-040, TD-110"
 ```
 
 ---
@@ -1631,9 +1629,7 @@ Expected: `PASS` and `[OK] No errors`. If Pint reports the published activitylog
 
 ```bash
 git add config/activitylog.php database/migrations/2026_10_30_000100_create_activity_log_table.php database/migrations/2026_10_30_000101_add_event_column_to_activity_log_table.php database/migrations/2026_10_30_000102_add_batch_uuid_column_to_activity_log_table.php database/migrations/2026_10_30_000110_add_subject_created_at_index_to_activity_log_table.php database/migrations/2026_10_30_000200_add_assignment_columns_to_users_table.php database/migrations/2026_10_30_000300_create_categories_table.php database/migrations/2026_10_30_000310_create_agent_category_table.php database/migrations/2026_10_30_000400_create_tickets_table.php database/migrations/2026_10_30_000410_create_ticket_sequences_table.php database/migrations/2026_10_30_000500_create_ticket_replies_table.php database/migrations/2026_10_30_000510_create_attachments_table.php database/migrations/2026_10_30_000600_create_holidays_table.php database/migrations/2026_10_30_000700_create_ticket_imports_table.php database/migrations/2026_10_30_000710_create_ticket_import_errors_table.php database/migrations/2026_10_30_000800_create_notifications_table.php tests/Feature/Database/SchemaTest.php
-git commit -m "T01.2: schema with TD-021 indexes, TD-025 delete rules and activitylog tables
-
-TD-021, TD-022, TD-023, TD-024, TD-025, TD-026, TD-060"
+git commit -m "feat(db): add schema with indexes, delete rules and activitylog tables" --trailer "Refs: T01.2" --trailer "Implements: TD-021, TD-022, TD-023, TD-024, TD-025, TD-026, TD-060"
 ```
 
 ---
@@ -1850,9 +1846,7 @@ Expected: all green.
 
 ```bash
 git add database/seeders/RolesAndPermissionsSeeder.php tests/Pest.php tests/Feature/Database/RolesAndPermissionsSeederTest.php
-git commit -m "T01.3: idempotent roles/permissions seeder and shared Pest bootstrap
-
-TD-010, TD-011, TD-031, TD-032"
+git commit -m "feat(db): add idempotent roles/permissions seeder and Pest bootstrap" --trailer "Refs: T01.3" --trailer "Implements: TD-010, TD-011, TD-031, TD-032"
 ```
 
 ---
@@ -3234,9 +3228,7 @@ Expected: all green.
 
 ```bash
 git add app/Models database/factories app/Http/Resources/V1/UserSummaryResource.php app/Http/Resources/V1/CategoryResource.php tests/Feature/Models tests/Feature/Http/Resources/V1/SummaryResourcesTest.php
-git commit -m "T01.4: domain models, factories with role/SLA states and summary resources
-
-TD-010, TD-020, TD-023, TD-024, TD-026, TD-060, TD-120"
+git commit -m "feat(domain): add models, factories and summary resources" --trailer "Refs: T01.4" --trailer "Implements: TD-010, TD-020, TD-023, TD-024, TD-026, TD-060, TD-120"
 ```
 
 ---
@@ -3551,9 +3543,7 @@ Expected: all green.
 
 ```bash
 git add database/seeders/DemoSeeder.php database/seeders/DatabaseSeeder.php tests/Feature/Database/DemoSeederTest.php
-git commit -m "T01.5: demo seeder with documented accounts and mixed-state tickets
-
-TD-010, TD-022"
+git commit -m "feat(db): add demo seeder with documented accounts and tickets" --trailer "Refs: T01.5" --trailer "Implements: TD-010, TD-022"
 ```
 
 ---
@@ -3888,9 +3878,7 @@ Expected: exits 0 and prints no `Parse error`. If `npx` can't download Chromium 
 
 ```bash
 git add docs/ERD.md
-git commit -m "T01.6: Mermaid ERD covering domain, package and framework tables
-
-TD-020, TD-021, TD-025, TD-026"
+git commit -m "docs(erd): add Mermaid ERD for domain, package and framework tables" --trailer "Refs: T01.6" --trailer "Implements: TD-020, TD-021, TD-025, TD-026"
 ```
 
 ---

@@ -536,7 +536,7 @@ Expected: PASS (11 tests).
 
 ```bash
 git add app/Events tests/Unit/Events/EventContractTest.php
-git commit -m "T05.1: domain event contract (all ticket events)"
+git commit -m "feat(tickets): add ticket domain events" --trailer "Refs: T05.1"
 ```
 
 #### 5.1.b SlaQuery
@@ -752,7 +752,7 @@ Expected: PASS (7 tests). If "agrees with Ticket::slaState()" fails, T01's prece
 
 ```bash
 git add app/Services/Sla/SlaQuery.php tests/Feature/Sla/SlaQueryTest.php
-git commit -m "T05.1: SlaQuery index-backed SLA state predicates"
+git commit -m "feat(sla): add index-backed SLA state predicates" --trailer "Refs: T05.1"
 ```
 
 #### 5.1.c Config and AttachmentStorer
@@ -1012,7 +1012,7 @@ Expected: PASS (4 tests).
 
 ```bash
 git add config/attachments.php config/tickets.php app/Services/Attachments/AttachmentStorer.php tests/Feature/Attachments/AttachmentStorerTest.php
-git commit -m "T05.1: attachment storage with compensation, attachments and per_page config"
+git commit -m "feat(attachments): add attachment storage with compensation" --trailer "Refs: T05.1"
 ```
 
 ---
@@ -1311,7 +1311,7 @@ Expected: PASS (9 allowed + 16 forbidden + 9 other = 34 tests).
 
 ```bash
 git add app/Actions/Tickets/ChangeTicketStatus.php tests/Feature/Actions/Tickets/ChangeTicketStatusTest.php
-git commit -m "T05.2: ChangeTicketStatus with state machine and SLA pause/resume"
+git commit -m "feat(tickets): change status via state machine with SLA pause" --trailer "Refs: T05.2"
 ```
 
 #### 5.2.b ChangeTicketPriority
@@ -1493,7 +1493,7 @@ Expected: PASS (6 tests).
 
 ```bash
 git add app/Actions/Tickets/ChangeTicketPriority.php tests/Feature/Actions/Tickets/ChangeTicketPriorityTest.php
-git commit -m "T05.2: ChangeTicketPriority recalculates SLA from start"
+git commit -m "feat(tickets): recalculate SLA from start on priority change" --trailer "Refs: T05.2"
 ```
 
 #### 5.2.c UpdateTicket
@@ -1642,7 +1642,7 @@ Expected: PASS (3 tests).
 
 ```bash
 git add app/Actions/Tickets/UpdateTicket.php tests/Feature/Actions/Tickets/UpdateTicketTest.php
-git commit -m "T05.2: UpdateTicket for content fields"
+git commit -m "feat(tickets): add UpdateTicket action for content fields" --trailer "Refs: T05.2"
 ```
 
 #### 5.2.d CreateTicket
@@ -1895,7 +1895,7 @@ Expected: PASS (49 tests); `[OK] No errors`.
 
 ```bash
 git add app/Actions/Tickets/CreateTicket.php tests/Feature/Actions/Tickets/CreateTicketTest.php
-git commit -m "T05.2: CreateTicket with number, SLA, attachments and compensation"
+git commit -m "feat(tickets): create tickets with number, SLA and attachments" --trailer "Refs: T05.2"
 ```
 
 ---
@@ -2314,7 +2314,7 @@ Expected: PASS (13 tests).
 
 ```bash
 git add app/Listeners/RecordTicketActivity.php tests/Feature/Activity/RecordTicketActivityTest.php
-git commit -m "T05.3: RecordTicketActivity listener and Ticket::activitiesVisibleTo"
+git commit -m "feat(activity): record ticket activity from domain events" --trailer "Refs: T05.3"
 ```
 
 ---
@@ -3215,7 +3215,7 @@ Expected: `[OK] No errors`.
 
 ```bash
 git add app/Http/Resources/V1/TicketResource.php app/Http/Resources/V1/TicketListResource.php app/Http/Resources/V1/ActivityResource.php app/Http/Resources/V1/AttachmentResource.php app/Services/Tickets/TicketListQuery.php app/Services/Tickets/TicketPageData.php app/Http/Requests/Tickets tests/Feature/Tickets/TicketReadLayerTest.php
-git commit -m "T05.4: shared ticket requests, resources and read services"
+git commit -m "feat(tickets): add shared ticket requests, resources and read services" --trailer "Refs: T05.4"
 ```
 
 #### 5.4.5 Web controller and routes
@@ -4479,7 +4479,7 @@ Expected: PASS (23 tests).
 
 ```bash
 git add app/Http/Controllers/Web/TicketController.php routes/web/tickets.php tests/Feature/Http/Web/TicketPagesTest.php resources/js/types/tickets.ts resources/js/config/navigation/tickets.ts resources/js/components/tickets resources/js/pages/tickets resources/js/components/ui/badge resources/js/components/ui/select resources/js/components/ui/textarea resources/js/components/ui/table
-git commit -m "T05.4: web ticket pages, controller and components"
+git commit -m "feat(tickets): add web ticket pages, controller and components" --trailer "Refs: T05.4"
 ```
 (If a `components/ui/*` folder already existed before step 23, `git add` simply records no change for it.)
 
@@ -4794,7 +4794,7 @@ Expected: PASS (11 tests).
 
 ```bash
 git add app/Http/Controllers/Api/V1/TicketController.php routes/api/v1/tickets.php tests/Feature/Http/Api/TicketApiTest.php
-git commit -m "T05.5: ticket API v1 endpoints and activities"
+git commit -m "feat(api): add ticket and activity endpoints to API v1" --trailer "Refs: T05.5"
 ```
 
 ---
@@ -4933,7 +4933,7 @@ git checkout app/Http/Requests/Tickets/UpdateTicketRequest.php
 
 ```bash
 git add tests/Feature/Authorization/TicketRoutesAuthorizationTest.php
-git commit -m "T05.6: ticket routes authorization matrix (web + API)"
+git commit -m "test(auth): cover ticket routes in authorization matrix" --trailer "Refs: T05.6"
 ```
 
 - [ ] **Step 5: write the query-count test** `tests/Feature/Performance/TicketQueryCountTest.php`
@@ -5039,7 +5039,7 @@ git checkout app/Services/Tickets/TicketListQuery.php
 
 ```bash
 git add tests/Feature/Performance/TicketQueryCountTest.php
-git commit -m "T05.6: query-count guards for ticket index and show"
+git commit -m "test(tickets): guard query counts for ticket index and show" --trailer "Refs: T05.6"
 ```
 
 ---
@@ -5082,7 +5082,7 @@ Expected:
 - `route:list`: 7 web `tickets.*` and 7 `api.v1.tickets.*` routes.
 - `event:list`: 8 `RecordTicketActivity@handle...` entries.
 
-Squash-merge message: `T05: ticket lifecycle (events, actions, activity log, web + API)` with body `TD-001, TD-012, TD-023, TD-024, TD-026, TD-040, TD-042, TD-043, TD-053, TD-061, TD-070, TD-101, TD-120, TD-130`.
+Landing: rebase and fast-forward into `main` (README §2 step 9). No squash. Across the task's commits, the `Implements:` trailers cover TD-001, TD-012, TD-023, TD-024, TD-026, TD-040, TD-042, TD-043, TD-053, TD-061, TD-070, TD-101, TD-120, TD-130.
 
 ## Contract notes for controller
 

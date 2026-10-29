@@ -643,7 +643,7 @@ final class BusinessCalendar
 - [ ] **Step 7: Commit.**
   ```bash
   git add app/Services/Sla/BusinessCalendar.php tests/Unit/Sla/BusinessCalendarTest.php
-  git commit -m "T02.1: add pure window-stepping BusinessCalendar (TD-041)"
+  git commit -m "feat(sla): add pure window-stepping business calendar" --trailer "Refs: T02.1" --trailer "Implements: TD-041"
   ```
 
 ### 2.2 HolidayRepository (TD-045, TD-101)
@@ -765,7 +765,7 @@ final class HolidayRepository
 - [ ] **Step 7: Commit.**
   ```bash
   git add app/Services/Sla/HolidayRepository.php tests/Feature/Sla/HolidayRepositoryTest.php
-  git commit -m "T02.2: add cached HolidayRepository (TD-101)"
+  git commit -m "feat(sla): add cached holiday repository" --trailer "Refs: T02.2" --trailer "Implements: TD-101"
   ```
 
 ### 2.3 SlaDeadlines + SlaCalculator (TD-042, TD-043, TD-045)
@@ -1235,7 +1235,7 @@ final class SlaCalculator
 - [ ] **Step 9: Commit.**
   ```bash
   git add app/Services/Sla/SlaDeadlines.php app/Services/Sla/SlaCalculator.php tests/Unit/Sla/SlaCalculatorTest.php
-  git commit -m "T02.3: add SlaCalculator with pause/resume and priority recalculation (TD-042, TD-043)"
+  git commit -m "feat(sla): add SLA calculator with pause, resume and recalculation" --trailer "Refs: T02.3" --trailer "Implements: TD-042, TD-043"
   ```
 
 ### 2.4 Config files + SlaServiceProvider wiring (TD-045, TD-130)
@@ -1474,7 +1474,7 @@ return [
 - [ ] **Step 11: Commit.**
   ```bash
   git add config/sla.php config/business_hours.php app/Providers/SlaServiceProvider.php bootstrap/providers.php tests/Feature/Sla/SlaServiceProviderTest.php
-  git commit -m "T02.4: wire SLA config and SlaServiceProvider (TD-045, TD-130)"
+  git commit -m "feat(sla): wire SLA config and service provider" --trailer "Refs: T02.4" --trailer "Implements: TD-045, TD-130"
   ```
 
 ## 6. Acceptance criteria

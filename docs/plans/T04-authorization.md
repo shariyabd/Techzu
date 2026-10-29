@@ -517,7 +517,7 @@ final class AuthorizationMatrix
 - [ ] **Step 8: Commit.**
   ```bash
   git add tests/Support/AuthorizationMatrix.php tests/Support/TicketRelation.php tests/Feature/Authorization/AuthorizationMatrixTest.php
-  git commit -m "T04.1: add AuthorizationMatrix test helper (TD-010, TD-012)"
+  git commit -m "test(auth): add authorization matrix test helper" --trailer "Refs: T04.1" --trailer "Implements: TD-010, TD-012"
   ```
 
 ### 4.2 TicketPolicy (TD-010, TD-011, TD-012)
@@ -869,7 +869,7 @@ final class TicketPolicy
 - [ ] **Step 7: Commit.**
   ```bash
   git add app/Policies/TicketPolicy.php tests/Feature/Authorization/TicketPolicyTest.php
-  git commit -m "T04.2: add TicketPolicy with role x ownership matrix (TD-010, TD-011, TD-012)"
+  git commit -m "feat(auth): add ticket policy with role and ownership rules" --trailer "Refs: T04.2" --trailer "Implements: TD-010, TD-011, TD-012"
   ```
 
 ### 4.3 TicketReplyPolicy + AttachmentPolicy (TD-024, TD-120)
@@ -1053,7 +1053,7 @@ final class AttachmentPolicy
 - [ ] **Step 9: Commit.**
   ```bash
   git add app/Policies/TicketReplyPolicy.php app/Policies/AttachmentPolicy.php tests/Feature/Authorization/TicketReplyPolicyTest.php tests/Feature/Authorization/AttachmentPolicyTest.php
-  git commit -m "T04.3: add reply and attachment policies hiding internal content (TD-024, TD-120)"
+  git commit -m "feat(auth): add reply and attachment policies hiding internal content" --trailer "Refs: T04.3" --trailer "Implements: TD-024, TD-120"
   ```
 
 ### 4.4 Admin policies + viewDashboard Gate (TD-010, TD-011)
@@ -1352,7 +1352,7 @@ use Illuminate\Support\Facades\Gate;
 - [ ] **Step 13: Commit.**
   ```bash
   git add app/Policies/CategoryPolicy.php app/Policies/HolidayPolicy.php app/Policies/UserPolicy.php app/Policies/TicketImportPolicy.php app/Policies/DashboardPolicy.php app/Providers/AppServiceProvider.php tests/Feature/Authorization/AdminPoliciesTest.php tests/Feature/Authorization/DashboardGateTest.php
-  git commit -m "T04.4: add admin policies and viewDashboard gate (TD-010, TD-011)"
+  git commit -m "feat(auth): add admin policies and viewDashboard gate" --trailer "Refs: T04.4" --trailer "Implements: TD-010, TD-011"
   ```
 
 ### 4.5 Shared auth props in HandleInertiaRequests (TD-120)
@@ -1507,7 +1507,7 @@ use Illuminate\Http\Request;
 - [ ] **Step 11: Commit.**
   ```bash
   git add app/Http/Middleware/HandleInertiaRequests.php tests/Feature/Authorization/SharedAuthPropsTest.php
-  git commit -m "T04.5: share auth.user.roles and auth.can via Inertia (TD-120)"
+  git commit -m "feat(auth): share user roles and abilities via Inertia" --trailer "Refs: T04.5" --trailer "Implements: TD-120"
   ```
 
 ## 6. Acceptance criteria

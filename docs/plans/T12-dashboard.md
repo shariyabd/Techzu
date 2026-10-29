@@ -554,7 +554,7 @@ final class DashboardStats
 ```bash
 git add database/migrations/2026_10_29_120000_add_status_resolved_at_index_to_tickets_table.php \
   TECHNICAL_DECISIONS.md app/Services/Dashboard/DashboardStats.php tests/Feature/Dashboard/DashboardStatsTest.php
-git commit -m "T12.1: DashboardStats with three cached aggregate queries"
+git commit -m "feat(dashboard): add cached dashboard aggregate queries" --trailer "Refs: T12.1"
 ```
 
 ---
@@ -879,7 +879,7 @@ git add app/Http/Resources/V1/DashboardResource.php app/Http/Resources/V1/Dashbo
   app/Http/Controllers/Web/DashboardController.php app/Http/Controllers/Api/V1/DashboardController.php \
   routes/web/dashboard.php routes/api/v1/dashboard.php \
   tests/Feature/Dashboard/DashboardHttpTest.php tests/Feature/Authorization/DashboardAuthorizationTest.php
-git commit -m "T12.2: dashboard web page and API endpoint"
+git commit -m "feat(dashboard): add dashboard web route and API endpoint" --trailer "Refs: T12.2"
 ```
 
 ---
@@ -1158,7 +1158,7 @@ export default items;
 ```bash
 git add resources/js/types/dashboard.ts resources/js/components/dashboard/StatCard.vue \
   resources/js/pages/dashboard/Index.vue resources/js/config/navigation/dashboard.ts
-git commit -m "T12.3: dashboard page and navigation"
+git commit -m "feat(dashboard): add dashboard Vue page and navigation entry" --trailer "Refs: T12.3"
 ```
 
 ---

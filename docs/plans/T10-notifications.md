@@ -752,7 +752,7 @@ Expected: Pint clean; PHPStan `[OK] No errors`.
 
 ```bash
 git add app/Notifications tests/Feature/Notifications/NotificationQueueingTest.php
-git commit -m "T10.1: queued notification classes with the {ticket_number,title,body,url} payload"
+git commit -m "feat(notifications): add queued ticket notification classes" --trailer "Refs: T10.1"
 ```
 
 ---
@@ -1363,7 +1363,7 @@ git add app/Services/Notifications/Recipients.php app/Listeners/SendTicketCreate
   app/Listeners/SendTicketResolvedNotifications.php app/Listeners/SendSlaNotifications.php \
   app/Listeners/SendImportFinishedNotification.php tests/Feature/Notifications/NotificationRecipientsTest.php \
   tests/Feature/Notifications/InternalNoteLeakageTest.php tests/Feature/Notifications/NotificationQueueingTest.php
-git commit -m "T10.2: notification listeners with spec §11 recipients, no self-notices, no internal-note leakage"
+git commit -m "feat(notifications): notify recipients without leaking internal notes" --trailer "Refs: T10.2"
 ```
 
 ---
@@ -1960,7 +1960,7 @@ git add app/Actions/Notifications app/Services/Notifications/NotificationFeed.ph
   app/Http/Controllers/Api/V1/NotificationController.php routes/web/notifications.php routes/api/v1/notifications.php \
   app/Http/Middleware/HandleInertiaRequests.php tests/Feature/Notifications/NotificationEndpointsTest.php \
   tests/Feature/Authorization/NotificationAuthorizationTest.php resources/js/pages/notifications/Index.vue
-git commit -m "T10.3: notification inbox endpoints (web + API), owner-scoped mark-read, unread_count prop"
+git commit -m "feat(notifications): add inbox endpoints with owner-scoped mark-read" --trailer "Refs: T10.3"
 ```
 (Drop `resources/js/pages/notifications/Index.vue` from the `git add` if T10.4 commits it.)
 
@@ -2188,7 +2188,7 @@ Expected: PASS.
 ```bash
 git add resources/js/types/notifications.ts resources/js/components/notifications/NotificationBell.vue \
   resources/js/config/navigation/notifications.ts resources/js/pages/notifications/Index.vue
-git commit -m "T10.4: notification bell in navigation and inbox page"
+git commit -m "feat(notifications): add navigation bell and inbox page" --trailer "Refs: T10.4"
 ```
 
 ---

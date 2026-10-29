@@ -226,7 +226,7 @@ Expected: Pint clean; PHPStan `[OK] No errors`.
 
 ```bash
 git add app/Services/Tickets/FulltextSearchTerm.php tests/Unit/Tickets/FulltextSearchTermTest.php
-git commit -m "T08.1: FULLTEXT boolean-mode input sanitizer"
+git commit -m "feat(search): sanitize FULLTEXT boolean-mode input" --trailer "Refs: T08.1"
 ```
 
 ---
@@ -682,7 +682,7 @@ Expected: Pint clean; PHPStan `[OK] No errors`.
 
 ```bash
 git add app/Services/Tickets/TicketFilter.php tests/Feature/Tickets/TicketFilterTest.php
-git commit -m "T08.2: TicketFilter with indexed filters, FULLTEXT/LIKE keyword, SLA state and whitelisted sort"
+git commit -m "feat(search): add ticket filter with keyword, SLA state and sort" --trailer "Refs: T08.2"
 ```
 
 ---
@@ -1020,7 +1020,7 @@ Expected: Pint clean; PHPStan `[OK] No errors`.
 git add app/Http/Requests/Tickets/IndexTicketsRequest.php app/Services/Tickets/TicketListQuery.php \
   app/Services/Tickets/TicketPageData.php tests/Feature/Tickets/TicketIndexFilteringTest.php \
   tests/Feature/Tickets/TicketSlaFilterTest.php
-git commit -m "T08.3: TicketFilter plugged into TicketListQuery; IndexTicketsRequest filter rules"
+git commit -m "feat(search): apply ticket filter to the ticket list query" --trailer "Refs: T08.3"
 ```
 
 ---
@@ -1122,7 +1122,7 @@ Expected: PASS for both files in one process (the totals in `keeps T05 behaviour
 ```bash
 ./vendor/bin/pint tests/Database
 git add tests/Database/TicketKeywordSearchTest.php
-git commit -m "T08.4: FULLTEXT keyword search tested on committed MySQL rows"
+git commit -m "test(search): cover FULLTEXT keyword search on committed rows" --trailer "Refs: T08.4"
 ```
 
 ---
@@ -1479,7 +1479,7 @@ Expected: PASS.
 
 ```bash
 git add resources/js/types/ticket-filters.ts resources/js/components/tickets/TicketFilterBar.vue resources/js/pages/tickets/Index.vue
-git commit -m "T08.5: ticket filter bar with query-string sync"
+git commit -m "feat(search): add filter bar with query-string sync" --trailer "Refs: T08.5"
 ```
 
 ---

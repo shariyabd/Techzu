@@ -415,7 +415,7 @@ final class TicketCsvReader
 
 ```bash
 git add config/imports.php app/Services/Imports/TicketCsvReader.php tests/Unit/Imports/TicketCsvReaderTest.php
-git commit -m "T11.1: imports config and streaming CSV reader"
+git commit -m "feat(import): add imports config and streaming CSV reader" --trailer "Refs: T11.1"
 ```
 
 ---
@@ -894,7 +894,7 @@ final class ImportTicketRow
 git add app/Services/Imports/ImportTicketRowRules.php app/Actions/Imports/ImportTicketRow.php \
   tests/Support/Imports/ImportCsvFixture.php tests/Feature/Imports/ImportTicketRowRulesTest.php \
   tests/Feature/Imports/ImportTicketRowTest.php
-git commit -m "T11.2: import row rules and ImportTicketRow action"
+git commit -m "feat(import): validate and import single CSV rows" --trailer "Refs: T11.2"
 ```
 
 ---
@@ -1609,7 +1609,7 @@ git add app/Actions/Imports/StartTicketImport.php app/Jobs/PrepareTicketImport.p
   app/Jobs/ImportTicketsChunk.php app/Jobs/FinalizeTicketImport.php \
   tests/Support/Imports/ImportCsvFixture.php tests/Feature/Imports/TicketImportPipelineTest.php \
   tests/Feature/Imports/PrepareTicketImportMemoryTest.php
-git commit -m "T11.3: batched, streamed import pipeline"
+git commit -m "feat(import): process CSV imports in streamed batches" --trailer "Refs: T11.3"
 ```
 
 ---
@@ -2398,7 +2398,7 @@ git add app/Http/Requests/StoreTicketImportRequest.php app/Http/Requests/ListTic
   app/Http/Controllers/Api/V1/TicketImportController.php app/Http/Controllers/Api/V1/TicketImportErrorController.php \
   routes/web/imports.php routes/api/v1/imports.php \
   tests/Feature/Imports/TicketImportHttpTest.php tests/Feature/Authorization/ImportAuthorizationTest.php
-git commit -m "T11.4: import web and API endpoints, resources, errors CSV"
+git commit -m "feat(import): add import endpoints, resources and errors CSV" --trailer "Refs: T11.4"
 ```
 
 ---
@@ -2885,7 +2885,7 @@ git add resources/js/types/imports.ts resources/js/components/imports/ImportStat
   resources/js/components/imports/ImportPagination.vue resources/js/pages/admin/imports/Index.vue \
   resources/js/pages/admin/imports/Create.vue resources/js/pages/admin/imports/Show.vue \
   resources/js/config/navigation/imports.ts
-git commit -m "T11.5: import pages with progress polling, error table and navigation"
+git commit -m "feat(import): add import pages with progress and error table" --trailer "Refs: T11.5"
 ```
 
 ---

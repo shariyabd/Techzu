@@ -134,9 +134,10 @@ Expected: ends with `Application key set successfully.` and the migration output
 - [ ] **Step 3: Copy the scaffold into the repo root without overwriting the docs or bringing a `.env`/SQLite file**
 
 ```bash
-rsync -a --exclude='.git/' --exclude='README.md' --exclude='CLAUDE.md' --exclude='AGENTS.md' --exclude='.env' --exclude='database/database.sqlite' ../techzu-scaffold/ ./
+rsync -a --exclude='.git/' --exclude='.gitignore' --exclude='README.md' --exclude='CLAUDE.md' --exclude='AGENTS.md' --exclude='.env' --exclude='database/database.sqlite' ../techzu-scaffold/ ./
+cat ../techzu-scaffold/.gitignore >> .gitignore
 ```
-Expected: no output.
+Expected: no output. The repo's own `.gitignore` entries (`/prompts/`) stay at the top, and the kit's entries are appended below them.
 
 - [ ] **Step 4: Remove the scratch directory**
 
@@ -512,9 +513,7 @@ Expected: `clean`.
 
 ```bash
 git add -A -- . ':!docs/plans'
-git commit -m "T00.1: scaffold Laravel 12 Vue starter kit, packages, Sail and env profiles
-
-TD-002, TD-003, TD-005, TD-010, TD-033"
+git commit -m "build: scaffold Laravel 12 Vue starter kit with Sail and env profiles" --trailer "Refs: T00.1" --trailer "Implements: TD-002, TD-003, TD-005, TD-010, TD-033"
 ```
 
 ---
@@ -802,9 +801,7 @@ npm run build && npx vue-tsc --noEmit   # if resources/js changed
 ```bash
 git add -u
 git add pint.json phpstan.neon phpunit.xml tests/Concurrency/.gitkeep tests/Database/.gitkeep docs/DEVELOPMENT.md .github/workflows/ci.yml
-git commit -m "T00.2: Pint, Larastan level 6, MySQL test suites and CI workflow
-
-TD-030, TD-031, TD-032, TD-034"
+git commit -m "ci: add Pint, Larastan level 6, MySQL test suites and CI workflow" --trailer "Refs: T00.2" --trailer "Implements: TD-030, TD-031, TD-032, TD-034"
 ```
 
 ---
@@ -1137,9 +1134,7 @@ Expected: `PASS` and `[OK] No errors`.
 
 ```bash
 git add tests/Fixtures/ExampleDomainException.php tests/Feature/App/RouteLoadingTest.php tests/Feature/App/DomainExceptionRenderingTest.php tests/Feature/App/ConsoleScheduleTest.php app/Exceptions/Domain/DomainException.php app/Http/Middleware/ForceJsonResponse.php bootstrap/app.php routes/web.php routes/web/dashboard.php routes/console.php
-git commit -m "T00.3: per-feature route loading, domain exception renderer, console skeleton
-
-TD-003, TD-110, TD-140"
+git commit -m "feat(core): add per-feature route loading and domain exception renderer" --trailer "Refs: T00.3" --trailer "Implements: TD-003, TD-110, TD-140"
 ```
 
 ---
@@ -1277,9 +1272,7 @@ Expected: `PASS` and `[OK] No errors`. If Pint flags the `//` placeholder, run `
 
 ```bash
 git add app/Providers/AppServiceProvider.php tests/Feature/App/AppServiceProviderTest.php
-git commit -m "T00.4: api/uploads rate limiters and lazy-loading guard
-
-TD-101, TD-120"
+git commit -m "feat(core): add API and upload rate limiters and lazy-loading guard" --trailer "Refs: T00.4" --trailer "Implements: TD-101, TD-120"
 ```
 
 ---
@@ -1690,9 +1683,7 @@ Expected: `PASS` and `[OK] No errors`.
 
 ```bash
 git add tests/Feature/Api/V1/AuthTokenTest.php app/Http/Requests/Auth/LoginTokenRequest.php app/Actions/Auth/IssueApiToken.php app/Actions/Auth/RevokeCurrentApiToken.php app/Http/Resources/V1/ApiTokenResource.php app/Http/Resources/V1/CurrentUserResource.php app/Http/Controllers/Api/V1/AuthTokenController.php app/Http/Controllers/Api/V1/CurrentUserController.php routes/api/v1/auth.php
-git commit -m "T00.5: Sanctum token issue/revoke and /me endpoints under api/v1
-
-TD-003, TD-010, TD-120"
+git commit -m "feat(auth): add Sanctum token issue, revoke and /me endpoints" --trailer "Refs: T00.5" --trailer "Implements: TD-003, TD-010, TD-120"
 ```
 
 ---
@@ -2073,9 +2064,7 @@ Expected: all green.
 
 ```bash
 git add tests/Feature/App/InertiaSharedPropsTest.php app/Http/Middleware/HandleInertiaRequests.php resources/js/types/shared.ts resources/js/types/navigation.ts resources/js/config/navigation.ts resources/js/layouts/AppLayout.vue resources/js/components/AppSidebar.vue
-git commit -m "T00.6: whitelisted Inertia shared props, flash banner and navigation registry
-
-TD-002, TD-120"
+git commit -m "feat(ui): share whitelisted Inertia props and navigation registry" --trailer "Refs: T00.6" --trailer "Implements: TD-002, TD-120"
 ```
 
 ---
@@ -2236,9 +2225,7 @@ Expected: all green.
 
 ```bash
 git add app/Http/Controllers/HomeController.php routes/web.php config/fortify.php tests/Feature/App/HomeRedirectTest.php tests/Feature/Auth
-git commit -m "T00.7: role-aware home redirect used after login and registration
-
-TD-010, TD-012"
+git commit -m "feat(auth): redirect to role-aware home after login and registration" --trailer "Refs: T00.7" --trailer "Implements: TD-010, TD-012"
 ```
 
 ---
