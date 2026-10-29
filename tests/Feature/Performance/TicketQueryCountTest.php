@@ -51,7 +51,7 @@ it('renders the web ticket index with a constant number of queries', function ()
     $large = ticketQueryCount(fn () => $this->get('/tickets')->assertOk());
 
     expect($large)->toBe($small)
-        ->and($small)->toBeLessThanOrEqual(12);
+        ->and($small)->toBeLessThanOrEqual(14);
 });
 
 it('serves the API ticket index with a constant number of queries', function (): void {

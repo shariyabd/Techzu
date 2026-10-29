@@ -17,9 +17,9 @@ use App\Http\Requests\Tickets\UpdateTicketRequest;
 use App\Http\Resources\V1\ActivityResource;
 use App\Http\Resources\V1\AttachmentResource;
 use App\Http\Resources\V1\TicketListResource;
+use App\Http\Resources\V1\TicketReplyResource;
 use App\Http\Resources\V1\TicketResource;
 use App\Models\Ticket;
-use App\Models\TicketReply;
 use App\Models\User;
 use App\Services\Tickets\TicketListQuery;
 use App\Services\Tickets\TicketPageData;
@@ -44,6 +44,7 @@ final class TicketController extends Controller
             'tickets' => TicketListResource::collection($tickets->paginate($this->user($request), $validated, CarbonImmutable::now())),
             'scope' => $request->scope(),
             'filters' => (object) $validated,
+            'filterOptions' => $this->pages->filterOptions($this->user($request), $request->scope()),
         ]);
     }
 
@@ -54,6 +55,7 @@ final class TicketController extends Controller
         return Inertia::render('tickets/Create', [
             'options' => $this->pages->formOptions(),
             'canCreateOnBehalf' => $this->user($request)->can('createOnBehalf', Ticket::class),
+            'attachmentRules' => $this->pages->attachmentRules(),
         ]);
     }
 
@@ -74,12 +76,13 @@ final class TicketController extends Controller
 
         return Inertia::render('tickets/Show', [
             'ticket' => TicketResource::make($ticket)->resolve($request),
-            'replies' => $this->replyItems($ticket, $request),
+            'replies' => TicketReplyResource::collection($ticket->replies)->resolve($request),
             'attachments' => AttachmentResource::collection($ticket->attachments)->resolve($request),
             'activities' => ActivityResource::collection($this->pages->activities($ticket, $user))->resolve($request),
             'agents' => $can['assign'] ? $this->pages->agentOptions() : [],
             'can' => $can,
             'options' => $this->pages->formOptions(),
+            'attachmentRules' => $this->pages->attachmentRules(),
         ]);
     }
 
@@ -102,22 +105,6 @@ final class TicketController extends Controller
         $ticket = $changePriority->handle($this->user($request), $ticket, $request->targetPriority());
 
         return back()->with('success', "Priority changed to {$ticket->priority->label()}.");
-    }
-
-    /** @return list<array<string, mixed>> */
-    private function replyItems(Ticket $ticket, Request $request): array
-    {
-        return $ticket->replies
-            ->map(static fn (TicketReply $reply): array => [
-                'id' => $reply->id,
-                'body' => $reply->body,
-                'is_internal' => (bool) $reply->is_internal,
-                'author' => ['id' => $reply->author->id, 'name' => $reply->author->name],
-                'attachments' => AttachmentResource::collection($reply->attachments)->resolve($request),
-                'created_at' => $reply->created_at?->toIso8601String(),
-            ])
-            ->values()
-            ->all();
     }
 
     private function user(Request $request): User

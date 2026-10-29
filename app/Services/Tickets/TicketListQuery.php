@@ -25,6 +25,7 @@ final class TicketListQuery
 
     public function __construct(
         private readonly Config $config,
+        private readonly TicketFilter $filter,
     ) {}
 
     /**
@@ -36,7 +37,6 @@ final class TicketListQuery
         $statuses = ($validated['scope'] ?? 'active') === 'resolved' ? TicketStatus::finished() : TicketStatus::active();
 
         $query = Ticket::query()
-            ->visibleTo($viewer)
             ->select(self::LIST_COLUMNS)
             ->whereIn('tickets.status', array_map(static fn (TicketStatus $s): string => $s->value, $statuses))
             ->with(['category:id,name,slug,is_active', 'customer:id,name', 'assignedAgent:id,name'])
@@ -45,19 +45,8 @@ final class TicketListQuery
                 $q->visibleTo($viewer);
             }]);
 
-        $query = $this->applyFilters($query, $validated, $viewer, $now);
-
-        return $query->paginate($this->perPage($validated))->withQueryString();
-    }
-
-    /**
-     * @param  Builder<Ticket>  $query
-     * @param  array<string, mixed>  $validated
-     * @return Builder<Ticket>
-     */
-    private function applyFilters(Builder $query, array $validated, User $viewer, CarbonImmutable $now): Builder
-    {
-        return $query->orderByDesc('tickets.created_at')->orderByDesc('tickets.id');
+        return $this->filter->apply($query, $validated, $viewer, $now)
+            ->paginate($this->perPage($validated))->withQueryString();
     }
 
     /** @param  array<string, mixed>  $validated */
