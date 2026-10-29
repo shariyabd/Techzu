@@ -1,3 +1,5 @@
+export type { Paginated, PaginationLink } from '@/types/pagination';
+
 export type TicketStatusValue =
     | 'open'
     | 'in_progress'
@@ -103,34 +105,26 @@ export type ActivityItem = {
 
 export type AgentOption = { id: number; name: string };
 
-export type PaginationLink = {
-    url: string | null;
-    label: string;
-    active: boolean;
-};
-
-export type Paginated<T> = {
-    data: T[];
-    links: {
-        first: string | null;
-        last: string | null;
-        prev: string | null;
-        next: string | null;
-    };
-    meta: {
-        current_page: number;
-        from: number | null;
-        last_page: number;
-        links: PaginationLink[];
-        path: string;
-        per_page: number;
-        to: number | null;
-        total: number;
-    };
-};
-
 export type TicketFormOptions = {
     statuses: Option[];
     priorities: Option[];
     categories: Pick<CategorySummary, 'id' | 'name'>[];
+};
+
+export type TicketScope = 'active' | 'resolved';
+
+export type TicketFilterOptions = {
+    statuses: Option[];
+    priorities: Option[];
+    slaStates: Option[];
+    sorts: Option[];
+    categories: Pick<CategorySummary, 'id' | 'name'>[];
+    agents: AgentOption[];
+    showPeopleFilters: boolean;
+};
+
+export type AttachmentRules = {
+    extensions: string[];
+    max_kb: number;
+    max_files: number;
 };

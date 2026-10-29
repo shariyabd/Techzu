@@ -1,11 +1,14 @@
 import type { Component } from 'vue';
 import type { SharedProps } from '@/types/shared';
 
+export type NavGroup = 'support' | 'admin';
+
 export type NavItem = {
     title: string;
     href: string;
     icon?: Component;
     order: number;
+    group?: NavGroup;
     visible: (page: SharedProps) => boolean;
 };
 
@@ -19,4 +22,25 @@ export const navItems: NavItem[] = Object.values(modules)
 
 export function navigationFor(props: SharedProps): NavItem[] {
     return navItems.filter((item) => item.visible(props));
+}
+
+const groupLabels: Record<NavGroup, string> = {
+    support: 'Support',
+    admin: 'Administration',
+};
+
+export type NavSection = { group: NavGroup; label: string; items: NavItem[] };
+
+export function groupedNavigationFor(props: SharedProps): NavSection[] {
+    const visible = navigationFor(props);
+
+    return (Object.keys(groupLabels) as NavGroup[])
+        .map((group) => ({
+            group,
+            label: groupLabels[group],
+            items: visible.filter(
+                (item) => (item.group ?? 'support') === group,
+            ),
+        }))
+        .filter((section) => section.items.length > 0);
 }

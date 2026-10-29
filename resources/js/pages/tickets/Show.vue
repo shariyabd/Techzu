@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { Head, setLayoutProps } from '@inertiajs/vue3';
+import { Pencil } from '@lucide/vue';
+import { ref, watchEffect } from 'vue';
+import PageHeader from '@/components/PageHeader.vue';
 import ActivityTimeline from '@/components/tickets/ActivityTimeline.vue';
 import AssignmentPanel from '@/components/tickets/AssignmentPanel.vue';
 import AttachmentList from '@/components/tickets/AttachmentList.vue';
@@ -6,21 +10,23 @@ import ConversationPanel from '@/components/tickets/ConversationPanel.vue';
 import PriorityBadge from '@/components/tickets/PriorityBadge.vue';
 import SlaBadge from '@/components/tickets/SlaBadge.vue';
 import StatusBadge from '@/components/tickets/StatusBadge.vue';
+import TicketDetailsCard from '@/components/tickets/TicketDetailsCard.vue';
 import TicketEditForm from '@/components/tickets/TicketEditForm.vue';
 import TicketStateControls from '@/components/tickets/TicketStateControls.vue';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import type { BreadcrumbItem } from '@/types';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { index, show } from '@/routes/tickets';
 import type {
     ActivityItem,
     AgentOption,
     AttachmentItem,
+    AttachmentRules,
     ReplyItem,
     TicketCan,
     TicketDetail,
     TicketFormOptions,
 } from '@/types/tickets';
-import { Head, setLayoutProps } from '@inertiajs/vue3';
-import { watchEffect } from 'vue';
 
 const props = defineProps<{
     ticket: TicketDetail;
@@ -30,107 +36,116 @@ const props = defineProps<{
     agents: AgentOption[];
     can: TicketCan;
     options: TicketFormOptions;
+    attachmentRules: AttachmentRules;
 }>();
 
 watchEffect(() => {
-    const breadcrumbs: BreadcrumbItem[] = [
-        { title: 'Tickets', href: '/tickets' },
-        { title: props.ticket.number, href: `/tickets/${props.ticket.number}` },
-    ];
-    setLayoutProps({ breadcrumbs });
+    setLayoutProps({
+        breadcrumbs: [
+            { title: 'Tickets', href: index() },
+            { title: props.ticket.number, href: show(props.ticket.number) },
+        ],
+    });
 });
 
-const formatTime = (iso: string | null): string =>
-    iso ? new Date(iso).toLocaleString() : '—';
+const editing = ref(false);
 </script>
 
 <template>
     <Head :title="`${ticket.number} · ${ticket.subject}`" />
 
-    <div class="flex flex-col gap-4 p-4">
-        <div class="flex flex-wrap items-center gap-3">
-            <span class="font-mono text-sm text-muted-foreground">{{
-                ticket.number
-            }}</span>
-            <h1 class="text-xl font-semibold">{{ ticket.subject }}</h1>
-            <StatusBadge :status="ticket.status" />
-            <PriorityBadge :priority="ticket.priority" />
-            <SlaBadge :sla="ticket.sla" />
-        </div>
+    <div class="mx-auto flex w-full max-w-7xl flex-col gap-6 p-4 md:p-6">
+        <PageHeader :title="ticket.subject">
+            <template #meta>
+                <div class="flex flex-wrap items-center gap-2 pt-1">
+                    <span class="font-mono text-sm text-muted-foreground">{{
+                        ticket.number
+                    }}</span>
+                    <StatusBadge :status="ticket.status" />
+                    <PriorityBadge :priority="ticket.priority" />
+                    <SlaBadge :sla="ticket.sla" />
+                </div>
+            </template>
+        </PageHeader>
 
-        <div class="grid gap-4 lg:grid-cols-3">
-            <div class="flex flex-col gap-4 lg:col-span-2">
+        <div class="grid gap-6 lg:grid-cols-3">
+            <div class="flex min-w-0 flex-col gap-6 lg:col-span-2">
                 <Card>
-                    <CardHeader>
+                    <CardHeader
+                        class="flex flex-row items-center justify-between gap-2"
+                    >
                         <CardTitle class="text-base">Description</CardTitle>
+                        <Button
+                            v-if="can.update && !editing"
+                            variant="ghost"
+                            size="sm"
+                            @click="editing = true"
+                        >
+                            <Pencil aria-hidden="true" />
+                            Edit
+                        </Button>
                     </CardHeader>
-                    <CardContent class="space-y-3">
-                        <p class="text-sm whitespace-pre-line">
+                    <CardContent class="flex flex-col gap-4">
+                        <TicketEditForm
+                            v-if="editing"
+                            :ticket="ticket"
+                            :can="can"
+                            :categories="options.categories"
+                            @done="editing = false"
+                        />
+                        <p
+                            v-else
+                            class="text-sm break-words whitespace-pre-line"
+                        >
                             {{ ticket.description }}
                         </p>
                         <AttachmentList :attachments="attachments" />
                     </CardContent>
                 </Card>
 
-                <TicketEditForm
-                    v-if="can.update"
-                    :ticket="ticket"
-                    :can="can"
-                    :categories="options.categories"
-                />
-
-                <ConversationPanel
-                    :ticket="ticket"
-                    :replies="replies"
-                    :can="can"
-                />
-            </div>
-
-            <div class="flex flex-col gap-4">
                 <Card>
-                    <CardHeader>
-                        <CardTitle class="text-base">Details</CardTitle>
-                    </CardHeader>
                     <CardContent>
-                        <dl class="grid grid-cols-2 gap-x-2 gap-y-1 text-sm">
-                            <dt class="text-muted-foreground">Customer</dt>
-                            <dd>{{ ticket.customer?.name ?? '—' }}</dd>
-                            <dt class="text-muted-foreground">Category</dt>
-                            <dd>{{ ticket.category?.name ?? '—' }}</dd>
-                            <dt class="text-muted-foreground">Agent</dt>
-                            <dd>
-                                {{
-                                    ticket.assigned_agent?.name ?? 'Unassigned'
-                                }}
-                            </dd>
-                            <dt class="text-muted-foreground">Created</dt>
-                            <dd>{{ formatTime(ticket.created_at) }}</dd>
-                            <dt class="text-muted-foreground">Due</dt>
-                            <dd>{{ formatTime(ticket.sla.due_at) }}</dd>
-                            <dt
-                                v-if="ticket.resolved_at"
-                                class="text-muted-foreground"
-                            >
-                                Resolved
-                            </dt>
-                            <dd v-if="ticket.resolved_at">
-                                {{ formatTime(ticket.resolved_at) }}
-                            </dd>
-                        </dl>
+                        <Tabs default-value="conversation">
+                            <TabsList>
+                                <TabsTrigger value="conversation"
+                                    >Conversation ({{
+                                        replies.length
+                                    }})</TabsTrigger
+                                >
+                                <TabsTrigger value="activity"
+                                    >Activity ({{
+                                        activities.length
+                                    }})</TabsTrigger
+                                >
+                            </TabsList>
+                            <TabsContent value="conversation" class="pt-4">
+                                <ConversationPanel
+                                    :ticket="ticket"
+                                    :replies="replies"
+                                    :can="can"
+                                    :attachment-rules="attachmentRules"
+                                />
+                            </TabsContent>
+                            <TabsContent value="activity" class="pt-4">
+                                <ActivityTimeline :activities="activities" />
+                            </TabsContent>
+                        </Tabs>
                     </CardContent>
                 </Card>
+            </div>
 
+            <aside
+                class="order-first flex min-w-0 flex-col gap-6 lg:order-last"
+            >
                 <TicketStateControls
                     :ticket="ticket"
                     :can="can"
                     :statuses="options.statuses"
                     :priorities="options.priorities"
                 />
-
                 <AssignmentPanel :ticket="ticket" :agents="agents" :can="can" />
-
-                <ActivityTimeline :activities="activities" />
-            </div>
+                <TicketDetailsCard :ticket="ticket" />
+            </aside>
         </div>
     </div>
 </template>

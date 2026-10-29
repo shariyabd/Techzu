@@ -1,14 +1,17 @@
 <script setup lang="ts">
+import { Head, Link, router } from '@inertiajs/vue3';
+import { Pencil, Plus, Search, Users } from '@lucide/vue';
+import { computed, ref, watch } from 'vue';
+import EmptyState from '@/components/EmptyState.vue';
+import PageHeader from '@/components/PageHeader.vue';
+import ResourcePagination from '@/components/ResourcePagination.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
+    NativeSelect,
+    NativeSelectOption,
+} from '@/components/ui/native-select';
 import {
     Table,
     TableBody,
@@ -17,14 +20,13 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import type { Paginated } from '@/types/tickets';
+import { create, edit, index } from '@/routes/admin/users';
+import type { Paginated } from '@/types/pagination';
 import type { AdminUser, RoleOption, UserFilters } from '@/types/users';
-import { Head, Link, router } from '@inertiajs/vue3';
-import { ref } from 'vue';
 
 defineOptions({
     layout: {
-        breadcrumbs: [{ title: 'Users', href: '/admin/users' }],
+        breadcrumbs: [{ title: 'Users', href: index() }],
     },
 });
 
@@ -35,7 +37,11 @@ const props = defineProps<{
 }>();
 
 const search = ref(props.filters.q ?? '');
-const role = ref<string>(props.filters.role ?? 'all');
+const role = ref<string>(props.filters.role ?? '');
+
+const isFiltered = computed(
+    () => (props.filters.q ?? '') !== '' || (props.filters.role ?? '') !== '',
+);
 
 const applyFilters = (): void => {
     const query: Record<string, string> = {};
@@ -44,16 +50,25 @@ const applyFilters = (): void => {
         query.q = search.value;
     }
 
-    if (role.value !== 'all') {
+    if (role.value !== '') {
         query.role = role.value;
     }
 
-    router.get('/admin/users', query, { preserveState: true, replace: true });
+    router.get(index.url(), query, { preserveState: true, replace: true });
 };
 
-const onRoleChange = (value: unknown): void => {
-    role.value = String(value ?? 'all');
-    applyFilters();
+watch(role, applyFilters);
+
+const clearFilters = (): void => {
+    search.value = '';
+
+    if (role.value === '') {
+        applyFilters();
+
+        return;
+    }
+
+    role.value = '';
 };
 
 const roleLabel = (value: string | null): string =>
@@ -71,108 +86,140 @@ const agentProfile = (user: AdminUser): string => {
 <template>
     <Head title="Users" />
 
-    <div class="flex flex-col gap-4 p-4">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-            <h1 class="text-xl font-semibold">Users</h1>
-            <Button as-child size="sm">
-                <Link href="/admin/users/create">New user</Link>
-            </Button>
-        </div>
+    <div class="mx-auto flex w-full max-w-7xl flex-col gap-6 p-4 md:p-6">
+        <PageHeader
+            title="Users"
+            description="Accounts, their role and, for agents, their assignment profile."
+        >
+            <template #actions>
+                <Button as-child
+                    ><Link :href="create()"
+                        ><Plus aria-hidden="true" />New user</Link
+                    ></Button
+                >
+            </template>
+        </PageHeader>
 
-        <form class="flex flex-wrap gap-2" @submit.prevent="applyFilters">
+        <form
+            class="flex flex-col gap-2 sm:flex-row sm:flex-wrap"
+            @submit.prevent="applyFilters"
+        >
             <Input
                 v-model="search"
                 type="search"
                 placeholder="Name or email starts with…"
-                class="max-w-xs"
+                class="sm:max-w-xs"
                 aria-label="Search users"
             />
-            <Select :model-value="role" @update:model-value="onRoleChange">
-                <SelectTrigger class="w-44" aria-label="Filter by role">
-                    <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="all">All roles</SelectItem>
-                    <SelectItem
+            <div class="sm:w-44">
+                <NativeSelect v-model="role" aria-label="Filter by role">
+                    <NativeSelectOption value="">All roles</NativeSelectOption>
+                    <NativeSelectOption
                         v-for="option in roles"
                         :key="option.value"
                         :value="option.value"
+                        >{{ option.label }}</NativeSelectOption
                     >
-                        {{ option.label }}
-                    </SelectItem>
-                </SelectContent>
-            </Select>
-            <Button type="submit" variant="outline">Search</Button>
+                </NativeSelect>
+            </div>
+            <Button type="submit" variant="outline"
+                ><Search aria-hidden="true" />Search</Button
+            >
         </form>
 
-        <Table>
-            <TableHeader>
-                <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Agent profile</TableHead>
-                    <TableHead class="text-right">Actions</TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                <TableRow v-if="props.users.data.length === 0">
-                    <TableCell
-                        colspan="5"
-                        class="text-center text-muted-foreground"
-                        >No users match.</TableCell
-                    >
-                </TableRow>
-                <TableRow v-for="user in props.users.data" :key="user.id">
-                    <TableCell class="font-medium">{{ user.name }}</TableCell>
-                    <TableCell>{{ user.email }}</TableCell>
-                    <TableCell>
-                        <Badge variant="secondary">{{
-                            roleLabel(user.role)
-                        }}</Badge>
-                    </TableCell>
-                    <TableCell class="text-xs text-muted-foreground">{{
-                        user.role === 'agent' ? agentProfile(user) : '—'
-                    }}</TableCell>
-                    <TableCell class="text-right">
-                        <Button as-child size="sm" variant="outline">
-                            <Link :href="`/admin/users/${user.id}/edit`"
-                                >Edit</Link
-                            >
-                        </Button>
-                    </TableCell>
-                </TableRow>
-            </TableBody>
-        </Table>
+        <EmptyState
+            v-if="users.data.length === 0"
+            :icon="Users"
+            :title="
+                isFiltered ? 'No users match these filters' : 'No users yet'
+            "
+            :description="
+                isFiltered
+                    ? 'Try a different name, email or role.'
+                    : 'Create the first account to get started.'
+            "
+        >
+            <Button v-if="isFiltered" variant="outline" @click="clearFilters"
+                >Clear filters</Button
+            >
+            <Button v-else as-child
+                ><Link :href="create()">Create a user</Link></Button
+            >
+        </EmptyState>
 
-        <div class="flex items-center justify-between text-sm">
-            <span class="text-muted-foreground">
-                Page {{ props.users.meta.current_page }} of
-                {{ props.users.meta.last_page }} ·
-                {{ props.users.meta.total }} users
-            </span>
-            <div class="flex gap-2">
-                <Button
-                    v-if="props.users.links.prev"
-                    as-child
-                    size="sm"
-                    variant="outline"
-                >
-                    <Link :href="props.users.links.prev" preserve-scroll
-                        >Previous</Link
-                    >
-                </Button>
-                <Button
-                    v-if="props.users.links.next"
-                    as-child
-                    size="sm"
-                    variant="outline"
-                >
-                    <Link :href="props.users.links.next" preserve-scroll
-                        >Next</Link
-                    >
-                </Button>
+        <template v-else>
+            <div class="overflow-x-auto rounded-md border">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Name</TableHead>
+                            <TableHead class="hidden md:table-cell"
+                                >Email</TableHead
+                            >
+                            <TableHead>Role</TableHead>
+                            <TableHead class="hidden lg:table-cell"
+                                >Agent profile</TableHead
+                            >
+                            <TableHead class="text-right"
+                                ><span class="sr-only">Actions</span></TableHead
+                            >
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        <TableRow v-for="user in users.data" :key="user.id">
+                            <TableCell class="font-medium">
+                                <Link
+                                    :href="edit(user.id)"
+                                    class="hover:underline"
+                                    >{{ user.name }}</Link
+                                >
+                                <div
+                                    class="text-xs font-normal text-muted-foreground md:hidden"
+                                >
+                                    {{ user.email }}
+                                </div>
+                            </TableCell>
+                            <TableCell class="hidden md:table-cell">{{
+                                user.email
+                            }}</TableCell>
+                            <TableCell>
+                                <Badge variant="secondary">{{
+                                    roleLabel(user.role)
+                                }}</Badge>
+                            </TableCell>
+                            <TableCell
+                                class="hidden text-xs text-muted-foreground lg:table-cell"
+                                >{{
+                                    user.role === 'agent'
+                                        ? agentProfile(user)
+                                        : '—'
+                                }}</TableCell
+                            >
+                            <TableCell>
+                                <div class="flex justify-end">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        as-child
+                                    >
+                                        <Link :href="edit(user.id)"
+                                            ><Pencil aria-hidden="true" /><span
+                                                class="sr-only sm:not-sr-only"
+                                                >Edit</span
+                                            ></Link
+                                        >
+                                    </Button>
+                                </div>
+                            </TableCell>
+                        </TableRow>
+                    </TableBody>
+                </Table>
             </div>
-        </div>
+            <ResourcePagination
+                :links="users.links"
+                :meta="users.meta"
+                noun="users"
+            />
+        </template>
     </div>
 </template>

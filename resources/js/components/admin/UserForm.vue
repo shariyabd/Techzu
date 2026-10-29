@@ -1,23 +1,22 @@
 <script setup lang="ts">
+import { Link, useForm } from '@inertiajs/vue3';
 import InputError from '@/components/InputError.vue';
+import SubmitButton from '@/components/SubmitButton.vue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
+    NativeSelect,
+    NativeSelectOption,
+} from '@/components/ui/native-select';
+import { index, store, update } from '@/routes/admin/users';
 import type {
     AdminUser,
     CategoryOption,
     RoleOption,
     RoleValue,
 } from '@/types/users';
-import { Link, useForm } from '@inertiajs/vue3';
 
 const props = defineProps<{
     user?: AdminUser;
@@ -42,10 +41,6 @@ const form = useForm<{
     is_available: props.user?.is_available ?? true,
 });
 
-const onRoleChange = (value: unknown): void => {
-    form.role = String(value) as RoleValue;
-};
-
 const toggleCategory = (id: number, checked: boolean): void => {
     form.category_ids = checked
         ? [...form.category_ids, id]
@@ -54,19 +49,19 @@ const toggleCategory = (id: number, checked: boolean): void => {
 
 const submit = (): void => {
     if (props.user) {
-        form.patch(`/admin/users/${props.user.id}`, {
+        form.patch(update.url(props.user.id), {
             onSuccess: () => form.reset('password'),
         });
 
         return;
     }
 
-    form.post('/admin/users');
+    form.post(store.url());
 };
 </script>
 
 <template>
-    <form class="flex flex-col gap-4" @submit.prevent="submit">
+    <form class="flex flex-col gap-5" @submit.prevent="submit">
         <div class="grid gap-2">
             <Label for="name">Name</Label>
             <Input id="name" v-model="form.name" required maxlength="255" />
@@ -101,22 +96,14 @@ const submit = (): void => {
 
         <div class="grid gap-2">
             <Label for="role">Role</Label>
-            <Select
-                :model-value="form.role"
-                :disabled="isSelf"
-                @update:model-value="onRoleChange"
-            >
-                <SelectTrigger id="role"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                    <SelectItem
-                        v-for="role in roles"
-                        :key="role.value"
-                        :value="role.value"
-                    >
-                        {{ role.label }}
-                    </SelectItem>
-                </SelectContent>
-            </Select>
+            <NativeSelect id="role" v-model="form.role" :disabled="isSelf">
+                <NativeSelectOption
+                    v-for="role in roles"
+                    :key="role.value"
+                    :value="role.value"
+                    >{{ role.label }}</NativeSelectOption
+                >
+            </NativeSelect>
             <p v-if="isSelf" class="text-xs text-muted-foreground">
                 You cannot change your own role.
             </p>
@@ -174,12 +161,12 @@ const submit = (): void => {
             </div>
         </fieldset>
 
-        <div class="flex gap-2">
-            <Button type="submit" :disabled="form.processing">{{
+        <div class="flex flex-wrap gap-2">
+            <SubmitButton :processing="form.processing">{{
                 user ? 'Save changes' : 'Create user'
-            }}</Button>
+            }}</SubmitButton>
             <Button variant="ghost" as-child>
-                <Link href="/admin/users">Cancel</Link>
+                <Link :href="index()">Cancel</Link>
             </Button>
         </div>
     </form>
