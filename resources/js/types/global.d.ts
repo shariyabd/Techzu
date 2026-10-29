@@ -1,7 +1,6 @@
 import type { Directive } from 'vue';
-import type { Auth } from '@/types/auth';
+import type { SharedProps } from '@/types/shared';
 
-// Extend ImportMeta interface for Vite...
 declare module 'vite/client' {
     interface ImportMetaEnv {
         readonly VITE_APP_NAME: string;
@@ -16,12 +15,7 @@ declare module 'vite/client' {
 
 declare module '@inertiajs/core' {
     export interface InertiaConfig {
-        sharedPageProps: {
-            name: string;
-            auth: Auth;
-            sidebarOpen: boolean;
-            [key: string]: unknown;
-        };
+        sharedPageProps: SharedProps;
     }
 }
 
