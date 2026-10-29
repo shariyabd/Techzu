@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent-Driven Workflow</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --surface: #ffffff; --surface-2: #f0efeb; --text: #1d1d1b; --muted: #66645e;
+    --line: #d9d7d0; --accent: #2f5bd3; --accent-soft: #e4ebfb;
+    --ok: #1f7a4d; --ok-soft: #dff2e7; --warn: #a15c00; --warn-soft: #fbeedb;
+    --human: #8a3ab9; --human-soft: #f1e4f8; --gate: #b3261e; --gate-soft: #fae3e1;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141413; --surface: #1d1d1b; --surface-2: #262623; --text: #ecebe6; --muted: #a3a199;
+      --line: #3a3935; --accent: #7fa0ff; --accent-soft: #1f2a47;
+      --ok: #5fd39a; --ok-soft: #173326; --warn: #f0b35c; --warn-soft: #3a2a12;
+      --human: #d39cf5; --human-soft: #33213f; --gate: #ff8a80; --gate-soft: #3d1c1a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 40px 16px 80px; }
+  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 20px; margin: 48px 0 6px; }
+  h3 { font-size: 15px; margin: 0 0 4px; }
+  p.lead { color: var(--muted); margin: 0 0 8px; max-width: 760px; }
+  .sub { color: var(--muted); margin: 0 0 18px; }
+  code, .mono { font-family: var(--mono); font-size: 13px; }
+  code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+
+  /* status strip */
+  .status { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-top: 22px; }
+  .status .card { padding: 12px 14px; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+  .done { background: var(--ok-soft); color: var(--ok); }
+  .todo { background: var(--surface-2); color: var(--muted); }
+  .next { background: var(--warn-soft); color: var(--warn); }
+
+  /* waves */
+  .waves { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; align-items: stretch; }
+  .wave { flex: 1 0 128px; display: flex; flex-direction: column; gap: 6px; }
+  .wave .label { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  .wave .mode { font-size: 12px; color: var(--muted); }
+  .task { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; padding: 8px 10px; }
+  .task b { font-family: var(--mono); font-size: 13px; }
+  .task span { display: block; font-size: 12.5px; color: var(--muted); }
+  .task.solo { border-left-color: var(--warn); }
+  .arrow-col { display: flex; align-items: center; color: var(--muted); font-size: 20px; flex: 0 0 auto; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin-top: 10px; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 5px; }
+
+  /* pipeline */
+  .pipe { display: grid; gap: 0; }
+  .lane { display: grid; grid-template-columns: 150px 1fr; gap: 14px; padding: 14px 0; border-top: 1px dashed var(--line); }
+  .lane:first-child { border-top: 0; }
+  .lane .who { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding-top: 10px; }
+  .steps { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .step { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 11px; max-width: 250px; }
+  .step .n { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .step h3 { font-size: 14px; }
+  .step p { margin: 2px 0 0; font-size: 12.5px; color: var(--muted); }
+  .step.agent { border-color: var(--accent); background: var(--accent-soft); }
+  .step.gate { border-color: var(--gate); background: var(--gate-soft); }
+  .step.human { border-color: var(--human); background: var(--human-soft); }
+  .who.agent { color: var(--accent); } .who.gate { color: var(--gate); } .who.human { color: var(--human); } .who.ctrl { color: var(--warn); }
+  .step.ctrl { border-color: var(--warn); background: var(--warn-soft); }
+  .to { color: var(--muted); }
+  .loop { font-size: 12.5px; color: var(--gate); margin-top: 8px; }
+
+  /* git graph */
+  svg { display: block; width: 100%; height: auto; }
+  .g-line { stroke: var(--line); stroke-width: 2; fill: none; }
+  .g-main { stroke: var(--ok); stroke-width: 3; fill: none; }
+  .g-task { stroke: var(--accent); stroke-width: 2.5; fill: none; stroke-dasharray: 5 4; }
+  .g-dot-main { fill: var(--ok); }
+  .g-dot-task { fill: var(--surface); stroke: var(--accent); stroke-width: 2.5; }
+  .g-text { fill: var(--text); font: 12px var(--mono); }
+  .g-muted { fill: var(--muted); font: 12px system-ui, sans-serif; }
+  .g-label { fill: var(--muted); font: 600 11px system-ui, sans-serif; letter-spacing: .05em; }
+
+  /* commit anatomy */
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  pre { margin: 0; font: 13px/1.6 var(--mono); white-space: pre-wrap; word-break: break-word; }
+  .c-type { color: var(--accent); font-weight: 700; } .c-scope { color: var(--warn); } .c-trailer { color: var(--ok); }
+  .bad { color: var(--gate); text-decoration: line-through; }
+  ul.rules { margin: 8px 0 0; padding-left: 18px; } ul.rules li { margin: 3px 0; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .table-wrap { overflow-x: auto; }
+
+  @media (max-width: 720px) {
+    .lane { grid-template-columns: 1fr; gap: 6px; }
+    .lane .who { padding-top: 0; }
+    .two { grid-template-columns: 1fr; }
+    .step { max-width: none; flex: 1 1 100%; }
+    .to { display: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Agent-driven development workflow</h1>
+  <p class="lead">Support Ticket &amp; SLA Management System. Each plan task runs in its own local worktree, where subagents implement and review it. The owner reviews every commit and fast-forwards it onto <code>main</code>, the only branch on GitHub.</p>
+
+  <div class="status">
+    <div class="card"><span class="pill done">Done</span><h3 style="margin-top:6px">Design spec</h3><span class="sub mono">docs/superpowers/specs</span></div>
+    <div class="card"><span class="pill done">Done</span><h3 style="margin-top:6px">Technical decisions</h3><span class="sub mono">TD-001 … TD-140</span></div>
+    <div class="card"><span class="pill done">Done</span><h3 style="margin-top:6px">Plan + contract</h3><span class="sub mono">docs/plans T00–T14</span></div>
+    <div class="card"><span class="pill done">Done</span><h3 style="margin-top:6px">Guardrails</h3><span class="sub mono">CLAUDE.md</span></div>
+    <div class="card"><span class="pill next">Next</span><h3 style="margin-top:6px">Implementation</h3><span class="sub">Starts with T00; 0 of 15 tasks landed</span></div>
+  </div>
+
+  <h2>1 · Execution order</h2>
+  <p class="sub">A wave starts only when every task in the wave before it is on <code>main</code>. Tasks in the same wave run in parallel sessions and land one at a time.</p>
+  <div class="waves">
+    <div class="wave"><div class="label">Wave 0</div><div class="mode">alone</div>
+      <div class="task solo"><b>T00</b><span>bootstrap, tooling, CI</span></div></div>
+    <div class="arrow-col">→</div>
+    <div class="wave"><div class="label">Wave 1</div><div class="mode">alone</div>
+      <div class="task solo"><b>T01</b><span>schema, models, enums</span></div></div>
+    <div class="arrow-col">→</div>
+    <div class="wave"><div class="label">Wave 2</div><div class="mode">3 parallel</div>
+      <div class="task"><b>T02</b><span>business calendar, SLA</span></div>
+      <div class="task"><b>T03</b><span>ticket number</span></div>
+      <div class="task"><b>T04</b><span>authorization</span></div></div>
+    <div class="arrow-col">→</div>
+    <div class="wave"><div class="label">Wave 3</div><div class="mode">alone</div>
+      <div class="task solo"><b>T05</b><span>ticket lifecycle</span></div></div>
+    <div class="arrow-col">→</div>
+    <div class="wave"><div class="label">Wave 4a</div><div class="mode">up to 4 parallel</div>
+      <div class="task"><b>T06</b><span>assignment</span></div>
+      <div class="task"><b>T07</b><span>conversation, attachments</span></div>
+      <div class="task"><b>T08</b><span>search, filtering</span></div>
+      <div class="task"><b>T09</b><span>SLA escalation</span></div></div>
+    <div class="arrow-col">→</div>
+    <div class="wave"><div class="label">Wave 4b</div><div class="mode">up to 4 parallel</div>
+      <div class="task"><b>T10</b><span>notifications</span></div>
+      <div class="task"><b>T11</b><span>CSV import</span></div>
+      <div class="task"><b>T12</b><span>dashboard</span></div>
+      <div class="task"><b>T13</b><span>admin config</span></div></div>
+    <div class="arrow-col">→</div>
+    <div class="wave"><div class="label">Wave 5</div><div class="mode">alone</div>
+      <div class="task solo"><b>T14</b><span>hardening, docs, ERD</span></div></div>
+  </div>
+  <div class="legend"><span><i style="background:var(--warn)"></i>Runs alone: everything after it builds on it</span><span><i style="background:var(--accent)"></i>Runs in parallel: each file has a single owning task (README §4)</span></div>
+
+  <h2>2 · Lifecycle of one task</h2>
+  <p class="sub">Example: <code>T06</code> in worktree <code>../techzu-wt/T06</code> on local branch <code>task/T06-assignment</code>, with databases <code>techzu_wt_t06</code> and <code>techzu_wt_t06_testing</code>.</p>
+  <div class="card pipe">
+    <div class="lane">
+      <div class="who ctrl">Session controller</div>
+      <div class="steps">
+        <div class="step ctrl"><div class="n">1</div><h3>Create worktree</h3><p><code>git worktree add … -b task/T06-… main</code>, plus <code>.env</code> with its own DB names</p></div>
+        <span class="to">→</span>
+        <div class="step ctrl"><div class="n">2</div><h3>Dispatch implementer</h3><p>Gives it the task file, CLAUDE.md, the spec and README §3</p></div>
+      </div>
+    </div>
+    <div class="lane">
+      <div class="who agent">Implementer agent</div>
+      <div class="steps">
+        <div class="step agent"><div class="n">3</div><h3>Subtasks by mini-wave</h3><p>For each subtask: failing test → code → green</p></div>
+        <span class="to">→</span>
+        <div class="step agent"><div class="n">4</div><h3>Commit per subtask</h3><p><code>feat(assignment): …</code><br><code>Refs: T06.1</code></p></div>
+      </div>
+    </div>
+    <div class="lane">
+      <div class="who agent">Reviewer agents</div>
+      <div class="steps">
+        <div class="step agent"><div class="n">5</div><h3>Spec reviewer</h3><p>Checks acceptance criteria and the interface contract. Didn't see the implementer's reasoning.</p></div>
+        <span class="to">→</span>
+        <div class="step agent"><div class="n">6</div><h3>Code-quality reviewer</h3><p>Checks CLAUDE.md rules, security, N+1 queries, missing tests. Reads commit by commit.</p></div>
+      </div>
+      <div></div>
+      <div class="loop">↺ Findings go back to the implementer as <code>git commit --fixup &lt;sha&gt;</code>. Only the findings are re-reviewed, until both reviewers pass.</div>
+    </div>
+    <div class="lane">
+      <div class="who gate">Gate</div>
+      <div class="steps">
+        <div class="step gate"><div class="n">7</div><h3>Autosquash fixups</h3><p><code>git rebase -i --autosquash main</code>: each fix joins the commit it belongs to</p></div>
+        <span class="to">→</span>
+        <div class="step gate"><div class="n">8</div><h3>Gate on every commit</h3><p><code>git rebase main --exec</code> runs pint, phpstan, pest, plus the build and vue-tsc if the commit touched JS</p></div>
+        <span class="to">→</span>
+        <div class="step ctrl"><div class="n">9</div><h3>Stop &amp; report</h3><p>Commit list, gate output, unconfirmed contract notes. Agents never touch <code>main</code>.</p></div>
+      </div>
+    </div>
+    <div class="lane">
+      <div class="who human">You (owner)</div>
+      <div class="steps">
+        <div class="step human"><div class="n">10</div><h3>Review</h3><p><code>git log -p main..task/T06-…</code>, the same view your team lead gets</p></div>
+        <span class="to">→</span>
+        <div class="step human"><div class="n">11</div><h3>Rebase + re-gate</h3><p>Picks up tasks from the same wave that landed first</p></div>
+        <span class="to">→</span>
+        <div class="step human"><div class="n">12</div><h3>Land</h3><p><code>merge --ff-only</code> → <code>push origin main</code> → remove the worktree</p></div>
+      </div>
+    </div>
+    <div class="lane">
+      <div class="who human">Team lead</div>
+      <div class="steps">
+        <div class="step human"><h3>Reviews on GitHub, commit by commit</h3><p>Any change requested after the push becomes a new commit. <code>main</code> is never rewritten.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <h2>3 · Branches: many local, one on GitHub</h2>
+  <p class="sub">Task branches are scratch space on your machine. Every task joins the end of <code>main</code> as one unbroken block of commits, so the history stays linear.</p>
+  <div class="card">
+    <svg viewBox="0 0 1000 260" role="img" aria-label="Local task branches rebased and fast-forwarded onto a linear main branch">
+      <text class="g-label" x="10" y="22">LOCAL ONLY (never pushed)</text>
+      <text class="g-label" x="10" y="232">GITHUB · origin/main</text>
+      <line class="g-line" x1="0" y1="120" x2="1000" y2="120" stroke-dasharray="2 6"/>
+      <!-- main -->
+      <path class="g-main" d="M30 195 H970"/>
+      <g>
+        <circle class="g-dot-main" cx="60" cy="195" r="7"/>
+        <circle class="g-dot-main" cx="130" cy="195" r="7"/>
+        <circle class="g-dot-main" cx="200" cy="195" r="7"/>
+        <text class="g-muted" x="60" y="250" text-anchor="middle">T05 …</text>
+        <circle class="g-dot-main" cx="420" cy="195" r="7"/><circle class="g-dot-main" cx="470" cy="195" r="7"/><circle class="g-dot-main" cx="520" cy="195" r="7"/>
+        <text class="g-muted" x="470" y="250" text-anchor="middle">T06 block (rebased, ff)</text>
+        <circle class="g-dot-main" cx="700" cy="195" r="7"/><circle class="g-dot-main" cx="750" cy="195" r="7"/><circle class="g-dot-main" cx="800" cy="195" r="7"/>
+        <text class="g-muted" x="750" y="250" text-anchor="middle">T07 block (rebased onto T06, ff)</text>
+      </g>
+      <!-- task T06 -->
+      <path class="g-task" d="M200 195 C230 195 230 70 260 70 H360"/>
+      <circle class="g-dot-task" cx="270" cy="70" r="7"/><circle class="g-dot-task" cx="315" cy="70" r="7"/><circle class="g-dot-task" cx="360" cy="70" r="7"/>
+      <text class="g-text" x="250" y="48">task/T06-assignment</text>
+      <path class="g-task" d="M360 70 C390 70 390 195 420 195" opacity=".55"/>
+      <!-- task T07 -->
+      <path class="g-task" d="M200 195 C260 195 270 100 330 100 H600" opacity=".9"/>
+      <circle class="g-dot-task" cx="520" cy="100" r="6"/><circle class="g-dot-task" cx="560" cy="100" r="6"/><circle class="g-dot-task" cx="600" cy="100" r="6"/>
+      <text class="g-text" x="470" y="90">task/T07-conversation</text>
+      <path class="g-task" d="M600 100 C650 100 650 195 700 195" opacity=".55"/>
+      <text class="g-muted" x="610" y="150">git rebase main</text>
+      <text class="g-muted" x="610" y="166">merge --ff-only</text>
+    </svg>
+    <div class="legend"><span><i style="background:var(--ok)"></i>main: linear history, never force-pushed</span><span><i style="background:var(--accent)"></i>task branch: commits rebased locally before landing</span></div>
+  </div>
+
+  <h2>4 · Anatomy of a commit</h2>
+  <div class="two">
+    <div class="card">
+      <h3>Required format (Conventional Commits)</h3>
+<pre><span class="c-type">feat</span>(<span class="c-scope">assignment</span>): add atomic ticket claim with race tests
+
+Claims use a conditional UPDATE so two agents
+can never both own the ticket; the loser gets
+a 409 instead of silently overwriting.
+
+<span class="c-trailer">Refs: T06.1</span>
+<span class="c-trailer">Implements: TD-031, TD-050</span></pre>
+    </div>
+    <div class="card">
+      <h3>Rules</h3>
+      <ul class="rules">
+        <li>Subject: <code>type(scope): imperative summary</code>, ≤ 72 characters, no trailing period</li>
+        <li><span class="bad">T06.1: atomic ClaimTicket …</span>: no plan number in the subject</li>
+        <li>Plan traceability goes in the <code>Refs:</code> trailer: <code>git log --grep "Refs: T06"</code></li>
+        <li><span class="bad">Co-Authored-By: …</span>: no co-author or AI attribution, ever</li>
+        <li>One subtask per commit, tests and code together, and every commit passes the gate</li>
+        <li>Review fixes are folded in with autosquash, so there are no "address review" commits</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>5 · Who does what</h2>
+  <div class="card table-wrap">
+    <table>
+      <thead><tr><th>Role</th><th>Does</th><th>Never</th></tr></thead>
+      <tbody>
+        <tr><td><b>Session controller</b></td><td>Creates the worktree, dispatches the agents, runs the gate, cleans the history, reports back</td><td>Merges to <code>main</code> or pushes</td></tr>
+        <tr><td><b>Implementer</b></td><td>Writes test-first code for its task's subtasks; one commit per subtask</td><td>Edits files its task doesn't own; fixes a wrong contract by improvising</td></tr>
+        <tr><td><b>Spec reviewer</b></td><td>Checks acceptance criteria and the interface contract (README §3)</td><td>Sees the implementer's reasoning</td></tr>
+        <tr><td><b>Code-quality reviewer</b></td><td>Checks CLAUDE.md rules, security, queries and tests, commit by commit</td><td>Approves while a finding is still open</td></tr>
+        <tr><td><b>You (owner)</b></td><td>Reviews each commit, rebases, fast-forwards and pushes <code>main</code></td><td>Squash-merges, creates merge commits, force-pushes</td></tr>
+        <tr><td><b>Team lead</b></td><td>Reviews the history on GitHub</td><td>n/a</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>6 · Task status</h2>
+  <div class="card table-wrap">
+    <table>
+      <thead><tr><th>Task</th><th>Plan</th><th>Wave</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">T00</td><td>T00-bootstrap.md</td><td>0</td><td><span class="pill next">Next</span></td></tr>
+        <tr><td class="mono">T01</td><td>T01-schema-models.md</td><td>1</td><td><span class="pill todo">Not started</span></td></tr>
+        <tr><td class="mono">T02</td><td>T02-business-calendar-sla.md</td><td>2</td><td><span class="pill todo">Not started</span></td></tr>
+        <tr><td class="mono">T03</td><td>T03-ticket-number.md</td><td>2</td><td><span class="pill todo">Not started</span></td></tr>
+        <tr><td class="mono">T04</td><td>T04-authorization.md</td><td>2</td><td><span class="pill todo">Not started</span></td></tr>
+        <tr><td class="mono">T05</td><td>T05-ticket-lifecycle.md</td><td>3</td><td><span class="pill todo">Not started</span></td></tr>
+        <tr><td class="mono">T06</td><td>T06-assignment.md</td><td>4a</td><td><span class="pill todo">Not started</span></td></tr>
+        <tr><td class="mono">T07</td><td>T07-conversation-attachments.md</td><td>4a</td><td><span class="pill todo">Not started</span></td></tr>
+        <tr><td class="mono">T08</td><td>T08-search-filtering.md</td><td>4a</td><td><span class="pill todo">Not started</span></td></tr>
+        <tr><td class="mono">T09</td><td>T09-sla-escalation.md</td><td>4a</td><td><span class="pill todo">Not started</span></td></tr>
+        <tr><td class="mono">T10</td><td>T10-notifications.md</td><td>4b</td><td><span class="pill todo">Not started</span></td></tr>
+        <tr><td class="mono">T11</td><td>T11-csv-import.md</td><td>4b</td><td><span class="pill todo">Not started</span></td></tr>
+        <tr><td class="mono">T12</td><td>T12-dashboard.md</td><td>4b</td><td><span class="pill todo">Not started</span></td></tr>
+        <tr><td class="mono">T13</td><td>T13-admin-config.md</td><td>4b</td><td><span class="pill todo">Not started</span></td></tr>
+        <tr><td class="mono">T14</td><td>T14-hardening-docs.md</td><td>5</td><td><span class="pill todo">Not started</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+</body>
+</html>
