@@ -259,13 +259,82 @@ Ticket lifecycle covers creating a ticket, editing it, moving it through its sta
 - A customer who asks for a ticket that is not theirs, or tries any action on it, gets "not found" rather than "forbidden", so they cannot learn whether it exists. A customer who can see a ticket but is not allowed an action on it (for example changing its priority) gets "forbidden".
 
 ## Assignment (T06)
-_Pending._
+Every ticket has at most one assigned agent. A ticket can get its agent in three ways: an agent claims it, a person with the right permission assigns or hands it off, or the system picks one automatically. Customers cannot assign tickets, and no assignment can be set through ticket creation or edit forms.
+
+**Claiming**
+- An agent claims an unassigned ticket for themselves. Only active tickets (not resolved or closed) can be claimed, and the agent needs the claim permission and must be able to see the ticket.
+- The claim only succeeds if the ticket is still unassigned at that moment. If another agent or the automatic assignment got there first, the claim is refused with an "already claimed" error and nothing changes. Two agents claiming at the same time can never both win.
+- Claiming a ticket that is Open moves it to In progress. A ticket in any other active status keeps its status.
+
+**Manual assignment and hand-off**
+- Someone with the assign-any permission can assign any ticket to an agent or reassign it. An agent with the hand-off permission can pass on only the tickets currently assigned to them.
+- The chosen person must be an available agent: they must have the agent role and be marked available. Anyone else is refused with a "not an eligible agent" error. Manual assignment does not check the agent's categories.
+- Assigning a ticket to the agent who already has it changes nothing and records nothing.
+- Manual assignment does not change the ticket's status.
+- A customer who may not view the ticket gets "not found"; a viewer who may see it but not assign it gets "forbidden".
+
+**Automatic assignment**
+- When a ticket is created, it is queued for automatic assignment, unless the ticket came from a CSV import, the setting for automatic assignment is turned off, or it already has an agent.
+- Assignment runs in the background and is retried up to three times (after 10 seconds, 1 minute and 5 minutes) if it fails. Only one assignment job per ticket is queued at a time.
+- Before assigning, the job checks again that the ticket still exists, is still unassigned and is still active. Otherwise it does nothing.
+- The candidates are available agents who are assigned to the ticket's category. The agent with the fewest active tickets wins. Ties go to the agent who was assigned a ticket least recently, with agents who were never assigned anything first, then to the lowest user id. This spreads work evenly and rotates between equally busy agents.
+- If no agent is eligible, the ticket simply stays in the unassigned queue and a log entry notes it. This is not an error, and agents can still claim it.
+- If someone claimed the ticket while the job was running, the automatic assignment backs off and changes nothing.
+- Like a claim, an automatic assignment moves an Open ticket to In progress.
+
+**What gets recorded**
+- Every assignment records the agent's "last assigned" time, which feeds the rotation rule above. The ticket's timeline shows who assigned it to whom and whether it was a claim, a manual assignment or an automatic one. The status change from Open to In progress is recorded as its own timeline entry.
 
 ## Conversation and attachments (T07)
-_Pending._
+A ticket carries a conversation of replies. A reply is either public or an internal note, and may carry attachments.
+
+**Posting a reply**
+- Anyone who can see a ticket and holds the reply permission can post a reply, except on a closed ticket. A closed ticket accepts no replies or notes and the attempt is refused with a "ticket closed" error. Resolved tickets still accept replies.
+- The reply text is required and can be up to 20,000 characters. Up to 5 files can be attached to one reply.
+- The author is always the signed-in user. Posting a reply also bumps the ticket's last-updated time.
+- Posting is limited to 20 requests per minute per user.
+- Everything happens in one step: if the reply or any attachment fails, no reply is saved and files already written are removed.
+
+**Public replies and internal notes**
+- Staff with the internal-notes permission can mark a reply as an internal note. If anyone else sends the internal flag, it is ignored and the reply is saved as a public reply, so a customer can never create or see an internal note.
+- Internal notes, and any attachment on an internal note, are never visible to customers: they are left out of the conversation list, the ticket page, reply counts and attachment lists, and are not downloadable. Staff see everything.
+- The timeline records a public reply and an internal note as different kinds of entry, without the text.
+
+**Customer reply resumes the SLA**
+- When the ticket's own customer posts a public reply while the ticket is Waiting for customer, the ticket moves back to In progress and the paused SLA clock resumes, with the due time pushed out by the time spent waiting. A reply by anyone else, or an internal note, does not do this.
+
+**Attachments**
+- Allowed types are PDF, PNG, JPG, JPEG, GIF, TXT, CSV, DOC, DOCX, XLS, XLSX and ZIP. A file may be up to 10 MB, and the type and the extension must both be allowed. These limits come from configuration.
+- Files are stored privately under a random name, never in a publicly reachable place. The original file name is kept for display and for the download. An attachment is public or internal following the reply it belongs to.
+
+**Downloading**
+- Files are downloaded only through a permission-checked route, never by a direct link. The viewer must be allowed to see the ticket, and an internal attachment is only for staff.
+- A customer who may not see the ticket or the attachment gets "not found", so they cannot tell it exists. The file is sent as a download under its original name with its recorded type, and browsers are told not to guess its content type.
+
+**Reading the conversation**
+- The conversation is listed oldest first in pages (20 by default, up to 100 per page), and customers receive only the public part. The web ticket page also shows the upload limits to the user.
 
 ## Search and filtering (T08)
-_Pending._
+The ticket list can be narrowed and sorted. It always shows only tickets the viewer is allowed to see, so a customer's filters can never reveal anyone else's tickets, and staff filters work inside the same visibility rules.
+
+**Lists and scopes**
+- The list has two scopes. Active shows tickets that are Open, In progress or Waiting for customer. Resolved shows Resolved and Closed tickets. Active is the default.
+- Lists are paginated: 20 per page by default, never more than 100 per page. Filters stay in the page links.
+
+**Filters** (all optional and combinable)
+- Ticket number: matches numbers that start with what was typed, in any letter case.
+- Keyword: searches the subject and the description. Each word matches words that start with it (for example "print" finds "printer"), except words shorter than three characters, which must match exactly. At most 10 words are used, up to 200 characters are accepted, and search operator characters such as quotes, plus, minus and asterisks are stripped so typing them cannot change how the search behaves. Where full-text search is not available, a plain "contains" match is used instead.
+- Status and priority: one or several values. The status choices offered depend on the scope.
+- Category, assigned agent, customer: by id. A "no agent" option shows only unassigned tickets.
+- Created from and to: calendar dates inclusive of both days, interpreted in the business time zone. The end date cannot be before the start date.
+- SLA state: shows tickets in the chosen SLA state, using the same definition of the state as the rest of the system.
+- Unknown values for status, priority, SLA state or sort are rejected, and a category must exist.
+
+**Sorting**
+- Newest first (default), oldest first, recently updated, least recently updated, due soonest, due latest, highest priority, lowest priority. Priority sorts by importance (urgent first when highest), not alphabetically. Ties are broken by ticket id so paging is stable. Any other sort value is rejected.
+
+**What the page offers**
+- The filter form offers the statuses for the current scope, priorities, SLA states, sorts and active categories. Staff also get a list of agents to filter by and the customer and agent filters; customers do not see those.
 
 ## SLA escalation (T09)
 _Pending._
