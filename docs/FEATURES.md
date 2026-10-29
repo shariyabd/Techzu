@@ -30,7 +30,7 @@ Authentication is plain email-and-password sign-in with a server-side session. T
 - Self-registration gives the new account the customer role.
 
 **What is not included**
-- No two-factor authentication, passkeys, email verification, password reset, password confirmation step or account settings pages.
+- No two-factor authentication, passkeys, email verification, password confirmation step or account settings pages.
 - The colour scheme simply follows the operating system's light or dark preference. There is no appearance setting.
 
 **API tokens**
@@ -284,3 +284,49 @@ _Pending._
 
 ## Security and performance (T14)
 _Pending._
+
+## Password reset (P2)
+Guests who forgot their password can set a new one through a link sent by email. The login page has a "Forgot password?" link to the request page.
+
+**Requesting a link**
+- The user enters their email. The answer is always the same message, "If an account exists for that email, a password reset link has been sent.", whether or not the email belongs to an account. No error is shown for an unknown email, so nobody can find out who has an account.
+- Only an existing account actually receives the email. In development the email is written to the application log instead of being delivered.
+- A link stays valid for 60 minutes. Asking again for the same email within 60 seconds does not send another message.
+- Requests are limited to 5 per minute from the same address.
+- Only guests can use these pages. A signed-in user is sent to the home page.
+
+**Setting the new password**
+- The link opens a page with the email filled in. The user types the new password twice.
+- The password follows the same rule as registration (stricter in production, 8 characters minimum elsewhere).
+- If the link is wrong, expired, already used or does not match the email, the reset fails with one error on the email field. Nothing is changed.
+- On success the password is replaced, the "remember me" login is invalidated, and every API token of that user is revoked, so old devices must sign in again. The user is sent to the login page with the message "Your password has been reset. You can log in now." They are not signed in automatically.
+- Reset attempts are limited to 5 per minute from the same address.
+
+## User and role management (P2)
+Admins manage accounts from an admin users page and from the matching API. Only users who hold the user-management permission (admins) can open any of it; everyone else is refused. Accounts are never deleted, so there is no delete option.
+
+**Listing users**
+- The list is paginated (20 per page by default, at most 100) and sorted by name.
+- It can be filtered by role and searched by typing the beginning of a name or an email. The search matches from the start of the text only, not from the middle.
+- Each row shows the user's role and, for agents, their categories and availability.
+
+**Creating a user**
+- An admin enters a name, an email, a password and one role (admin, agent or customer). The email must be lower case and unique, the password follows the registration rule.
+- For an agent the admin can also pick the categories the agent handles and whether the agent is available for automatic assignment. A new agent is available unless said otherwise. These fields are ignored for other roles.
+- The new account can sign in straight away.
+
+**Editing a user**
+- An admin can change name, email, role, and for agents the categories and availability.
+- The password field is optional. Left empty, the password is unchanged. When filled in, the password is replaced and all of the user's API tokens are revoked.
+- For an agent, categories and availability that are not sent keep their current values.
+
+**Changing a role**
+- Each user has exactly one role. Choosing the role they already have changes nothing.
+- An admin cannot change their own role, so an admin cannot lock themselves out by accident. The attempt is refused with a clear error.
+- When a role really changes, all of the user's API tokens are revoked, because tokens carry the permissions the user had when they were issued. A user who stops being an agent also loses their category assignments.
+
+## Permission matrix (P2)
+Admins can open a read-only page, and an API list, showing the three fixed roles (admin, agent, customer) in that order, with the permissions each one has.
+- The page shows a table of every permission against every role, with a mark where the role has it.
+- It reflects what was granted when the system was set up. Roles and permissions cannot be created, edited or removed from the application.
+- It is open to the same people who can manage users.
