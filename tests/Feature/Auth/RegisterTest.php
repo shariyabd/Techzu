@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\Role;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 
@@ -34,4 +35,18 @@ it('rejects an email that is already taken', function (): void {
 
     $this->assertGuest();
     expect(User::query()->count())->toBe(1);
+});
+
+it('ignores any role sent with the registration form', function (): void {
+    $this->post(route('register'), [
+        'name' => 'Role Seeker',
+        'email' => 'role.seeker@example.com',
+        'password' => 'password',
+        'password_confirmation' => 'password',
+        'role' => Role::Admin->value,
+        'roles' => [Role::Admin->value],
+    ])->assertRedirect(route('home'));
+
+    expect(User::query()->where('email', 'role.seeker@example.com')->sole()->getRoleNames()->all())
+        ->toBe([Role::Customer->value]);
 });
