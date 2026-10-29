@@ -27,7 +27,7 @@ const status = computed(() => page.props.flash.success);
     <div
         v-if="status"
         role="status"
-        class="mb-4 text-center text-sm font-medium text-green-600"
+        class="mb-4 text-center text-sm font-medium text-green-600 dark:text-green-400"
     >
         {{ status }}
     </div>

@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import UserForm from '@/components/admin/UserForm.vue';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import type { BreadcrumbItem } from '@/types';
-import type { AdminUser, CategoryOption, RoleOption } from '@/types/users';
 import { Head, setLayoutProps } from '@inertiajs/vue3';
 import { watchEffect } from 'vue';
+import UserForm from '@/components/admin/UserForm.vue';
+import PageHeader from '@/components/PageHeader.vue';
+import { Card, CardContent } from '@/components/ui/card';
+import { edit, index } from '@/routes/admin/users';
+import type { BreadcrumbItem } from '@/types';
+import type { AdminUser, CategoryOption, RoleOption } from '@/types/users';
 
 const props = defineProps<{
     user: AdminUser;
@@ -15,8 +17,8 @@ const props = defineProps<{
 
 watchEffect(() => {
     const breadcrumbs: BreadcrumbItem[] = [
-        { title: 'Users', href: '/admin/users' },
-        { title: props.user.name, href: `/admin/users/${props.user.id}/edit` },
+        { title: 'Users', href: index() },
+        { title: props.user.name, href: edit(props.user.id) },
     ];
     setLayoutProps({ breadcrumbs });
 });
@@ -25,11 +27,9 @@ watchEffect(() => {
 <template>
     <Head :title="`Edit ${user.name}`" />
 
-    <div class="p-4">
-        <Card class="max-w-xl">
-            <CardHeader>
-                <CardTitle>Edit user</CardTitle>
-            </CardHeader>
+    <div class="mx-auto flex w-full max-w-2xl flex-col gap-6 p-4 md:p-6">
+        <PageHeader :title="`Edit ${user.name}`" :description="user.email" />
+        <Card>
             <CardContent>
                 <UserForm
                     :user="user"
