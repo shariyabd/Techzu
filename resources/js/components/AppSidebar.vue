@@ -15,11 +15,11 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { useCurrentUrl } from '@/composables/useCurrentUrl';
-import { navigationFor } from '@/config/navigation';
+import { groupedNavigationFor } from '@/config/navigation';
 import { home } from '@/routes';
 
 const page = usePage();
-const items = computed(() => navigationFor(page.props));
+const sections = computed(() => groupedNavigationFor(page.props));
 const { isCurrentOrParentUrl } = useCurrentUrl();
 </script>
 
@@ -38,10 +38,17 @@ const { isCurrentOrParentUrl } = useCurrentUrl();
         </SidebarHeader>
 
         <SidebarContent>
-            <SidebarGroup class="px-2 py-0">
-                <SidebarGroupLabel>Support</SidebarGroupLabel>
+            <SidebarGroup
+                v-for="section in sections"
+                :key="section.group"
+                class="px-2 py-0"
+            >
+                <SidebarGroupLabel>{{ section.label }}</SidebarGroupLabel>
                 <SidebarMenu>
-                    <SidebarMenuItem v-for="item in items" :key="item.href">
+                    <SidebarMenuItem
+                        v-for="item in section.items"
+                        :key="item.href"
+                    >
                         <SidebarMenuButton
                             as-child
                             :is-active="isCurrentOrParentUrl(item.href)"
