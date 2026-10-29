@@ -1,26 +1,28 @@
 <script setup lang="ts">
+import { Head, Link, useForm } from '@inertiajs/vue3';
+import { computed } from 'vue';
 import InputError from '@/components/InputError.vue';
+import PageHeader from '@/components/PageHeader.vue';
+import SubmitButton from '@/components/SubmitButton.vue';
+import AttachmentPicker from '@/components/tickets/AttachmentPicker.vue';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
+    NativeSelect,
+    NativeSelectOption,
+} from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
-import type { TicketFormOptions } from '@/types/tickets';
-import { Head, useForm } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { errorsFor } from '@/lib/forms';
+import { create, index, store } from '@/routes/tickets';
+import type { AttachmentRules, TicketFormOptions } from '@/types/tickets';
 
 defineOptions({
     layout: {
         breadcrumbs: [
-            { title: 'Tickets', href: '/tickets' },
-            { title: 'New ticket', href: '/tickets/create' },
+            { title: 'Tickets', href: index() },
+            { title: 'New ticket', href: create() },
         ],
     },
 });
@@ -28,6 +30,7 @@ defineOptions({
 const props = defineProps<{
     options: TicketFormOptions;
     canCreateOnBehalf: boolean;
+    attachmentRules: AttachmentRules;
 }>();
 
 const form = useForm<{
@@ -46,16 +49,7 @@ const form = useForm<{
     attachments: [],
 });
 
-const attachmentErrors = computed<string[]>(() =>
-    Object.entries(form.errors)
-        .filter(([key]) => key.startsWith('attachments'))
-        .map(([, message]) => message as string),
-);
-
-const onFiles = (event: Event): void => {
-    const input = event.target as HTMLInputElement;
-    form.attachments = input.files ? Array.from(input.files) : [];
-};
+const attachmentErrors = computed(() => errorsFor(form.errors, 'attachments'));
 
 const submit = (): void => {
     form.transform((data) => {
@@ -65,26 +59,33 @@ const submit = (): void => {
         const rest: Partial<typeof data> = { ...data };
         delete rest.customer_email;
         return rest;
-    }).post('/tickets', { forceFormData: true });
+    }).post(store.url(), { forceFormData: true });
 };
 </script>
 
 <template>
     <Head title="New ticket" />
 
-    <div class="p-4">
-        <Card class="max-w-2xl">
-            <CardHeader>
-                <CardTitle>New ticket</CardTitle>
-            </CardHeader>
+    <div class="mx-auto flex w-full max-w-2xl flex-col gap-6 p-4 md:p-6">
+        <PageHeader
+            title="New ticket"
+            :description="
+                canCreateOnBehalf
+                    ? 'Open a ticket for a customer.'
+                    : 'Tell us what you need help with. We reply by email and here.'
+            "
+        />
+
+        <Card>
             <CardContent>
-                <form class="space-y-4" @submit.prevent="submit">
+                <form class="flex flex-col gap-5" @submit.prevent="submit">
                     <div v-if="canCreateOnBehalf" class="grid gap-2">
                         <Label for="customer_email">Customer email</Label>
                         <Input
                             id="customer_email"
                             v-model="form.customer_email"
                             type="email"
+                            autocomplete="off"
                             required
                         />
                         <InputError :message="form.errors.customer_email" />
@@ -112,69 +113,53 @@ const submit = (): void => {
                     <div class="grid gap-4 sm:grid-cols-2">
                         <div class="grid gap-2">
                             <Label for="priority">Priority</Label>
-                            <Select
-                                :model-value="form.priority"
-                                @update:model-value="
-                                    (v) => (form.priority = String(v ?? ''))
-                                "
-                            >
-                                <SelectTrigger id="priority"
-                                    ><SelectValue
-                                /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem
-                                        v-for="option in options.priorities"
-                                        :key="option.value"
-                                        :value="option.value"
-                                    >
-                                        {{ option.label }}
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
+                            <NativeSelect id="priority" v-model="form.priority">
+                                <NativeSelectOption
+                                    v-for="option in options.priorities"
+                                    :key="option.value"
+                                    :value="option.value"
+                                    >{{ option.label }}</NativeSelectOption
+                                >
+                            </NativeSelect>
                             <InputError :message="form.errors.priority" />
                         </div>
                         <div class="grid gap-2">
                             <Label for="category">Category</Label>
-                            <Select
-                                :model-value="form.category_id"
-                                @update:model-value="
-                                    (v) => (form.category_id = String(v ?? ''))
-                                "
+                            <NativeSelect
+                                id="category"
+                                v-model="form.category_id"
+                                required
                             >
-                                <SelectTrigger id="category"
-                                    ><SelectValue
-                                        placeholder="Choose a category"
-                                /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem
-                                        v-for="category in options.categories"
-                                        :key="category.id"
-                                        :value="String(category.id)"
-                                    >
-                                        {{ category.name }}
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
+                                <NativeSelectOption value="" disabled
+                                    >Choose a category</NativeSelectOption
+                                >
+                                <NativeSelectOption
+                                    v-for="category in options.categories"
+                                    :key="category.id"
+                                    :value="String(category.id)"
+                                    >{{ category.name }}</NativeSelectOption
+                                >
+                            </NativeSelect>
                             <InputError :message="form.errors.category_id" />
                         </div>
                     </div>
                     <div class="grid gap-2">
                         <Label for="attachments">Attachments</Label>
-                        <Input
+                        <AttachmentPicker
                             id="attachments"
-                            type="file"
-                            multiple
-                            @change="onFiles"
-                        />
-                        <InputError
-                            v-for="(message, index) in attachmentErrors"
-                            :key="index"
-                            :message="message"
+                            v-model="form.attachments"
+                            :rules="attachmentRules"
+                            :errors="attachmentErrors"
                         />
                     </div>
-                    <Button type="submit" :disabled="form.processing"
-                        >Create ticket</Button
-                    >
+                    <div class="flex flex-wrap items-center gap-2">
+                        <SubmitButton :processing="form.processing"
+                            >Create ticket</SubmitButton
+                        >
+                        <Button variant="ghost" as-child>
+                            <Link :href="index()">Cancel</Link>
+                        </Button>
+                    </div>
                 </form>
             </CardContent>
         </Card>
