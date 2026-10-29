@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Support;
 
+use App\Models\Attachment;
 use App\Models\Ticket;
 use App\Models\User;
 use Closure;
@@ -38,6 +39,7 @@ final class RouteAudit
     public static function bindings(): array
     {
         return [
+            'attachment' => static fn (): string => (string) Attachment::factory()->create()->id,
             'ticket' => static fn (): string => Ticket::factory()->create()->number,
             'user' => static fn (): string => (string) User::factory()->customer()->create()->id,
         ];
