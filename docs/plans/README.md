@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a Laravel 12 support-ticket system with business-hours SLAs, escalation, concurrency-safe assignment, and both an Inertia/Vue UI and a versioned REST API, as specified in `PRD.md`.
+**Goal:** Build a Laravel 13 support-ticket system with business-hours SLAs, escalation, concurrency-safe assignment, and both an Inertia/Vue UI and a versioned REST API, as specified in `PRD.md`.
 
 **Architecture:** Thin Web (Inertia) and API (`/api/v1`) controllers share FormRequests, Policies and single-purpose Actions. Pure services handle the SLA and business-hours math. Domain events drive the activity log, queued notifications and auto-assignment. See TD-001.
 
-**Tech stack:** Laravel 12, PHP 8.3, MySQL 8, Inertia 2, Vue 3 + TypeScript, Tailwind, shadcn-vue, Sanctum, spatie/laravel-permission, spatie/laravel-activitylog, dedoc/scramble, Pest 3, Larastan, Pint.
+**Tech stack:** Laravel 13, PHP 8.3, MySQL 8, Inertia 3, Vue 3 + TypeScript, Tailwind, shadcn-vue, Sanctum, spatie/laravel-permission, spatie/laravel-activitylog, dedoc/scramble, Pest 4, Larastan, Pint.
 
 **Required reading for every task:**
 - `CLAUDE.md` (guardrails)
@@ -16,16 +16,16 @@
 
 ## Global constraints
 
-- PHP `^8.3`, Laravel `^12.0`, MySQL `8.0`, Node `>=20`.
-- Packages, with these exact names:
-  - `laravel/sanctum`
-  - `spatie/laravel-permission:^6.0`
-  - `spatie/laravel-activitylog:^4.10`
-  - `dedoc/scramble`
-  - `pestphp/pest:^3.0`
-  - `pestphp/pest-plugin-laravel`
-  - `larastan/larastan:^3.0`
-  - `laravel/pint`
+- PHP `^8.3`, Laravel `^13.0`, MySQL `8.0`, Node `>=22`.
+- Starter kit: `laravel/vue-starter-kit:dev-main` (Laravel 13, Inertia 3, Fortify, Wayfinder, `@lucide/vue` icons, Vite+). The tagged kit release v1.0.2 is the old Laravel 12 kit and must not be used (TD-002).
+- Packages, with these exact names. All of these were verified on 2026-10-29 to resolve together on PHP 8.3.17:
+  - `laravel/sanctum:^4.3`
+  - `spatie/laravel-permission:^8.3`
+  - `spatie/laravel-activitylog:^4.12` (v5 needs PHP 8.4)
+  - `dedoc/scramble:^0.13`
+  - `pestphp/pest:^4.0` and `pestphp/pest-plugin-laravel:^4.0` (they replace the kit's `phpunit/phpunit`; Pest 5 needs PHP 8.4)
+  - `larastan/larastan:^3.13`, `laravel/pint`, `laravel/sail` (all shipped by the kit)
+  - `laravel/boost:^2.10` (dev only, TD-141)
 - **No other runtime packages** without a new TD entry.
 - `declare(strict_types=1);` in every PHP file under `app/`, `database/`, `routes/` and `tests/`.
 - Storage and time: store UTC (`APP_TIMEZONE=UTC`), and compute business time in `config('business_hours.timezone')` (default `Asia/Dhaka`).
@@ -87,45 +87,69 @@ Wave 4 tasks are independent of each other by construction: separate route files
 
 ## 2. Execution workflow (per task)
 
-For each task (`superpowers:subagent-driven-development`):
+For each task (`superpowers:subagent-driven-development`). Five subagent roles: **implementer**, **spec reviewer**, **code-quality reviewer**, **documenter**, and the **controller** (the session itself), which runs the gate and the browser checks.
 
-1. **Worktree:** the controller creates it:
+1. **Worktree (controller):**
    ```bash
    git worktree add ../techzu-wt/Txx -b task/Txx-<slug> main
    ```
-   Each worktree needs its own `.env` (copied from `.env.example`) with `DB_DATABASE=techzu_wt_txx`. `phpunit.xml` values take precedence over `.env`, so tests must be run with the database on the command line: `DB_DATABASE=techzu_wt_txx_testing ./vendor/bin/pest --parallel`. That keeps parallel worktrees from sharing a database.
+   Each worktree needs its own `.env` (copied from `.env.example`) with `DB_DATABASE=techzu_wt_txx` and `APP_URL=http://127.0.0.1:80NN`, where `NN` is the task number (T06 → 8006). `phpunit.xml` values take precedence over `.env`, so tests must be run with the database on the command line: `DB_DATABASE=techzu_wt_txx_testing ./vendor/bin/pest --parallel`. That keeps parallel worktrees from sharing a database or a port.
 2. **Implementer subagent:** given its task file, CLAUDE.md, the spec and this contract.
    - Runs the subtasks in the order of the task's mini-waves.
-   - Works test-first (red → green → refactor).
+   - Works test-first (red → green → refactor), writing only the tests that CLAUDE.md §Testing allows.
    - Commits per subtask on the task branch, in Conventional Commits format with `Refs: Txx.n` and `Implements: TD-...` trailers (CLAUDE.md §Commits). No plan number in the subject, no co-author trailer.
 3. **Spec reviewer subagent:** has **not** seen the implementation reasoning. Checks every acceptance criterion and every "Produces" interface against this contract, and reports PASS or a list of gaps.
-4. **Code-quality reviewer subagent:** checks against CLAUDE.md (architecture, security, database, style rules), naming consistency, and missing tests for risky logic. Reports PASS or a list of findings.
-5. **Fix loop:** the implementer fixes the findings, and the reviewers re-check only those findings.
-6. **Gate (controller runs it in the worktree):**
+4. **Code-quality reviewer subagent:** checks against CLAUDE.md (architecture, security, database, style rules), naming consistency, and missing tests for risky logic. It also flags **redundant tests**: framework behavior, duplicates across layers, trivial getters. Reports PASS or a list of findings.
+5. **Fix loop:** the implementer fixes the findings as `git commit --fixup <sha>`, and the reviewers re-check only those findings.
+6. **Browser check (controller, only if the task touched `resources/js` or web routes):**
+   - Uses **Playwright MCP only** (CLAUDE.md §Browser).
+   - Serves the worktree with `npm run build && php artisan serve --port=80NN`, after `php artisan migrate:fresh --seed` on the worktree DB.
+   - Logs in as each affected demo role and walks the task's main flow: the pages it added, one happy path, and one forbidden path.
+   - Checks the browser console for errors.
+   - A failure goes back to the implementer as a fixup. Screenshots stay in the scratchpad and are never committed.
+7. **Documenter subagent:** given the task file, the final diff (`git diff main...HEAD`) and `docs/features/_TEMPLATE.md`.
+   - Writes or updates the task's feature doc, `docs/features/<doc>.md` (index in `docs/features/README.md`): every business rule mapped to the file::method that implements it and the test that proves it, plus the flow, data, events, permissions, config and edge cases.
+   - Documents only what the code does. Anything it can't find in the code goes to the report, not into the doc.
+   - One commit: `docs(<scope>): document <feature> logic` with `Refs: Txx`.
+   - The spec reviewer then checks the doc in one pass: every referenced file::method and test exists, and every rule matches the code.
+8. **Clean the history (controller):**
+   - Fold every fixup into the commit it belongs to: `git rebase -i --autosquash main`, run with `GIT_SEQUENCE_EDITOR=true` so it doesn't stop for an editor.
+   - The branch is now the exact sequence of commits the reviewer will read.
+9. **Gate on every commit (controller):**
    ```bash
-   ./vendor/bin/pint --test && ./vendor/bin/phpstan analyse --memory-limit=1G && ./vendor/bin/pest --parallel
-   npm run build && npx vue-tsc --noEmit   # if resources/js changed
+   git rebase main --exec "./vendor/bin/pint --test && ./vendor/bin/phpstan analyse --memory-limit=1G && DB_DATABASE=techzu_wt_txx_testing ./vendor/bin/pest --parallel"
+   npm run build && npm run check && npx vue-tsc --noEmit   # at the tip, if resources/js changed
    ```
-   Run the gate on **every** commit, not only the tip: `git rebase main --exec "<gate>"`. Each commit must pass alone because it is reviewed alone.
-7. **Clean the history:** fold every review fix into the commit it belongs to (`git commit --fixup <sha>` → `git rebase -i --autosquash main`). The branch is now the exact sequence of commits the reviewer will read.
-8. **Stop and report.** The controller hands the owner the commit list (`git log --oneline main..task/Txx`), the gate output, and any contract note that couldn't be confirmed. Agents never touch `main`.
-9. **Owner review and land** (human only):
-   ```bash
-   git log -p main..task/Txx-<slug>          # review commit by commit
-   git rebase main                           # pick up tasks landed earlier in the wave
-   # re-run the gate
-   git checkout main && git merge --ff-only task/Txx-<slug>
-   git push origin main
-   git worktree remove ../techzu-wt/Txx && git branch -d task/Txx-<slug>
-   ```
-   No squash, no merge commits, never force-push `main`. Within a wave, tasks land one at a time.
-10. **Next wave** starts only after every task in its prerequisite wave has landed on `main`.
+   Each commit must pass alone, because it is reviewed alone.
+10. **Stop and report.** The controller hands the owner:
+    - the commit list (`git log --oneline main..task/Txx-<slug>`)
+    - the gate output
+    - the browser-check result
+    - the feature doc path
+    - any contract note that couldn't be confirmed
+
+    Agents never touch `main`.
+11. **Owner review, land and clean up** (human only). Run from the main checkout, not the worktree:
+    ```bash
+    cd ../techzu-wt/Txx && git log -p main..task/Txx-<slug>   # review commit by commit
+    git rebase main                                            # pick up tasks landed earlier in the wave; re-run the gate
+    cd /home/shariya/techzu \
+      && git merge --ff-only task/Txx-<slug> \
+      && git push origin main \
+      && git worktree remove ../techzu-wt/Txx \
+      && git branch -d task/Txx-<slug> \
+      && env_val() { grep -E "^$1=" .env | tail -n1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//'; } \
+      && MYSQL_PWD="$(env_val DB_PASSWORD)" mysql -h "$(env_val DB_HOST)" -P "$(env_val DB_PORT)" -u "$(env_val DB_USERNAME)" \
+           -e "DROP DATABASE IF EXISTS techzu_wt_txx; DROP DATABASE IF EXISTS techzu_wt_txx_testing"
+    ```
+    The `&&` chain means the worktree, branch and databases are deleted **only after the push succeeds**. If the push fails, nothing is removed. No squash, no merge commits, never force-push `main`. Within a wave, tasks land one at a time.
+12. **Next wave** starts only after every task in its prerequisite wave has landed on `main`.
 
 Visual overview of this workflow: [docs/workflow.html](../workflow.html).
 
 **Parallelism limit:** at most 4 implementers run concurrently. Subtasks inside a task may run in parallel *only* where the task file's mini-wave table says so, and only by separate subagents in the same worktree working on disjoint files.
 
-**Escalation rule:** if an implementer finds that the contract (§3) is wrong or incomplete, they **stop and report**. The controller amends this README in a separate commit (`plan: amend contract ...`), and only then does work continue.
+**Escalation rule:** if an implementer finds that the contract (§3) is wrong or incomplete, they **stop and report**. The controller amends this README in a separate commit (`docs(plans): amend contract for ...`), and only then does work continue.
 
 ### Task file template
 
@@ -414,8 +438,8 @@ DashboardPolicy (Gate 'viewDashboard')            // registered as Gate::define(
 
 ### 3.13 Inertia pages & shared props
 
-- Shared (`HandleInertiaRequests`, T00, extended in T04): `auth.user{id,name,email,roles[]}`, `auth.can{viewDashboard, manageImports, manageUsers, manageCategories, manageHolidays, createOnBehalf}`, `flash{success,error}`, and `notifications.unread_count`, which T10 fills in through a lazy prop. T00 defines the key as `0`, and T10 replaces the closure in `HandleInertiaRequests`. **T10 is allowed to modify that one closure.**
-- Layout: `resources/js/layouts/AppLayout.vue` (T00). Navigation is assembled by `resources/js/config/navigation.ts` (T00) from per-feature modules loaded with `import.meta.glob('./navigation/*.ts', { eager: true })`. Each module default-exports `NavItem[]`, where `type NavItem = { title: string; href: string; icon?: Component; order: number; visible: (page: SharedProps) => boolean }`. Features add **their own file**: `navigation/tickets.ts` (T05), `navigation/dashboard.ts` (T12), `navigation/imports.ts` (T11), `navigation/admin.ts` (T13). No shared file is edited.
+- Shared (`HandleInertiaRequests`, T00, extended in T04): `auth.user{id,name,email,email_verified_at,roles[]}`, `auth.can{viewDashboard, manageImports, manageUsers, manageCategories, manageHolidays, createOnBehalf}`, `flash{success,error}`, and `notifications.unread_count`, which T10 fills in through a lazy prop. T00 defines the key as `0`, and T10 replaces the closure in `HandleInertiaRequests`. **T10 is allowed to modify that one closure.**
+- Layout: `resources/js/layouts/AppLayout.vue` (T00). **Inertia 3: the kit's `resources/js/app.ts` applies `AppLayout` to every page by default. Pages never wrap themselves in `<AppLayout>`**, because that renders two sidebars. Pages pass breadcrumbs as layout props: static ones with `defineOptions({ layout: { breadcrumbs } })`, as in the kit's `pages/Dashboard.vue`, and prop-dependent ones with `setLayoutProps()` inside `watchEffect`. Icons come from `@lucide/vue`. Navigation is assembled by `resources/js/config/navigation.ts` (T00) from per-feature modules loaded with `import.meta.glob('./navigation/*.ts', { eager: true })`. Each module default-exports `NavItem[]`, where `type NavItem = { title: string; href: string; icon?: Component; order: number; visible: (page: SharedProps) => boolean }`. Features add **their own file**: `navigation/tickets.ts` (T05), `navigation/dashboard.ts` (T12), `navigation/imports.ts` (T11), `navigation/admin.ts` (T13). No shared file is edited.
 - `tickets/Show.vue` (T05) renders the components below, which T05 creates as **stubs**:
 
   | Stub component | Owner from wave 4 | Props |
@@ -463,6 +487,8 @@ Files modified by more than one task, and who may touch what:
 | `components/tickets/TicketFilterBar.vue` | T05 (stub) | T08 (replaces it) |
 | `phpunit.xml` | T00 (suites Unit, Feature, Database, Concurrency; `TICKETS_AUTO_ASSIGN=false`) | none |
 | `TECHNICAL_DECISIONS.md` | — | any task: only to record an amendment it was told to make |
+| `docs/features/<doc>.md` | the task's documenter (map in `docs/features/README.md`) | later tasks' documenters may add a "Changed by Txx" section when their task changes that feature's logic |
+| `docs/features/README.md`, `docs/features/_TEMPLATE.md` | plan (already written) | none: each task fills only its own row's doc |
 
 ---
 

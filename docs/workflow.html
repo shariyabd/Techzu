@@ -113,6 +113,7 @@
     <div class="card"><span class="pill done">Done</span><h3 style="margin-top:6px">Technical decisions</h3><span class="sub mono">TD-001 … TD-140</span></div>
     <div class="card"><span class="pill done">Done</span><h3 style="margin-top:6px">Plan + contract</h3><span class="sub mono">docs/plans T00–T14</span></div>
     <div class="card"><span class="pill done">Done</span><h3 style="margin-top:6px">Guardrails</h3><span class="sub mono">CLAUDE.md</span></div>
+    <div class="card"><span class="pill done">Ready</span><h3 style="margin-top:6px">Feature docs</h3><span class="sub mono">docs/features/ (filled per task)</span></div>
     <div class="card"><span class="pill next">Next</span><h3 style="margin-top:6px">Implementation</h3><span class="sub">Starts with T00; 0 of 15 tasks landed</span></div>
   </div>
 
@@ -156,7 +157,7 @@
     <div class="lane">
       <div class="who ctrl">Session controller</div>
       <div class="steps">
-        <div class="step ctrl"><div class="n">1</div><h3>Create worktree</h3><p><code>git worktree add … -b task/T06-… main</code>, plus <code>.env</code> with its own DB names</p></div>
+        <div class="step ctrl"><div class="n">1</div><h3>Create worktree</h3><p><code>git worktree add … -b task/T06-… main</code>, plus <code>.env</code> with its own DB names and port <code>8006</code></p></div>
         <span class="to">→</span>
         <div class="step ctrl"><div class="n">2</div><h3>Dispatch implementer</h3><p>Gives it the task file, CLAUDE.md, the spec and README §3</p></div>
       </div>
@@ -164,39 +165,53 @@
     <div class="lane">
       <div class="who agent">Implementer agent</div>
       <div class="steps">
-        <div class="step agent"><div class="n">3</div><h3>Subtasks by mini-wave</h3><p>For each subtask: failing test → code → green</p></div>
+        <div class="step agent"><div class="n">2</div><h3>Subtasks by mini-wave</h3><p>For each subtask: failing test → code → green. Only tests for rules, criteria, security or real failure modes.</p></div>
         <span class="to">→</span>
-        <div class="step agent"><div class="n">4</div><h3>Commit per subtask</h3><p><code>feat(assignment): …</code><br><code>Refs: T06.1</code></p></div>
+        <div class="step agent"><div class="n">2</div><h3>Commit per subtask</h3><p><code>feat(assignment): …</code><br><code>Refs: T06.1</code></p></div>
       </div>
     </div>
     <div class="lane">
       <div class="who agent">Reviewer agents</div>
       <div class="steps">
-        <div class="step agent"><div class="n">5</div><h3>Spec reviewer</h3><p>Checks acceptance criteria and the interface contract. Didn't see the implementer's reasoning.</p></div>
+        <div class="step agent"><div class="n">3</div><h3>Spec reviewer</h3><p>Checks acceptance criteria and the interface contract. Didn't see the implementer's reasoning.</p></div>
         <span class="to">→</span>
-        <div class="step agent"><div class="n">6</div><h3>Code-quality reviewer</h3><p>Checks CLAUDE.md rules, security, N+1 queries, missing tests. Reads commit by commit.</p></div>
+        <div class="step agent"><div class="n">4</div><h3>Code-quality reviewer</h3><p>Checks CLAUDE.md rules, security, N+1 queries, missing tests <b>and redundant tests</b>. Reads commit by commit.</p></div>
       </div>
       <div></div>
-      <div class="loop">↺ Findings go back to the implementer as <code>git commit --fixup &lt;sha&gt;</code>. Only the findings are re-reviewed, until both reviewers pass.</div>
+      <div class="loop">↺ 5 · Findings go back to the implementer as <code>git commit --fixup &lt;sha&gt;</code>. Only the findings are re-reviewed, until both reviewers pass.</div>
+    </div>
+    <div class="lane">
+      <div class="who ctrl">Browser check</div>
+      <div class="steps">
+        <div class="step ctrl"><div class="n">6 · UI tasks only</div><h3>Playwright MCP</h3><p>Serves the worktree on <code>:80NN</code> with seeded data. Logs in per role, walks the happy and forbidden paths, checks the console. Never Claude in Chrome.</p></div>
+      </div>
+    </div>
+    <div class="lane">
+      <div class="who agent">Documenter agent</div>
+      <div class="steps">
+        <div class="step agent"><div class="n">7</div><h3>Write the feature doc</h3><p><code>docs/features/&lt;feature&gt;.md</code>: every rule → <code>File.php::method()</code> → proving test, plus the flow, data, events and permissions</p></div>
+        <span class="to">→</span>
+        <div class="step agent"><div class="n">7</div><h3>Spec reviewer checks it</h3><p>Every referenced file, method and test exists, and every rule matches the code</p></div>
+      </div>
     </div>
     <div class="lane">
       <div class="who gate">Gate</div>
       <div class="steps">
-        <div class="step gate"><div class="n">7</div><h3>Autosquash fixups</h3><p><code>git rebase -i --autosquash main</code>: each fix joins the commit it belongs to</p></div>
+        <div class="step gate"><div class="n">8</div><h3>Autosquash fixups</h3><p><code>git rebase -i --autosquash main</code>: each fix joins the commit it belongs to</p></div>
         <span class="to">→</span>
-        <div class="step gate"><div class="n">8</div><h3>Gate on every commit</h3><p><code>git rebase main --exec</code> runs pint, phpstan, pest, plus the build and vue-tsc if the commit touched JS</p></div>
+        <div class="step gate"><div class="n">9</div><h3>Gate on every commit</h3><p><code>git rebase main --exec</code> runs pint, phpstan and pest; the build and vue-tsc run at the tip</p></div>
         <span class="to">→</span>
-        <div class="step ctrl"><div class="n">9</div><h3>Stop &amp; report</h3><p>Commit list, gate output, unconfirmed contract notes. Agents never touch <code>main</code>.</p></div>
+        <div class="step ctrl"><div class="n">10</div><h3>Stop &amp; report</h3><p>Commits, gate output, browser result, doc path, unconfirmed notes. Agents never touch <code>main</code>.</p></div>
       </div>
     </div>
     <div class="lane">
       <div class="who human">You (owner)</div>
       <div class="steps">
-        <div class="step human"><div class="n">10</div><h3>Review</h3><p><code>git log -p main..task/T06-…</code>, the same view your team lead gets</p></div>
+        <div class="step human"><div class="n">11</div><h3>Review</h3><p><code>git log -p main..task/T06-…</code> and the feature doc</p></div>
         <span class="to">→</span>
         <div class="step human"><div class="n">11</div><h3>Rebase + re-gate</h3><p>Picks up tasks from the same wave that landed first</p></div>
         <span class="to">→</span>
-        <div class="step human"><div class="n">12</div><h3>Land</h3><p><code>merge --ff-only</code> → <code>push origin main</code> → remove the worktree</p></div>
+        <div class="step human"><div class="n">11</div><h3>Land &amp; clean up</h3><p><code>merge --ff-only &amp;&amp; push &amp;&amp;</code> remove the worktree, branch and DBs. Nothing is deleted if the push fails.</p></div>
       </div>
     </div>
     <div class="lane">
@@ -277,7 +292,9 @@ a 409 instead of silently overwriting.
         <tr><td><b>Implementer</b></td><td>Writes test-first code for its task's subtasks; one commit per subtask</td><td>Edits files its task doesn't own; fixes a wrong contract by improvising</td></tr>
         <tr><td><b>Spec reviewer</b></td><td>Checks acceptance criteria and the interface contract (README §3)</td><td>Sees the implementer's reasoning</td></tr>
         <tr><td><b>Code-quality reviewer</b></td><td>Checks CLAUDE.md rules, security, queries and tests, commit by commit</td><td>Approves while a finding is still open</td></tr>
-        <tr><td><b>You (owner)</b></td><td>Reviews each commit, rebases, fast-forwards and pushes <code>main</code></td><td>Squash-merges, creates merge commits, force-pushes</td></tr>
+        <tr><td><b>Documenter</b></td><td>Writes the task's feature doc: each rule mapped to its file::method and its proving test</td><td>Documents anything that isn't in the code</td></tr>
+        <tr><td><b>Browser check</b></td><td>Playwright MCP against the worktree's own server and seeded demo accounts</td><td>Uses Claude in Chrome or the built-in browser (denied in settings)</td></tr>
+        <tr><td><b>You (owner)</b></td><td>Reviews each commit and the feature doc, fast-forwards and pushes <code>main</code>, then deletes the worktree</td><td>Squash-merges, creates merge commits, force-pushes</td></tr>
         <tr><td><b>Team lead</b></td><td>Reviews the history on GitHub</td><td>n/a</td></tr>
       </tbody>
     </table>

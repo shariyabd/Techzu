@@ -27,7 +27,7 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 | Dashboard & performance | TD-100 – TD-101 |
 | Error handling | TD-110 |
 | Configuration | TD-130 |
-| Development process | TD-140 |
+| Development process | TD-140, TD-141 |
 
 ---
 
@@ -57,10 +57,10 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 
 ---
 
-### TD-002 — Inertia 2 + Vue 3 (TypeScript) via the official Laravel Vue starter kit
+### TD-002 — Inertia 3 + Vue 3 (TypeScript) via the official Laravel Vue starter kit
 **Status:** Accepted
 
-**Decision.** Use Laravel 12's Vue starter kit: Inertia 2, Vue 3 Composition API with `<script setup lang="ts">`, Tailwind, and shadcn-vue components.
+**Decision.** Use the Laravel 13 Vue starter kit (`laravel/vue-starter-kit:dev-main`): Inertia 3, Vue 3 Composition API with `<script setup lang="ts">`, Tailwind, and shadcn-vue components.
 
 **Why.**
 - Server-side routing and authorization stay in Laravel. Inertia pages receive props that the server has already authorized, so there's no second auth layer in the client.
@@ -73,7 +73,14 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 - *Blade/Livewire.* Simpler, but the requirement asked for a modern SPA-feel UI.
 - *A standalone SPA consuming the API.* Doubles the auth surface (token storage in the browser) and the deployment pipeline.
 
-**Starter-kit dependencies (amended 2026-10-29).** The kit brings `inertia-laravel`, `laravel/fortify` (session auth: login, registration, password reset, 2FA), `laravel/wayfinder` (typed route helpers for TypeScript) and `laravel/tinker`. These are accepted as part of this decision rather than fighting the kit. API tokens (TD-003) are issued separately and don't go through Fortify's two-factor flow. This is documented as a known limitation.
+**Starter-kit dependencies (amended 2026-10-29).** The kit brings `inertia-laravel`, `laravel/fortify` (session auth: login, registration, password reset, 2FA), `laravel/wayfinder` (typed route helpers for TypeScript) and `laravel/tinker`. These are accepted as part of this decision rather than fighting the kit.
+
+**Moved to Laravel 13 (amended 2026-10-29, before any code was written).**
+- The only kit tag, v1.0.2 (Feb 2025), is the old Laravel 12 kit without Fortify or Wayfinder.
+- The maintained kit is `dev-main`, on Laravel 13 and Inertia 3.
+- Laravel 12 is in security-fix-only support, ending around Feb 2027.
+- Local PHP is 8.3, so Pest stays on 4 and activitylog on 4.12. Pest 5 and activitylog 5 need PHP 8.4.
+- spatie/permission moves to ^8.3. Its v7/v8 breaking changes (renamed event and command classes, type hints) don't affect code that goes through Policies and `can()`. API tokens (TD-003) are issued separately and don't go through Fortify's two-factor flow. This is documented as a known limitation.
 
 **Trade-offs.** It's a JS build step plus a second language in the repo. Frontend tests are limited to type-checking and linting. Behavior is tested at the HTTP/Inertia level (`assertInertia`), because all the rules live on the server.
 
@@ -428,7 +435,7 @@ Each index exists to serve a named query:
 
 ## Testing & tooling
 
-### TD-030 — Pest 3 with risk-ordered test priorities; Larastan level 6; Pint
+### TD-030 — Pest 4 with risk-ordered test priorities; Larastan level 6; Pint
 **Status:** Accepted
 
 **Decision.** Pest for all tests. Larastan (PHPStan) at level 6 and Pint (Laravel preset) run in CI and in the gate for every task.
@@ -511,7 +518,7 @@ Each index exists to serve a named query:
 ### TD-034 — CI pipeline
 **Status:** Accepted
 
-GitHub Actions runs: `composer install` → `pint --test` → `phpstan analyse` → `pest --parallel` (MySQL service) → `npm ci && npm run build && vue-tsc --noEmit`. The same commands form the local gate every task must pass (TD-140).
+GitHub Actions runs: `composer install` → `pint --test` → `phpstan analyse` → `pest --parallel` (MySQL service) → `npm ci && npm run build && npm run check && vue-tsc --noEmit`. The build runs first because it generates Wayfinder's gitignored TypeScript, and `npm run check` is the kit's lint/format check (amended 2026-10-29 for the Laravel 13 kit). The same commands form the local gate every task must pass (TD-140).
 
 ---
 
@@ -1020,6 +1027,8 @@ The result is cached in `Cache::remember('dashboard:'.$scope, 60)`.
   1. An **implementer** subagent works test-first.
   2. A **spec reviewer** subagent checks the work against the acceptance criteria.
   3. A **code-quality reviewer** subagent checks it against `CLAUDE.md`.
+  4. A **documenter** subagent writes the task's feature doc in `docs/features/`: each business rule mapped to its file::method and its proving test. The spec reviewer checks it against the code.
+  5. The controller runs the gate on every commit and, for UI tasks, a browser check through Playwright MCP only (Claude in Chrome is denied in settings).
 - One Conventional Commit per subtask, with the plan subtask in a `Refs:` trailer and no co-author trailer. Every commit must pass the gate `pint --test && phpstan analyse && pest` on its own.
 - `main` is the only remote branch. Task branches are rebased and fast-forwarded into it by the owner after their review. There are no squash merges and no merge commits, so the commit-by-commit history stays linear and traceable.
 - At most 4 subagents run in parallel per wave.
@@ -1044,3 +1053,34 @@ The result is cached in `Cache::remember('dashboard:'.$scope, 60)`.
 **Trade-offs.**
 - Coordination overhead: the plan must be precise about file ownership.
 - Rule: a task that needs to change a file it doesn't own stops and reports, rather than editing the file.
+
+---
+
+### TD-141 — Agent tooling: Laravel Boost MCP and Playwright MCP; no Claude-in-Chrome
+**Status:** Accepted (2026-10-29)
+
+**Decision.**
+- **Laravel Boost** (`laravel/boost:^2.10`, dev only) is installed in T00 with `boost:install --guidelines --mcp`. It gives the implementing agents an MCP server with:
+  - documentation search for the exact installed versions
+  - the database schema
+  - tinker
+  - application and browser logs
+  - the last error
+
+  Its guidelines are appended **below** our rules in CLAUDE.md, and our rules win where they conflict. The Antigravity files it creates are removed.
+- **Playwright MCP** (`.mcp.json`) is the only browser automation. Agents use it for the browser check of UI tasks (README §2 step 6), against the worktree's own server and seeded data.
+- **Claude in Chrome and the built-in Claude browser are denied** in `.claude/settings.json` and in the owner's global settings.
+
+**Why.**
+- Agents that look up the installed version's docs make far fewer API mistakes than agents working from memory. That matters most right after a major-version move (Laravel 13, Inertia 3).
+- Playwright runs a separate, scriptable browser profile on the local machine. It never touches the owner's real browser sessions.
+
+**Alternatives rejected.**
+- *No Boost.* Agents would rely on their training data, which predates parts of this stack.
+- *Pest browser tests in the suite.* They would add a heavy, slower layer of tests the owner didn't ask for. The MCP-driven check covers the UI flows without growing the suite.
+- *Claude in Chrome.* It drives the owner's real browser profile; explicitly forbidden by the owner.
+
+**Trade-offs.**
+- Boost adds dev-only files (`boost.json` and the guideline block) that `boost:update` can change, so review its diffs like any other change.
+- Browser checks aren't a committed regression suite. They're a per-task verification step.
+

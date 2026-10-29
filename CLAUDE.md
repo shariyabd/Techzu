@@ -9,7 +9,7 @@ Read before writing any code. Sources of truth:
 If these disagree, **stop and report**. Don't improvise.
 
 ## Stack
-Laravel 12 · PHP 8.3 · MySQL 8 · Inertia 2 + Vue 3 (`<script setup lang="ts">`) · Tailwind + shadcn-vue · Sanctum · spatie/laravel-permission · spatie/laravel-activitylog · Pest 3 · Larastan level 6 · Pint.
+Laravel 13 · PHP 8.3 · MySQL 8 · Inertia 3 + Vue 3 (`<script setup lang="ts">`) · Tailwind + shadcn-vue · Sanctum · spatie/laravel-permission · spatie/laravel-activitylog · Pest 4 · Larastan level 6 · Pint.
 
 ## Architecture rules (TD-001)
 1. **Controllers are thin.** Their only steps are `authorize` → FormRequest → one Action or Service → Inertia response or API Resource. No queries beyond route-model binding, and no business logic.
@@ -55,6 +55,7 @@ Laravel 12 · PHP 8.3 · MySQL 8 · Inertia 2 + Vue 3 (`<script setup lang="ts">
 - Touch **only** the files your task lists under "Files". If you need to change another file, stop and report, and explain why.
 - Routes: add them only to your feature's files, `routes/web/<feature>.php` and `routes/api/v1/<feature>.php`.
 - Don't edit migrations from earlier tasks. Add a new migration instead.
+- Exception: the task's own feature doc, `docs/features/<doc>.md` (map in `docs/features/README.md`), is always in scope for its documenter.
 
 ## Testing (TD-030, TD-031)
 - Work test-first: write the failing test, make it pass, then refactor.
@@ -62,12 +63,27 @@ Laravel 12 · PHP 8.3 · MySQL 8 · Inertia 2 + Vue 3 (`<script setup lang="ts">
 - Use Pest datasets for matrices and edge cases. Use `Notification::fake()`, `Queue::fake()`, `Event::fake([...])` and `Storage::fake()` where appropriate. Freeze time with `$this->travelTo()`.
 - Test behavior and rules, not framework internals.
 
+**Only specific, necessary tests (strict).** Every test must prove one of these, and its name says which:
+1. a business rule from the PRD or spec (`it('pauses the SLA while waiting for the customer')`)
+2. an acceptance criterion of the task
+3. a security boundary (authorization, internal-note visibility, 404 versus 403)
+4. a failure mode that can really happen (race conditions, the compensation path, a duplicate scan)
+
+Don't write tests for:
+- framework or package behavior: Eloquent casts, relationship definitions, spatie internals, single-field `required` rules
+- trivial getters, constructors, config values or enum labels
+- the same rule at several layers. Test the rule once, at the Action or Service. Endpoint tests cover only the HTTP mapping (status, resource shape) and authorization.
+
+Use one dataset instead of several copy-pasted tests.
+
+The code-quality reviewer rejects redundant tests. If the plan prescribes a test that breaks these rules and isn't tied to an acceptance criterion, the implementer drops it and says so in the report.
+
 ## Gate: must pass before any commit
 ```bash
 ./vendor/bin/pint --test
 ./vendor/bin/phpstan analyse --memory-limit=1G
 ./vendor/bin/pest --parallel
-npm run build && npx vue-tsc --noEmit   # only if the task touched resources/js
+npm run build && npm run check && npx vue-tsc --noEmit   # only if the task touched resources/js (build first: it generates Wayfinder's gitignored types)
 ```
 
 ## Commits (strict)
@@ -96,6 +112,23 @@ Implements: TD-031, TD-050
 - Tasks reach `main` only by `git rebase main` → gate → `git merge --ff-only`. No squash merges and no merge commits. History stays linear, with each task's commits as one unbroken block.
 - **Never rewrite or force-push `main`.** A change after a push is a new commit.
 - Only the human owner merges into `main` and pushes. Agents stop at a reviewed, rebased task branch and report.
+- **After a successful push, the worktree, its local branch and its two databases are deleted** (README §2 step 11, chained with `&&` so a failed push deletes nothing).
 
 ## Output rules (strict)
 - **Never create claude.ai Artifacts** (no Artifact tool, no published pages). Any visual output (diagrams, reports, workflow pages) is written as a self-contained HTML file inside this project, under `docs/`.
+
+## Browser (strict)
+- **Never use or open Claude in Chrome (`mcp__claude-in-chrome__*`) or the built-in Claude browser (`mcp__Claude_Browser__*`).** They are denied in `.claude/settings.json`. Don't try to enable them, and don't ask to.
+- All browser work uses the **Playwright MCP** server (`.mcp.json`), running locally. It drives its own browser profile, not the user's.
+- Browser checks run against the worktree's own server (`php artisan serve --port=80NN`) and seeded demo accounts, never against production or remote URLs. Screenshots go to the scratchpad and are never committed.
+
+## Feature documentation (TD-140)
+- `docs/features/` holds the living explanation of the business logic, written for a reader who hasn't read the code. Each task's **documenter** subagent writes or updates its feature doc from `_TEMPLATE.md`, and the spec reviewer checks it against the code before the task is reported.
+- Every rule names the `path/File.php::method()` that implements it and the test that proves it. Document only what exists in the code.
+
+## Laravel Boost guidelines (appended below by T00)
+T00 runs `php artisan boost:install`, which appends a `<laravel-boost-guidelines>` block below this line. Use Boost's MCP tools, especially `search-docs` for the installed versions, before writing code against any package API. **Where Boost's guidelines conflict with the rules above, the rules above win.** For example:
+- the gate still runs `pint --test`
+- agents run the full suite themselves
+- plan tests that break §Testing are dropped and reported
+

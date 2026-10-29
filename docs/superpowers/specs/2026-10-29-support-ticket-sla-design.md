@@ -11,14 +11,14 @@
 
 | Item | Decision |
 |---|---|
-| Framework | Laravel 12, PHP 8.3 |
-| UI | Inertia 2 + Vue 3 (Composition API, `<script setup>`, TypeScript), Tailwind, shadcn-vue — Laravel Vue starter kit (TD-002) |
+| Framework | Laravel 13, PHP 8.3 |
+| UI | Inertia 3 + Vue 3 (Composition API, `<script setup>`, TypeScript), Tailwind, shadcn-vue — Laravel Vue starter kit (TD-002) |
 | API | Separate versioned REST JSON API under `/api/v1`, Sanctum personal access tokens (TD-003) |
 | Shared logic | Web and API controllers are thin and call the same Actions, FormRequests and Policies (TD-001) |
 | Database | MySQL 8 (dev, test, CI) (TD-004, TD-031) |
 | Runtime | Config-driven: Laravel Sail (MySQL, Redis, Mailpit) is the primary setup; plain local (MySQL, `database` queue/cache, `log` mail) is also supported (TD-005) |
 | API docs | Scramble (OpenAPI generated from FormRequests and Resources), exported to `docs/api/openapi.json` (TD-033) |
-| Testing | Pest 3, Larastan level 6, Pint (TD-030) |
+| Testing | Pest 4, Larastan level 6, Pint (TD-030); agent tooling: Laravel Boost MCP, Playwright MCP (TD-141) |
 
 Out of scope (YAGNI): multi-tenant setups, per-team calendars, SLA for first response (only resolution SLA), chat or realtime websockets, ticket merging, customer satisfaction surveys.
 
