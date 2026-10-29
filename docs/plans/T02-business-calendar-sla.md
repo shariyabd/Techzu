@@ -42,7 +42,7 @@ A `beforeEach` listener throws on any `QueryExecuted` event, which proves the "u
 - `tests/Feature/Sla/SlaServiceProviderTest.php`
 
 **Modify**
-- `bootstrap/providers.php`: append `App\Providers\SlaServiceProvider::class` (README §4 allows T02 this one line).
+- `bootstrap/providers.php`: append `SlaServiceProvider::class` and its `use` import (README §4 allows T02 this entry).
 
 **Must not touch**
 - `app/Models/*`, `app/Enums/*`, `database/**` (migrations, factories, seeders): T01 owns them.
@@ -1446,16 +1446,21 @@ final class SlaServiceProvider extends ServiceProvider
 }
 ```
 
-- [ ] **Step 6: Register the provider.** In `bootstrap/providers.php`, add `App\Providers\SlaServiceProvider::class,` as the last element of the returned array. Keep every entry T00 put there. With T00's baseline the file reads:
+- [ ] **Step 6: Register the provider.** In `bootstrap/providers.php`, import `App\Providers\SlaServiceProvider` and add `SlaServiceProvider::class,` as the last element of the returned array. Keep every entry already there (the Laravel 13 Vue starter kit ships `AppServiceProvider` and `FortifyServiceProvider`, imported with `use`). With the kit's baseline after T00's Pint pass the file reads:
 
 ```php
 <?php
 
 declare(strict_types=1);
 
+use App\Providers\AppServiceProvider;
+use App\Providers\FortifyServiceProvider;
+use App\Providers\SlaServiceProvider;
+
 return [
-    App\Providers\AppServiceProvider::class,
-    App\Providers\SlaServiceProvider::class,
+    AppServiceProvider::class,
+    FortifyServiceProvider::class,
+    SlaServiceProvider::class,
 ];
 ```
 
@@ -1508,3 +1513,5 @@ Expected: Pint `PASS`, PHPStan `[OK] No errors`, Pest all green with 0 failures 
 5. **Unit-test bootstrap assumption.** `tests/Unit/Sla/SlaCalculatorTest.php` declares `uses(Tests\TestCase::class)`. This assumes T01's `tests/Pest.php` applies `TestCase`, `RefreshDatabase` and the role-seeding `beforeEach` to `Feature` only. If it also targets `Unit`, the file's `uses()` call conflicts and the seeding would trip the no-SQL guard. It also assumes `TicketFactory::make()` runs no queries once the foreign keys are overridden.
 6. **`HolidayRepository::flush()` callers.** T13's holiday Actions must call `flush()` after every create, update or delete. Already-resolved scoped calendars refresh on the next request or job.
 7. **Env keys** `BUSINESS_TIMEZONE`, `SLA_MINUTES_{LOW,MEDIUM,HIGH,CRITICAL}` and `SLA_WARNING_THRESHOLD_PERCENT` should be documented in `.env.example`. T02 may not touch that file, so this falls to T00 or T14.
+8. **Laravel 13 cache hardening.** The Laravel 13 skeleton sets `cache.serializable_classes` to `false`, so cached PHP objects no longer unserialize. `HolidayRepository` caches a plain `list<string>` of `Y-m-d` dates, never `Holiday` models or Carbon instances, so it's unaffected. Keep it that way. The key `sla.holidays` goes through the cache repository, so the Laravel 13 change to the default `CACHE_PREFIX` (`-cache-`) only changes the stored key name and doesn't affect behavior.
+9. **Static analysis depends on Larastan reading `casts()`.** `SlaCalculator` and `HolidayRepository` rely on `Ticket`/`Holiday` casts (enums, `CarbonImmutable`). They pass level 6 only when T00's `phpstan.neon` sets `parseModelCastsMethod: true` (see T01 Contract note 11). Without it, Larastan 3.13 types those attributes as `string` and reports 17 errors in this task's files.

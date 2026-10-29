@@ -774,8 +774,20 @@ This task uses the starter-kit `button`, `card`, `input` and `label` components 
 ```ts
 export interface ResourcePage<T> {
     data: T[];
-    links: { first: string | null; last: string | null; prev: string | null; next: string | null };
-    meta: { current_page: number; last_page: number; per_page: number; total: number; from: number | null; to: number | null };
+    links: {
+        first: string | null;
+        last: string | null;
+        prev: string | null;
+        next: string | null;
+    };
+    meta: {
+        current_page: number;
+        last_page: number;
+        per_page: number;
+        total: number;
+        from: number | null;
+        to: number | null;
+    };
 }
 
 export interface AdminCategory {
@@ -826,18 +838,32 @@ import { Link } from '@inertiajs/vue3';
 import { Button } from '@/components/ui/button';
 import type { ResourcePage } from '@/types/admin';
 
-defineProps<{ links: ResourcePage<unknown>['links']; meta: ResourcePage<unknown>['meta'] }>();
+defineProps<{
+    links: ResourcePage<unknown>['links'];
+    meta: ResourcePage<unknown>['meta'];
+}>();
 </script>
 
 <template>
-    <nav v-if="meta.last_page > 1" class="flex items-center justify-between gap-2 text-sm" aria-label="Pagination">
-        <span class="text-muted-foreground">Page {{ meta.current_page }} of {{ meta.last_page }} · {{ meta.total }} total</span>
+    <nav
+        v-if="meta.last_page > 1"
+        class="flex items-center justify-between gap-2 text-sm"
+        aria-label="Pagination"
+    >
+        <span class="text-muted-foreground"
+            >Page {{ meta.current_page }} of {{ meta.last_page }} ·
+            {{ meta.total }} total</span
+        >
         <div class="flex gap-2">
             <Button v-if="links.prev" variant="outline" size="sm" as-child>
-                <Link :href="links.prev" preserve-scroll preserve-state>Previous</Link>
+                <Link :href="links.prev" preserve-scroll preserve-state
+                    >Previous</Link
+                >
             </Button>
             <Button v-if="links.next" variant="outline" size="sm" as-child>
-                <Link :href="links.next" preserve-scroll preserve-state>Next</Link>
+                <Link :href="links.next" preserve-scroll preserve-state
+                    >Next</Link
+                >
             </Button>
         </div>
     </nav>
@@ -901,18 +927,35 @@ function submit(): void {
         </div>
         <div class="grid gap-2">
             <Label for="slug">Slug</Label>
-            <Input id="slug" v-model="form.slug" required maxlength="100" @input="slugTouched = true" />
-            <p class="text-xs text-muted-foreground">Lowercase letters, numbers and dashes. CSV imports refer to categories by slug.</p>
+            <Input
+                id="slug"
+                v-model="form.slug"
+                required
+                maxlength="100"
+                @input="slugTouched = true"
+            />
+            <p class="text-xs text-muted-foreground">
+                Lowercase letters, numbers and dashes. CSV imports refer to
+                categories by slug.
+            </p>
             <InputError :message="form.errors.slug" />
         </div>
         <label class="flex items-center gap-2 text-sm">
-            <input v-model="form.is_active" type="checkbox" class="size-4 rounded border-input" />
+            <input
+                v-model="form.is_active"
+                type="checkbox"
+                class="size-4 rounded border-input"
+            />
             Active (offered when creating tickets)
         </label>
         <InputError :message="form.errors.is_active" />
         <div class="flex gap-2">
-            <Button type="submit" :disabled="form.processing">{{ category ? 'Save changes' : 'Create category' }}</Button>
-            <Button variant="ghost" as-child><Link href="/admin/categories">Cancel</Link></Button>
+            <Button type="submit" :disabled="form.processing">{{
+                category ? 'Save changes' : 'Create category'
+            }}</Button>
+            <Button variant="ghost" as-child
+                ><Link href="/admin/categories">Cancel</Link></Button
+            >
         </div>
     </form>
 </template>
@@ -958,11 +1001,16 @@ function submit(): void {
             <InputError :message="form.errors.name" />
         </div>
         <p class="text-xs text-muted-foreground">
-            New SLA deadlines skip this day. Deadlines already calculated for existing tickets are not changed.
+            New SLA deadlines skip this day. Deadlines already calculated for
+            existing tickets are not changed.
         </p>
         <div class="flex gap-2">
-            <Button type="submit" :disabled="form.processing">{{ holiday ? 'Save changes' : 'Add holiday' }}</Button>
-            <Button variant="ghost" as-child><Link href="/admin/holidays">Cancel</Link></Button>
+            <Button type="submit" :disabled="form.processing">{{
+                holiday ? 'Save changes' : 'Add holiday'
+            }}</Button>
+            <Button variant="ghost" as-child
+                ><Link href="/admin/holidays">Cancel</Link></Button
+            >
         </div>
     </form>
 </template>
@@ -977,7 +1025,12 @@ import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { AdminUser, CategoryOption, RoleOption, RoleValue } from '@/types/admin';
+import type {
+    AdminUser,
+    CategoryOption,
+    RoleOption,
+    RoleValue,
+} from '@/types/admin';
 
 const props = defineProps<{
     user?: AdminUser;
@@ -1004,7 +1057,9 @@ const form = useForm<{
 
 function submit(): void {
     if (props.user) {
-        form.patch(`/admin/users/${props.user.id}`, { onSuccess: () => form.reset('password') });
+        form.patch(`/admin/users/${props.user.id}`, {
+            onSuccess: () => form.reset('password'),
+        });
     } else {
         form.post('/admin/users');
     }
@@ -1020,12 +1075,26 @@ function submit(): void {
         </div>
         <div class="grid gap-2">
             <Label for="email">Email</Label>
-            <Input id="email" v-model="form.email" type="email" required maxlength="255" />
+            <Input
+                id="email"
+                v-model="form.email"
+                type="email"
+                required
+                maxlength="255"
+            />
             <InputError :message="form.errors.email" />
         </div>
         <div class="grid gap-2">
-            <Label for="password">{{ user ? 'New password (leave blank to keep)' : 'Password' }}</Label>
-            <Input id="password" v-model="form.password" type="password" autocomplete="new-password" :required="!user" />
+            <Label for="password">{{
+                user ? 'New password (leave blank to keep)' : 'Password'
+            }}</Label>
+            <Input
+                id="password"
+                v-model="form.password"
+                type="password"
+                autocomplete="new-password"
+                :required="!user"
+            />
             <InputError :message="form.errors.password" />
         </div>
         <div class="grid gap-2">
@@ -1036,34 +1105,71 @@ function submit(): void {
                 :disabled="isSelf"
                 class="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs disabled:opacity-50"
             >
-                <option v-for="role in roles" :key="role.value" :value="role.value">{{ role.label }}</option>
+                <option
+                    v-for="role in roles"
+                    :key="role.value"
+                    :value="role.value"
+                >
+                    {{ role.label }}
+                </option>
             </select>
-            <p v-if="isSelf" class="text-xs text-muted-foreground">You cannot change your own role.</p>
+            <p v-if="isSelf" class="text-xs text-muted-foreground">
+                You cannot change your own role.
+            </p>
             <InputError :message="form.errors.role" />
         </div>
 
-        <fieldset v-if="form.role === 'agent'" class="flex flex-col gap-3 rounded-lg border p-4">
+        <fieldset
+            v-if="form.role === 'agent'"
+            class="flex flex-col gap-3 rounded-lg border p-4"
+        >
             <legend class="px-1 text-sm font-medium">Agent profile</legend>
             <label class="flex items-center gap-2 text-sm">
-                <input v-model="form.is_available" type="checkbox" class="size-4 rounded border-input" />
+                <input
+                    v-model="form.is_available"
+                    type="checkbox"
+                    class="size-4 rounded border-input"
+                />
                 Available for automatic assignment
             </label>
             <InputError :message="form.errors.is_available" />
             <div class="grid gap-2">
                 <span class="text-sm">Categories</span>
-                <p v-if="categories.length === 0" class="text-xs text-muted-foreground">No categories exist yet.</p>
-                <label v-for="category in categories" :key="category.id" class="flex items-center gap-2 text-sm">
-                    <input v-model="form.category_ids" type="checkbox" :value="category.id" class="size-4 rounded border-input" />
+                <p
+                    v-if="categories.length === 0"
+                    class="text-xs text-muted-foreground"
+                >
+                    No categories exist yet.
+                </p>
+                <label
+                    v-for="category in categories"
+                    :key="category.id"
+                    class="flex items-center gap-2 text-sm"
+                >
+                    <input
+                        v-model="form.category_ids"
+                        type="checkbox"
+                        :value="category.id"
+                        class="size-4 rounded border-input"
+                    />
                     {{ category.name }}
-                    <span v-if="!category.is_active" class="text-xs text-muted-foreground">(inactive)</span>
+                    <span
+                        v-if="!category.is_active"
+                        class="text-xs text-muted-foreground"
+                        >(inactive)</span
+                    >
                 </label>
                 <InputError :message="form.errors.category_ids" />
             </div>
         </fieldset>
 
         <div class="flex gap-2">
-            <Button type="submit" :disabled="form.processing">{{ user ? 'Save changes' : 'Create user' }}</Button>
-            <Button variant="ghost" as-child><Link href="/admin/users">Cancel</Link></Button>
+            <Button type="submit" :disabled="form.processing">{{
+                user ? 'Save changes' : 'Create user'
+            }}</Button>
+            <Button variant="ghost" as-child
+                ><Link href="/admin/users">Cancel</Link></Button
+            >
         </div>
     </form>
 </template>
@@ -1077,13 +1183,15 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import AdminPagination from '@/components/admin/AdminPagination.vue';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
 import type { AdminCategory, ResourcePage } from '@/types/admin';
 
 defineProps<{ categories: ResourcePage<AdminCategory> }>();
 
-const breadcrumbs: BreadcrumbItem[] = [{ title: 'Categories', href: '/admin/categories' }];
+defineOptions({
+    layout: {
+        breadcrumbs: [{ title: 'Categories', href: '/admin/categories' }],
+    },
+});
 
 function remove(category: AdminCategory): void {
     const inUse = (category.tickets_count ?? 0) > 0;
@@ -1092,62 +1200,112 @@ function remove(category: AdminCategory): void {
         : `Delete "${category.name}"?`;
 
     if (window.confirm(question)) {
-        router.delete(`/admin/categories/${category.id}`, { preserveScroll: true });
+        router.delete(`/admin/categories/${category.id}`, {
+            preserveScroll: true,
+        });
     }
 }
 </script>
 
 <template>
     <Head title="Categories" />
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-4 p-4">
-            <div class="flex items-center justify-between">
-                <h1 class="text-xl font-semibold">Categories</h1>
-                <Button as-child><Link href="/admin/categories/create">New category</Link></Button>
-            </div>
-            <Card>
-                <CardContent class="flex flex-col gap-4 pt-6">
-                    <p v-if="categories.data.length === 0" class="text-sm text-muted-foreground">No categories yet.</p>
-                    <div v-else class="overflow-x-auto">
-                        <table class="w-full text-left text-sm">
-                            <thead class="border-b text-xs uppercase text-muted-foreground">
-                                <tr>
-                                    <th class="py-2 pr-4">Name</th>
-                                    <th class="py-2 pr-4">Slug</th>
-                                    <th class="py-2 pr-4">Status</th>
-                                    <th class="py-2 pr-4 text-right">Tickets</th>
-                                    <th class="py-2 text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr v-for="category in categories.data" :key="category.id" class="border-b last:border-0">
-                                    <td class="py-2 pr-4 font-medium">{{ category.name }}</td>
-                                    <td class="py-2 pr-4 font-mono text-xs">{{ category.slug }}</td>
-                                    <td class="py-2 pr-4">
-                                        <span :class="category.is_active ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'">
-                                            {{ category.is_active ? 'Active' : 'Inactive' }}
-                                        </span>
-                                    </td>
-                                    <td class="py-2 pr-4 text-right tabular-nums">{{ category.tickets_count ?? 0 }}</td>
-                                    <td class="py-2 text-right">
-                                        <div class="flex justify-end gap-2">
-                                            <Button variant="outline" size="sm" as-child>
-                                                <Link :href="`/admin/categories/${category.id}/edit`">Edit</Link>
-                                            </Button>
-                                            <Button variant="destructive" size="sm" @click="remove(category)">
-                                                {{ (category.tickets_count ?? 0) > 0 ? 'Deactivate' : 'Delete' }}
-                                            </Button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <AdminPagination :links="categories.links" :meta="categories.meta" />
-                </CardContent>
-            </Card>
+    <div class="flex flex-col gap-4 p-4">
+        <div class="flex items-center justify-between">
+            <h1 class="text-xl font-semibold">Categories</h1>
+            <Button as-child
+                ><Link href="/admin/categories/create"
+                    >New category</Link
+                ></Button
+            >
         </div>
-    </AppLayout>
+        <Card>
+            <CardContent class="flex flex-col gap-4 pt-6">
+                <p
+                    v-if="categories.data.length === 0"
+                    class="text-sm text-muted-foreground"
+                >
+                    No categories yet.
+                </p>
+                <div v-else class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead
+                            class="border-b text-xs text-muted-foreground uppercase"
+                        >
+                            <tr>
+                                <th class="py-2 pr-4">Name</th>
+                                <th class="py-2 pr-4">Slug</th>
+                                <th class="py-2 pr-4">Status</th>
+                                <th class="py-2 pr-4 text-right">Tickets</th>
+                                <th class="py-2 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="category in categories.data"
+                                :key="category.id"
+                                class="border-b last:border-0"
+                            >
+                                <td class="py-2 pr-4 font-medium">
+                                    {{ category.name }}
+                                </td>
+                                <td class="py-2 pr-4 font-mono text-xs">
+                                    {{ category.slug }}
+                                </td>
+                                <td class="py-2 pr-4">
+                                    <span
+                                        :class="
+                                            category.is_active
+                                                ? 'text-emerald-600 dark:text-emerald-400'
+                                                : 'text-muted-foreground'
+                                        "
+                                    >
+                                        {{
+                                            category.is_active
+                                                ? 'Active'
+                                                : 'Inactive'
+                                        }}
+                                    </span>
+                                </td>
+                                <td class="py-2 pr-4 text-right tabular-nums">
+                                    {{ category.tickets_count ?? 0 }}
+                                </td>
+                                <td class="py-2 text-right">
+                                    <div class="flex justify-end gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            as-child
+                                        >
+                                            <Link
+                                                :href="`/admin/categories/${category.id}/edit`"
+                                                >Edit</Link
+                                            >
+                                        </Button>
+                                        <Button
+                                            variant="destructive"
+                                            size="sm"
+                                            @click="remove(category)"
+                                        >
+                                            {{
+                                                (category.tickets_count ?? 0) >
+                                                0
+                                                    ? 'Deactivate'
+                                                    : 'Delete'
+                                            }}
+                                        </Button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <AdminPagination
+                    :links="categories.links"
+                    :meta="categories.meta"
+                />
+            </CardContent>
+        </Card>
+    </div>
 </template>
 ```
 
@@ -1158,23 +1316,25 @@ function remove(category: AdminCategory): void {
 import { Head } from '@inertiajs/vue3';
 import CategoryForm from '@/components/admin/CategoryForm.vue';
 import { Card, CardContent } from '@/components/ui/card';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
 
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Categories', href: '/admin/categories' },
-    { title: 'New', href: '/admin/categories/create' },
-];
+defineOptions({
+    layout: {
+        breadcrumbs: [
+            { title: 'Categories', href: '/admin/categories' },
+            { title: 'New', href: '/admin/categories/create' },
+        ],
+    },
+});
 </script>
 
 <template>
     <Head title="New category" />
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex max-w-xl flex-col gap-4 p-4">
-            <h1 class="text-xl font-semibold">New category</h1>
-            <Card><CardContent class="pt-6"><CategoryForm /></CardContent></Card>
-        </div>
-    </AppLayout>
+    <div class="flex max-w-xl flex-col gap-4 p-4">
+        <h1 class="text-xl font-semibold">New category</h1>
+        <Card
+            ><CardContent class="pt-6"><CategoryForm /></CardContent
+        ></Card>
+    </div>
 </template>
 ```
 
@@ -1182,11 +1342,10 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 ```vue
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { Head, setLayoutProps } from '@inertiajs/vue3';
+import { computed, watchEffect } from 'vue';
 import CategoryForm from '@/components/admin/CategoryForm.vue';
 import { Card, CardContent } from '@/components/ui/card';
-import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
 import type { AdminCategory } from '@/types/admin';
 
@@ -1194,18 +1353,27 @@ const props = defineProps<{ category: AdminCategory }>();
 
 const breadcrumbs = computed((): BreadcrumbItem[] => [
     { title: 'Categories', href: '/admin/categories' },
-    { title: props.category.name, href: `/admin/categories/${props.category.id}/edit` },
+    {
+        title: props.category.name,
+        href: `/admin/categories/${props.category.id}/edit`,
+    },
 ]);
+
+// The breadcrumbs depend on props, so they're pushed to the default AppLayout (app.ts) reactively.
+watchEffect(() => {
+    setLayoutProps({ breadcrumbs: breadcrumbs.value });
+});
 </script>
 
 <template>
     <Head :title="`Edit ${category.name}`" />
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex max-w-xl flex-col gap-4 p-4">
-            <h1 class="text-xl font-semibold">Edit category</h1>
-            <Card><CardContent class="pt-6"><CategoryForm :category="category" /></CardContent></Card>
-        </div>
-    </AppLayout>
+    <div class="flex max-w-xl flex-col gap-4 p-4">
+        <h1 class="text-xl font-semibold">Edit category</h1>
+        <Card
+            ><CardContent class="pt-6"
+                ><CategoryForm :category="category" /></CardContent
+        ></Card>
+    </div>
 </template>
 ```
 
@@ -1216,14 +1384,25 @@ const breadcrumbs = computed((): BreadcrumbItem[] => [
 import { Head, Link, router } from '@inertiajs/vue3';
 import AdminPagination from '@/components/admin/AdminPagination.vue';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
 import type { HolidayItem, ResourcePage } from '@/types/admin';
 
-const props = defineProps<{ holidays: ResourcePage<HolidayItem>; year: number }>();
+const props = defineProps<{
+    holidays: ResourcePage<HolidayItem>;
+    year: number;
+}>();
 
-const breadcrumbs: BreadcrumbItem[] = [{ title: 'Holidays', href: '/admin/holidays' }];
+defineOptions({
+    layout: {
+        breadcrumbs: [{ title: 'Holidays', href: '/admin/holidays' }],
+    },
+});
 
 function goToYear(year: number): void {
     router.get('/admin/holidays', { year }, { preserveState: true });
@@ -1231,60 +1410,105 @@ function goToYear(year: number): void {
 
 function remove(holiday: HolidayItem): void {
     if (window.confirm(`Delete "${holiday.name}" (${holiday.date})?`)) {
-        router.delete(`/admin/holidays/${holiday.id}`, { preserveScroll: true });
+        router.delete(`/admin/holidays/${holiday.id}`, {
+            preserveScroll: true,
+        });
     }
 }
 </script>
 
 <template>
     <Head title="Holidays" />
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-4 p-4">
-            <div class="flex items-center justify-between">
-                <h1 class="text-xl font-semibold">Holidays</h1>
-                <Button as-child><Link href="/admin/holidays/create">Add holiday</Link></Button>
-            </div>
-            <Card>
-                <CardHeader>
-                    <CardTitle class="flex items-center gap-2">
-                        <Button variant="ghost" size="sm" aria-label="Previous year" @click="goToYear(props.year - 1)">‹</Button>
-                        {{ year }}
-                        <Button variant="ghost" size="sm" aria-label="Next year" @click="goToYear(props.year + 1)">›</Button>
-                    </CardTitle>
-                    <CardDescription>Business days on these dates are skipped when SLA deadlines are calculated.</CardDescription>
-                </CardHeader>
-                <CardContent class="flex flex-col gap-4">
-                    <p v-if="holidays.data.length === 0" class="text-sm text-muted-foreground">No holidays in {{ year }}.</p>
-                    <table v-else class="w-full text-left text-sm">
-                        <thead class="border-b text-xs uppercase text-muted-foreground">
-                            <tr>
-                                <th class="py-2 pr-4">Date</th>
-                                <th class="py-2 pr-4">Day</th>
-                                <th class="py-2 pr-4">Name</th>
-                                <th class="py-2 text-right">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr v-for="holiday in holidays.data" :key="holiday.id" class="border-b last:border-0">
-                                <td class="py-2 pr-4 font-mono text-xs">{{ holiday.date }}</td>
-                                <td class="py-2 pr-4">{{ holiday.weekday }}</td>
-                                <td class="py-2 pr-4">{{ holiday.name }}</td>
-                                <td class="py-2 text-right">
-                                    <div class="flex justify-end gap-2">
-                                        <Button variant="outline" size="sm" as-child>
-                                            <Link :href="`/admin/holidays/${holiday.id}/edit`">Edit</Link>
-                                        </Button>
-                                        <Button variant="destructive" size="sm" @click="remove(holiday)">Delete</Button>
-                                    </div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                    <AdminPagination :links="holidays.links" :meta="holidays.meta" />
-                </CardContent>
-            </Card>
+    <div class="flex flex-col gap-4 p-4">
+        <div class="flex items-center justify-between">
+            <h1 class="text-xl font-semibold">Holidays</h1>
+            <Button as-child
+                ><Link href="/admin/holidays/create">Add holiday</Link></Button
+            >
         </div>
-    </AppLayout>
+        <Card>
+            <CardHeader>
+                <CardTitle class="flex items-center gap-2">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label="Previous year"
+                        @click="goToYear(props.year - 1)"
+                        >‹</Button
+                    >
+                    {{ year }}
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label="Next year"
+                        @click="goToYear(props.year + 1)"
+                        >›</Button
+                    >
+                </CardTitle>
+                <CardDescription
+                    >Business days on these dates are skipped when SLA deadlines
+                    are calculated.</CardDescription
+                >
+            </CardHeader>
+            <CardContent class="flex flex-col gap-4">
+                <p
+                    v-if="holidays.data.length === 0"
+                    class="text-sm text-muted-foreground"
+                >
+                    No holidays in {{ year }}.
+                </p>
+                <table v-else class="w-full text-left text-sm">
+                    <thead
+                        class="border-b text-xs text-muted-foreground uppercase"
+                    >
+                        <tr>
+                            <th class="py-2 pr-4">Date</th>
+                            <th class="py-2 pr-4">Day</th>
+                            <th class="py-2 pr-4">Name</th>
+                            <th class="py-2 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="holiday in holidays.data"
+                            :key="holiday.id"
+                            class="border-b last:border-0"
+                        >
+                            <td class="py-2 pr-4 font-mono text-xs">
+                                {{ holiday.date }}
+                            </td>
+                            <td class="py-2 pr-4">{{ holiday.weekday }}</td>
+                            <td class="py-2 pr-4">{{ holiday.name }}</td>
+                            <td class="py-2 text-right">
+                                <div class="flex justify-end gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        as-child
+                                    >
+                                        <Link
+                                            :href="`/admin/holidays/${holiday.id}/edit`"
+                                            >Edit</Link
+                                        >
+                                    </Button>
+                                    <Button
+                                        variant="destructive"
+                                        size="sm"
+                                        @click="remove(holiday)"
+                                        >Delete</Button
+                                    >
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <AdminPagination
+                    :links="holidays.links"
+                    :meta="holidays.meta"
+                />
+            </CardContent>
+        </Card>
+    </div>
 </template>
 ```
 
@@ -1295,23 +1519,25 @@ function remove(holiday: HolidayItem): void {
 import { Head } from '@inertiajs/vue3';
 import HolidayForm from '@/components/admin/HolidayForm.vue';
 import { Card, CardContent } from '@/components/ui/card';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
 
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Holidays', href: '/admin/holidays' },
-    { title: 'New', href: '/admin/holidays/create' },
-];
+defineOptions({
+    layout: {
+        breadcrumbs: [
+            { title: 'Holidays', href: '/admin/holidays' },
+            { title: 'New', href: '/admin/holidays/create' },
+        ],
+    },
+});
 </script>
 
 <template>
     <Head title="Add holiday" />
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex max-w-xl flex-col gap-4 p-4">
-            <h1 class="text-xl font-semibold">Add holiday</h1>
-            <Card><CardContent class="pt-6"><HolidayForm /></CardContent></Card>
-        </div>
-    </AppLayout>
+    <div class="flex max-w-xl flex-col gap-4 p-4">
+        <h1 class="text-xl font-semibold">Add holiday</h1>
+        <Card
+            ><CardContent class="pt-6"><HolidayForm /></CardContent
+        ></Card>
+    </div>
 </template>
 ```
 
@@ -1319,11 +1545,10 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 ```vue
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { Head, setLayoutProps } from '@inertiajs/vue3';
+import { computed, watchEffect } from 'vue';
 import HolidayForm from '@/components/admin/HolidayForm.vue';
 import { Card, CardContent } from '@/components/ui/card';
-import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
 import type { HolidayItem } from '@/types/admin';
 
@@ -1331,18 +1556,27 @@ const props = defineProps<{ holiday: HolidayItem }>();
 
 const breadcrumbs = computed((): BreadcrumbItem[] => [
     { title: 'Holidays', href: '/admin/holidays' },
-    { title: props.holiday.name, href: `/admin/holidays/${props.holiday.id}/edit` },
+    {
+        title: props.holiday.name,
+        href: `/admin/holidays/${props.holiday.id}/edit`,
+    },
 ]);
+
+// The breadcrumbs depend on props, so they're pushed to the default AppLayout (app.ts) reactively.
+watchEffect(() => {
+    setLayoutProps({ breadcrumbs: breadcrumbs.value });
+});
 </script>
 
 <template>
     <Head :title="`Edit ${holiday.name}`" />
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex max-w-xl flex-col gap-4 p-4">
-            <h1 class="text-xl font-semibold">Edit holiday</h1>
-            <Card><CardContent class="pt-6"><HolidayForm :holiday="holiday" /></CardContent></Card>
-        </div>
-    </AppLayout>
+    <div class="flex max-w-xl flex-col gap-4 p-4">
+        <h1 class="text-xl font-semibold">Edit holiday</h1>
+        <Card
+            ><CardContent class="pt-6"
+                ><HolidayForm :holiday="holiday" /></CardContent
+        ></Card>
+    </div>
 </template>
 ```
 
@@ -1356,8 +1590,6 @@ import AdminPagination from '@/components/admin/AdminPagination.vue';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
 import type { AdminUser, ResourcePage, RoleOption } from '@/types/admin';
 
 const props = defineProps<{
@@ -1366,7 +1598,11 @@ const props = defineProps<{
     roles: RoleOption[];
 }>();
 
-const breadcrumbs: BreadcrumbItem[] = [{ title: 'Users', href: '/admin/users' }];
+defineOptions({
+    layout: {
+        breadcrumbs: [{ title: 'Users', href: '/admin/users' }],
+    },
+});
 
 const q = ref(props.filters.q ?? '');
 const role = ref(props.filters.role ?? '');
@@ -1385,60 +1621,111 @@ function roleLabel(value: string | null): string {
 
 <template>
     <Head title="Users" />
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-4 p-4">
-            <div class="flex items-center justify-between">
-                <h1 class="text-xl font-semibold">Users</h1>
-                <Button as-child><Link href="/admin/users/create">New user</Link></Button>
-            </div>
-            <Card>
-                <CardContent class="flex flex-col gap-4 pt-6">
-                    <form class="flex flex-wrap gap-2" @submit.prevent="search">
-                        <Input v-model="q" type="search" placeholder="Name or email starts with…" class="max-w-xs" aria-label="Search users" />
-                        <select v-model="role" class="h-9 rounded-md border border-input bg-transparent px-3 text-sm" aria-label="Role">
-                            <option value="">All roles</option>
-                            <option v-for="option in roles" :key="option.value" :value="option.value">{{ option.label }}</option>
-                        </select>
-                        <Button type="submit" variant="outline">Filter</Button>
-                    </form>
-                    <p v-if="users.data.length === 0" class="text-sm text-muted-foreground">No users match.</p>
-                    <div v-else class="overflow-x-auto">
-                        <table class="w-full text-left text-sm">
-                            <thead class="border-b text-xs uppercase text-muted-foreground">
-                                <tr>
-                                    <th class="py-2 pr-4">Name</th>
-                                    <th class="py-2 pr-4">Email</th>
-                                    <th class="py-2 pr-4">Role</th>
-                                    <th class="py-2 pr-4">Agent profile</th>
-                                    <th class="py-2 text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr v-for="user in users.data" :key="user.id" class="border-b last:border-0">
-                                    <td class="py-2 pr-4 font-medium">{{ user.name }}</td>
-                                    <td class="py-2 pr-4">{{ user.email }}</td>
-                                    <td class="py-2 pr-4">{{ roleLabel(user.role) }}</td>
-                                    <td class="py-2 pr-4 text-xs text-muted-foreground">
-                                        <template v-if="user.role === 'agent'">
-                                            {{ user.is_available ? 'Available' : 'Unavailable' }} ·
-                                            {{ user.categories?.map((category) => category.name).join(', ') || 'no categories' }}
-                                        </template>
-                                        <template v-else>—</template>
-                                    </td>
-                                    <td class="py-2 text-right">
-                                        <Button variant="outline" size="sm" as-child>
-                                            <Link :href="`/admin/users/${user.id}/edit`">Edit</Link>
-                                        </Button>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <AdminPagination :links="users.links" :meta="users.meta" />
-                </CardContent>
-            </Card>
+    <div class="flex flex-col gap-4 p-4">
+        <div class="flex items-center justify-between">
+            <h1 class="text-xl font-semibold">Users</h1>
+            <Button as-child
+                ><Link href="/admin/users/create">New user</Link></Button
+            >
         </div>
-    </AppLayout>
+        <Card>
+            <CardContent class="flex flex-col gap-4 pt-6">
+                <form class="flex flex-wrap gap-2" @submit.prevent="search">
+                    <Input
+                        v-model="q"
+                        type="search"
+                        placeholder="Name or email starts with…"
+                        class="max-w-xs"
+                        aria-label="Search users"
+                    />
+                    <select
+                        v-model="role"
+                        class="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                        aria-label="Role"
+                    >
+                        <option value="">All roles</option>
+                        <option
+                            v-for="option in roles"
+                            :key="option.value"
+                            :value="option.value"
+                        >
+                            {{ option.label }}
+                        </option>
+                    </select>
+                    <Button type="submit" variant="outline">Filter</Button>
+                </form>
+                <p
+                    v-if="users.data.length === 0"
+                    class="text-sm text-muted-foreground"
+                >
+                    No users match.
+                </p>
+                <div v-else class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead
+                            class="border-b text-xs text-muted-foreground uppercase"
+                        >
+                            <tr>
+                                <th class="py-2 pr-4">Name</th>
+                                <th class="py-2 pr-4">Email</th>
+                                <th class="py-2 pr-4">Role</th>
+                                <th class="py-2 pr-4">Agent profile</th>
+                                <th class="py-2 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="user in users.data"
+                                :key="user.id"
+                                class="border-b last:border-0"
+                            >
+                                <td class="py-2 pr-4 font-medium">
+                                    {{ user.name }}
+                                </td>
+                                <td class="py-2 pr-4">{{ user.email }}</td>
+                                <td class="py-2 pr-4">
+                                    {{ roleLabel(user.role) }}
+                                </td>
+                                <td
+                                    class="py-2 pr-4 text-xs text-muted-foreground"
+                                >
+                                    <template v-if="user.role === 'agent'">
+                                        {{
+                                            user.is_available
+                                                ? 'Available'
+                                                : 'Unavailable'
+                                        }}
+                                        ·
+                                        {{
+                                            user.categories
+                                                ?.map(
+                                                    (category) => category.name,
+                                                )
+                                                .join(', ') || 'no categories'
+                                        }}
+                                    </template>
+                                    <template v-else>—</template>
+                                </td>
+                                <td class="py-2 text-right">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        as-child
+                                    >
+                                        <Link
+                                            :href="`/admin/users/${user.id}/edit`"
+                                            >Edit</Link
+                                        >
+                                    </Button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <AdminPagination :links="users.links" :meta="users.meta" />
+            </CardContent>
+        </Card>
+    </div>
 </template>
 ```
 
@@ -1449,26 +1736,31 @@ function roleLabel(value: string | null): string {
 import { Head } from '@inertiajs/vue3';
 import UserForm from '@/components/admin/UserForm.vue';
 import { Card, CardContent } from '@/components/ui/card';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
 import type { CategoryOption, RoleOption } from '@/types/admin';
 
 defineProps<{ roles: RoleOption[]; categories: CategoryOption[] }>();
 
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Users', href: '/admin/users' },
-    { title: 'New', href: '/admin/users/create' },
-];
+defineOptions({
+    layout: {
+        breadcrumbs: [
+            { title: 'Users', href: '/admin/users' },
+            { title: 'New', href: '/admin/users/create' },
+        ],
+    },
+});
 </script>
 
 <template>
     <Head title="New user" />
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex max-w-xl flex-col gap-4 p-4">
-            <h1 class="text-xl font-semibold">New user</h1>
-            <Card><CardContent class="pt-6"><UserForm :roles="roles" :categories="categories" /></CardContent></Card>
-        </div>
-    </AppLayout>
+    <div class="flex max-w-xl flex-col gap-4 p-4">
+        <h1 class="text-xl font-semibold">New user</h1>
+        <Card
+            ><CardContent class="pt-6"
+                ><UserForm
+                    :roles="roles"
+                    :categories="categories" /></CardContent
+        ></Card>
+    </div>
 </template>
 ```
 
@@ -1476,54 +1768,84 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 ```vue
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { Head, setLayoutProps } from '@inertiajs/vue3';
+import { computed, watchEffect } from 'vue';
 import UserForm from '@/components/admin/UserForm.vue';
 import { Card, CardContent } from '@/components/ui/card';
-import AppLayout from '@/layouts/AppLayout.vue';
 import type { BreadcrumbItem } from '@/types';
 import type { AdminUser, CategoryOption, RoleOption } from '@/types/admin';
 
-const props = defineProps<{ user: AdminUser; roles: RoleOption[]; categories: CategoryOption[]; isSelf: boolean }>();
+const props = defineProps<{
+    user: AdminUser;
+    roles: RoleOption[];
+    categories: CategoryOption[];
+    isSelf: boolean;
+}>();
 
 const breadcrumbs = computed((): BreadcrumbItem[] => [
     { title: 'Users', href: '/admin/users' },
     { title: props.user.name, href: `/admin/users/${props.user.id}/edit` },
 ]);
+
+// The breadcrumbs depend on props, so they're pushed to the default AppLayout (app.ts) reactively.
+watchEffect(() => {
+    setLayoutProps({ breadcrumbs: breadcrumbs.value });
+});
 </script>
 
 <template>
     <Head :title="`Edit ${user.name}`" />
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex max-w-xl flex-col gap-4 p-4">
-            <h1 class="text-xl font-semibold">Edit user</h1>
-            <Card>
-                <CardContent class="pt-6">
-                    <UserForm :user="user" :roles="roles" :categories="categories" :is-self="isSelf" />
-                </CardContent>
-            </Card>
-        </div>
-    </AppLayout>
+    <div class="flex max-w-xl flex-col gap-4 p-4">
+        <h1 class="text-xl font-semibold">Edit user</h1>
+        <Card>
+            <CardContent class="pt-6">
+                <UserForm
+                    :user="user"
+                    :roles="roles"
+                    :categories="categories"
+                    :is-self="isSelf"
+                />
+            </CardContent>
+        </Card>
+    </div>
 </template>
 ```
 
 - [ ] **Step 15: Create** `resources/js/config/navigation/admin.ts`.
 
 ```ts
-import { CalendarDays, Tags, Users } from 'lucide-vue-next';
+import { CalendarDays, Tags, Users } from '@lucide/vue';
 import type { NavItem } from '@/config/navigation';
 
 const items: NavItem[] = [
-    { title: 'Categories', href: '/admin/categories', icon: Tags, order: 70, visible: (page) => page.auth.can.manageCategories },
-    { title: 'Holidays', href: '/admin/holidays', icon: CalendarDays, order: 71, visible: (page) => page.auth.can.manageHolidays },
-    { title: 'Users', href: '/admin/users', icon: Users, order: 72, visible: (page) => page.auth.can.manageUsers },
+    {
+        title: 'Categories',
+        href: '/admin/categories',
+        icon: Tags,
+        order: 70,
+        visible: (page) => page.auth.can.manageCategories,
+    },
+    {
+        title: 'Holidays',
+        href: '/admin/holidays',
+        icon: CalendarDays,
+        order: 71,
+        visible: (page) => page.auth.can.manageHolidays,
+    },
+    {
+        title: 'Users',
+        href: '/admin/users',
+        icon: Users,
+        order: 72,
+        visible: (page) => page.auth.can.manageUsers,
+    },
 ];
 
 export default items;
 ```
 
 - [ ] **Step 16: Type-check and build.**
-  `npx vue-tsc --noEmit && npm run build`
+  `npm run build && npm run check && npx vue-tsc --noEmit`
   Expected: no type errors, and Vite prints `✓ built in …`.
 
 - [ ] **Step 17: Commit.**
@@ -3264,4 +3586,5 @@ Manual check, as `admin@example.com`:
    - `AdminCategoryResource`, needed because the admin list shows `tickets_count` and T01's `CategoryResource` is not T13's to change.
 5. **Resolved:** T04's admin policies take the model on `update`/`delete` (`update(User, Category)` and so on) and only the user on `viewAny`/`create`. The routes pass `'category'`, `'holiday'` and `'user'` for the former and the class for the latter.
 6. **Existing SLA deadlines.** Holiday changes don't recalculate deadlines already stored on tickets (TD-045). The UI says so.
-7. **Unpinned frontend contracts.** As in T11: no client route helper is specified, and `Paginated<T>` isn't pinned, so T13 defines a local `ResourcePage<T>` in `types/admin.ts`.
+7. **Unpinned frontend contracts.** As in T11: the kit ships Wayfinder, but README §3 doesn't pin a client route helper for feature pages, so paths are literal; and `Paginated<T>` isn't pinned, so T13 defines a local `ResourcePage<T>` in `types/admin.ts`.
+8. **spatie/laravel-permission v8.** `ChangeUserRole` keeps `syncRoles([$role->value])`. In v8, `HasRoles::syncRoles()` returns `static` and also accepts a `BackedEnum`, so passing `$role` directly would work too; the string form matches the rest of the plans. Assigning roles doesn't need `PermissionRegistrar::forgetCachedPermissions()`: the registrar caches role and permission definitions, not who holds them, and `assignRole()` only resets it when called on a `Permission`. T13 listens to no spatie events, so the v7 renames (`RoleAttachedEvent`, `RoleDetachedEvent`) don't affect it.

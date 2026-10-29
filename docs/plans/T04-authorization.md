@@ -101,7 +101,7 @@ Usage from later tasks: `$this->authorize('changeStatus', [$ticket, $to])`, `Gat
 
 ```php
 'auth' => [
-    'user' => null | ['id' => int, 'name' => string, 'email' => string, 'roles' => list<string>],
+    'user' => null | ['id' => int, 'name' => string, 'email' => string, 'email_verified_at' => ?string, 'roles' => list<string>],
     'can'  => ['viewDashboard' => bool, 'manageImports' => bool, 'manageUsers' => bool,
                'manageCategories' => bool, 'manageHolidays' => bool, 'createOnBehalf' => bool],
 ],
@@ -262,7 +262,7 @@ it('sends guests through unauthenticated', function (): void {
 
 - [ ] **Step 2: Run the test and confirm it fails.**
   Command: `./vendor/bin/pest tests/Feature/Authorization/AuthorizationMatrixTest.php`
-  Expected: FAIL with `Error: Class "Tests\Support\AuthorizationMatrix" not found`.
+  Expected: FAIL. Pest 4 aborts while loading the file with `Pest\Exceptions\DatasetMissing` for `it creates a user with the requested role`: the `AuthorizationMatrix::roles()` dataset can't be built while `Tests\Support\AuthorizationMatrix` doesn't exist.
 
 - [ ] **Step 3: Create the relation enum.** Create `tests/Support/TicketRelation.php`:
 
@@ -715,7 +715,7 @@ it('uses a 404 status for invisible tickets so authorize() renders not found', f
 
 - [ ] **Step 2: Run the test and confirm it fails.**
   Command: `./vendor/bin/pest tests/Feature/Authorization/TicketPolicyTest.php`
-  Expected: FAIL. The discovery test fails with `Failed asserting that null is an instance of class App\Policies\TicketPolicy`. The rows expecting 200 or 404 fail with `Failed asserting that 403 is identical to 200.` (or `... to 404.`), because without a policy every ability is denied.
+  Expected: FAIL. The discovery test fails with `Class or interface "App\Policies\TicketPolicy" does not exist` (PHPUnit 12 rejects an unknown class in `toBeInstanceOf`). The rows expecting 200 or 404 fail with `Failed asserting that 403 is identical to 200.` (or `... to 404.`), because without a policy every ability is denied.
 
 - [ ] **Step 3: Implement.** Create `app/Policies/TicketPolicy.php`:
 
@@ -965,7 +965,7 @@ it('never lets a customer download a file attached to an internal note on their 
 
 - [ ] **Step 3: Run both tests and confirm they fail.**
   Command: `./vendor/bin/pest tests/Feature/Authorization/TicketReplyPolicyTest.php tests/Feature/Authorization/AttachmentPolicyTest.php`
-  Expected: FAIL. Discovery fails with `Failed asserting that null is an instance of class App\Policies\TicketReplyPolicy` (and `...AttachmentPolicy`). The rows expecting 200 or 404 fail with `Failed asserting that 403 is identical to 200.` (or `... to 404.`).
+  Expected: FAIL. Discovery fails with `Class or interface "App\Policies\TicketReplyPolicy" does not exist` (and `...AttachmentPolicy`). The rows expecting 200 or 404 fail with `Failed asserting that 403 is identical to 200.` (or `... to 404.`).
 
 - [ ] **Step 4: Implement the reply policy.** Create `app/Policies/TicketReplyPolicy.php`:
 
@@ -1153,7 +1153,7 @@ it('lets staff view the dashboard and keeps customers out', function (Role $role
 
 - [ ] **Step 3: Run both tests and confirm they fail.**
   Command: `./vendor/bin/pest tests/Feature/Authorization/AdminPoliciesTest.php tests/Feature/Authorization/DashboardGateTest.php`
-  Expected: FAIL. Discovery fails with `Failed asserting that null is an instance of class App\Policies\CategoryPolicy` (and the other policies). The admin rows fail with `Failed asserting that 403 is identical to 200.` The gate test fails with `Failed asserting that false is true.`
+  Expected: FAIL. Discovery fails with `Class or interface "App\Policies\CategoryPolicy" does not exist` (and the other policies). The admin rows fail with `Failed asserting that 403 is identical to 200.` The gate test fails with `Failed asserting that false is identical to true.`
 
 - [ ] **Step 4: Create `app/Policies/CategoryPolicy.php`.**
 
@@ -1387,6 +1387,7 @@ it('shares only explicit user fields plus role names', function (Role $role): vo
         'id' => $user->id,
         'name' => $user->name,
         'email' => $user->email,
+        'email_verified_at' => $user->email_verified_at?->toIso8601String(),
         'roles' => [$role->value],
     ]);
 })->with(AuthorizationMatrix::roles());
@@ -1450,7 +1451,7 @@ use Illuminate\Http\Request;
     ];
 ```
 
-- [ ] **Step 5: Point the `auth` entry at the new method.** In `share()`, replace the whole value of the `'auth'` key (whatever T00 put there) with this line. Leave every other key, including `notifications` and `flash`, exactly as it is:
+- [ ] **Step 5: Point the `auth` entry at the new method.** In `share()`, replace the whole value of the `'auth'` key (whatever T00 put there) with this line. Leave everything else exactly as it is: the `...parent::share($request)` spread (Inertia 3's base middleware shares `errors` there as an `Inertia::always()` prop), the starter kit's `name` and `sidebarOpen` keys, and `notifications` and `flash`:
 
 ```php
             'auth' => $this->authProps($request),
@@ -1478,6 +1479,7 @@ use Illuminate\Http\Request;
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
+                'email_verified_at' => $user->email_verified_at?->toIso8601String(),
                 'roles' => $user->getRoleNames()->values()->all(),
             ],
             'can' => [
@@ -1519,7 +1521,7 @@ use Illuminate\Http\Request;
 - [ ] The customer special case of `changeStatus` holds: own `Resolved` ticket → `Closed` or `InProgress` allowed; any other target, status or ticket denied.
 - [ ] `claim` doesn't check the current assignee (409 stays with `ClaimTicket`). `reply` and `addInternalNote` are denied on `Closed`.
 - [ ] `Gate::define('viewDashboard', [DashboardPolicy::class, 'view'])` is registered in `AppServiceProvider::boot()`. Staff are allowed, customers denied.
-- [ ] `HandleInertiaRequests` shares `auth.user{id,name,email,roles[]}` and `auth.can{viewDashboard, manageImports, manageUsers, manageCategories, manageHolidays, createOnBehalf}` and nothing else from the user model. The `notifications` closure is unchanged.
+- [ ] `HandleInertiaRequests` shares `auth.user{id,name,email,email_verified_at,roles[]}` and `auth.can{viewDashboard, manageImports, manageUsers, manageCategories, manageHolidays, createOnBehalf}` and nothing else from the user model. The `notifications` closure is unchanged.
 - [ ] `Tests\Support\AuthorizationMatrix` supports policy-level checks (`statusOf`, `ticketCases`) and HTTP-level checks (`expectAccess`, `expectAccessAs` with the `ticketFor` ownership hook, web and API), and has its own self-test.
 
 ## 7. Verification

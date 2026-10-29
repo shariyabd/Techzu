@@ -612,7 +612,7 @@ it('schedules sla:scan every minute, without overlapping, on one server', functi
 use Illuminate\Support\Facades\Schedule;
 ```
 
-- [ ] **Step 4: Add the schedule line.** Append this as the last statement of `routes/console.php`:
+- [ ] **Step 4: Add the schedule line.** Put it in `routes/console.php`, not in `->withScheduling()` in `bootstrap/app.php`: T00 owns that file, and Laravel 13 defers `withScheduling()` callbacks until `Schedule` is first resolved. `routes/console.php` is loaded when the console kernel bootstraps, which the Step 1 test triggers explicitly. Append this as the last statement of `routes/console.php`:
 
 ```php
 // TD-044: every minute; idempotent, and locked against overlapping runs and multiple servers.
@@ -625,7 +625,7 @@ Schedule::command('sla:scan')->everyMinute()->withoutOverlapping()->onOneServer(
 
 - [ ] **Step 6: Check the scheduler sees it.**
   Command: `php artisan schedule:list`
-  Expected: a row `* * * * *  php artisan sla:scan` with a next-due time within the next minute.
+  Expected: a row `* * * * *  php artisan sla:scan ... Next Due: <n> seconds from now`. In Laravel 13, `schedule:list` checks each `withoutOverlapping()` event's mutex in the cache store. With `CACHE_STORE=database`, the worktree database must be migrated first, or the command fails with a `QueryException` on `cache_locks`.
 
 - [ ] **Step 7: Format.** Command: `./vendor/bin/pint --dirty`. Expected: exits 0.
 

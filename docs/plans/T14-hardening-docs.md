@@ -356,9 +356,9 @@ Earlier tasks test their own slice: T04 the matrix, T07 leakage, T10 notificatio
 | File uploads | `file uploads` → PHP disguised as PDF rejected; UUID name on a private disk; download headers | T07 |
 | Rate limiting | `rate limiting` → 6th token request is 429; every API route is in the throttled `api` group; reply upload route throttled | T00 |
 | Tokens | `tokens` → abilities mirror permissions; `DELETE auth/tokens/current` revokes | T00 |
-| Inertia props | `inertia shared props` → `auth.user` has exactly id, name, email, roles; `auth.can` holds only booleans | T04 |
+| Inertia props | `inertia shared props` → `auth.user` has exactly id, name, email, email_verified_at, roles; `auth.can` holds only booleans | T04 |
 | Search input | `search input` → FULLTEXT operators don't 500; injection text is bound; unknown sort is 422 | T08 |
-| CSRF / XSS | `csrf and xss` → the web group has `ValidateCsrfToken`; no `v-html` anywhere in `resources/js` | — |
+| CSRF / XSS | `csrf and xss` → the web group has `PreventRequestForgery` (Laravel 13's name for the CSRF middleware); no `v-html` anywhere in `resources/js` | — |
 | 404 not 403 (TD-012) | `foreign tickets` → web and API return 404 to another customer | T04 |
 
 **Field names** come from the sibling plans:
@@ -380,7 +380,7 @@ use App\Models\Ticket;
 use App\Models\TicketReply;
 use App\Models\User;
 use App\Services\Attachments\AttachmentStorer;
-use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Routing\Route as RoutingRoute;
 use Illuminate\Support\Facades\File;
@@ -410,10 +410,10 @@ beforeEach(function (): void {
 
 describe('server-side authorization', function (): void {
     it('requires authentication on every route that is not public by design', function (): void {
-        // Public by design: guest-only auth screens (carry `guest`), the landing page, the token endpoint,
-        // Sanctum's CSRF cookie, the signed-URL local file route, the health check, and the docs routes,
-        // which have their own AuthorizeApiDocs gate.
-        $publicNames = ['home', 'api.v1.auth.tokens.store', 'sanctum.csrf-cookie'];
+        // Public by design: guest-only auth screens (Fortify registers them as `guest:web`), the landing page,
+        // the token endpoint, Sanctum's CSRF cookie, the kit's passkey discovery document, the signed-URL local
+        // file route, the health check, and the docs routes, which have their own AuthorizeApiDocs gate.
+        $publicNames = ['home', 'api.v1.auth.tokens.store', 'sanctum.csrf-cookie', 'well-known.passkeys'];
         $publicPrefixes = ['storage.', 'scramble.'];
         $publicUris = ['up', '/'];
 
@@ -425,7 +425,7 @@ describe('server-side authorization', function (): void {
                 return in_array($name, $publicNames, true)
                     || collect($publicPrefixes)->contains(fn (string $prefix): bool => str_starts_with($name, $prefix))
                     || in_array($route->uri(), $publicUris, true)
-                    || in_array('guest', $middleware, true)
+                    || collect($middleware)->contains(fn (mixed $m): bool => is_string($m) && ($m === 'guest' || str_starts_with($m, 'guest:')))
                     || collect($middleware)->contains(fn (mixed $m): bool => is_string($m) && ($m === 'auth' || str_starts_with($m, 'auth:')));
             })
             ->map(fn (RoutingRoute $route): string => implode('|', $route->methods()).' '.$route->uri())
@@ -661,7 +661,7 @@ describe('inertia shared props', function (): void {
             ->get(route('dashboard'))
             ->assertOk()
             ->assertInertia(fn (AssertableInertia $page) => $page
-                ->has('auth.user', fn (AssertableInertia $user) => $user->hasAll(['id', 'name', 'email', 'roles']))
+                ->has('auth.user', fn (AssertableInertia $user) => $user->hasAll(['id', 'name', 'email', 'email_verified_at', 'roles']))
                 ->has('auth.can', fn (AssertableInertia $can) => $can->whereAllType([
                     'viewDashboard' => 'boolean',
                     'manageImports' => 'boolean',
@@ -699,7 +699,8 @@ describe('search input', function (): void {
 
 describe('csrf and xss', function (): void {
     it('verifies CSRF tokens on the web group', function (): void {
-        expect(app('router')->getMiddlewareGroups()['web'] ?? [])->toContain(ValidateCsrfToken::class);
+        // Laravel 13 registers PreventRequestForgery; ValidateCsrfToken is only a deprecated subclass alias.
+        expect(app('router')->getMiddlewareGroups()['web'] ?? [])->toContain(PreventRequestForgery::class);
     });
 
     it('never renders raw HTML in Vue', function (): void {
@@ -834,7 +835,11 @@ final class AuthorizeApiDocs
 }
 ```
 
-- [ ] **Step 4: Create** `config/scramble.php`.
+- [ ] **Step 4: Create** `config/scramble.php`. It follows the layout of Scramble 0.13's own `vendor/dedoc/scramble/config/scramble.php`. Two 0.13 details matter:
+  - The OpenAPI `info.title` comes from `ui.title` (falling back to `app.name`); there is no `info.title` key.
+  - The Stoplight Elements options (`theme`, `hideTryIt`, `logo`, `tryItCredentialsPolicy`) live under `renderers.elements`, not under `ui`.
+
+  Laravel merges a package config only at the top level, so every key left out here (`cache`, `openapi_version`, `dev_tools`, the enum strategies, `flatten_deep_query_parameters`) keeps Scramble's default.
 
 ```php
 <?php
@@ -842,6 +847,7 @@ final class AuthorizeApiDocs
 declare(strict_types=1);
 
 use App\Http\Middleware\AuthorizeApiDocs;
+use Dedoc\Scramble\SecurityDocumentation\MiddlewareAuthSecurityStrategy;
 
 return [
     // Only routes under this prefix are documented; servers become {APP_URL}/api/v1.
@@ -852,18 +858,29 @@ return [
     'export_path' => 'docs/api/openapi.json',
 
     'info' => [
-        'title' => env('APP_NAME', 'Laravel').' API',
         'version' => env('API_VERSION', '1.0.0'),
         'description' => 'Support Ticket & SLA Management API. Authenticate with a Sanctum bearer token from '
             .'`POST /api/v1/auth/tokens`. The narrative guide (auth flow, error codes, examples) is docs/API.md.',
     ],
 
+    // Scramble 0.13 uses this as the document's info.title and the docs page <title>.
     'ui' => [
-        'title' => env('APP_NAME', 'Laravel').' API reference',
-        'theme' => 'system',
-        'hide_try_it' => false,
-        'logo' => '',
-        'try_it_credentials_policy' => 'include',
+        'title' => env('APP_NAME', 'Laravel').' API',
+    ],
+
+    'renderer' => 'elements',
+
+    'renderers' => [
+        'elements' => [
+            'view' => 'scramble::docs',
+            'theme' => 'system',
+            'hideTryIt' => false,
+            'hideSchemas' => false,
+            'logo' => '',
+            'tryItCredentialsPolicy' => 'include',
+            'layout' => 'responsive',
+            'router' => 'hash',
+        ],
     ],
 
     'servers' => null,
@@ -875,12 +892,16 @@ return [
     ],
 
     'extensions' => [],
+
+    // Adds the bearer securityScheme to every route behind `auth`/`auth:*` (auth:sanctum) and marks the
+    // rest (POST auth/tokens) as public, without a Scramble::configure() call in a provider.
+    'security_strategy' => MiddlewareAuthSecurityStrategy::class,
 ];
 ```
 
 - [ ] **Step 5: Export the spec.**
   `mkdir -p docs/api && php artisan scramble:export --path=docs/api/openapi.json`
-  Expected: exit code 0, and `docs/api/openapi.json` exists and starts with `{"openapi":"3.1.0"`. Check with `head -c 40 docs/api/openapi.json`.
+  Expected: exit code 0, and `docs/api/openapi.json` exists. Scramble writes it pretty-printed (`JSON_PRETTY_PRINT`), so `head -n 2 docs/api/openapi.json` prints `{` and then `    "openapi": "3.1.2",` (Scramble 0.13's `OpenApiVersion::V3_1`). `jq '.info.title, (.components.securitySchemes | keys)' docs/api/openapi.json` prints the `"<APP_NAME> API"` title and `["http"]`, the bearer scheme added by `security_strategy`.
 
   Scramble infers types statically. If the export prints a warning for an endpoint, it falls back to a generic schema for it. List these warnings in the commit body. Don't add docblocks to another task's files.
 
@@ -1216,7 +1237,7 @@ How the Support Ticket & SLA system is built, how a request flows through it, an
 ```mermaid
 flowchart LR
     subgraph Clients
-        B[Browser<br/>Inertia + Vue 3]
+        B[Browser<br/>Inertia 3 + Vue 3]
         C[API client<br/>Bearer token]
     end
 
@@ -1630,10 +1651,12 @@ git commit -m "docs: add technical overview of architecture and operations" --tr
 ````markdown
 # Support Ticket & SLA Management System
 
-A Laravel 12 help desk with:
+A Laravel 13 help desk with:
 - business-hours SLAs, automatic escalation, and concurrency-safe claiming and auto-assignment
 - internal notes, private attachments and a streamed CSV import
 - an Inertia/Vue UI and a versioned REST API that share the same rules
+
+**Stack:** PHP 8.3, Laravel 13, MySQL 8, Inertia 3 + Vue 3 (TypeScript, Tailwind, shadcn-vue, `@lucide/vue` icons), built on `laravel/vue-starter-kit` (Fortify, Wayfinder, Vite+). Sanctum 4, spatie/laravel-permission 8, spatie/laravel-activitylog 4, Scramble 0.13. Tests: Pest 4 on PHPUnit 12, Larastan, Pint.
 
 | Document | What it covers |
 |---|---|
@@ -1643,12 +1666,13 @@ A Laravel 12 help desk with:
 | [`docs/API.md`](docs/API.md) | API guide: auth, errors, pagination, every endpoint |
 | [`docs/api/openapi.json`](docs/api/openapi.json) | Generated OpenAPI 3.1 spec (also at `/docs/api`) |
 | [`docs/ERD.md`](docs/ERD.md) | Database diagram |
+| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | Developer runbook: run profiles, Sail queue and scheduler services, per-worktree test databases |
 | [`CLAUDE.md`](CLAUDE.md) | Contributor guardrails |
 
 ## Requirements
 
 - **Sail profile:** Docker. Everything else runs in containers: PHP 8.3, MySQL 8, Redis, Mailpit.
-- **Local profile:** PHP 8.3 with `pdo_mysql`, `mbstring`, `intl`, `fileinfo`; Composer 2; Node ≥ 20; MySQL 8.
+- **Local profile:** PHP 8.3 with `pdo_mysql`, `mbstring`, `intl`, `fileinfo`; Composer 2; Node ≥ 22; MySQL 8.
 
 ## Setup with Sail (recommended)
 
@@ -1688,7 +1712,7 @@ CACHE_STORE=database
 MAIL_MAILER=log
 ```
 
-```bash
+mysql -u <your-mysql-user> -p -e "CREATE DATABASE IF NOT EXISTS techzu; CREATE DATABASE IF NOT EXISTS techzu_testing;"   # a user with ALL on `techzu%`, see docs/DEVELOPMENT.md
 mysql -u root -e "CREATE DATABASE techzu; CREATE DATABASE techzu_testing;"
 composer install
 php artisan key:generate
@@ -1788,6 +1812,14 @@ Holidays are managed in the app, under Admin → Holidays.
 - **An import stays at "Pending".** No worker is listening on the `imports` queue.
 - **Tickets never become "escalated".** The scheduler isn't running (`schedule:work`).
 - **Tests fail to connect.** Create the `techzu_testing` database and check the `DB_*` values in `phpunit.xml` or `.env.testing`.
+
+## Development tooling
+
+This repository is built by AI agents under the rules in [`CLAUDE.md`](CLAUDE.md) (TD-141):
+- **Laravel Boost** (`laravel/boost`, dev only) runs an MCP server that gives the agent documentation search for the exact installed versions (Laravel 13, Inertia 3, Pest 4, permission 8), the database schema, tinker and the application logs. `php artisan boost:install` set it up; `php artisan boost:update` refreshes its guidelines, and its diffs are reviewed like any other change.
+- **Playwright MCP** (`.mcp.json`) is the only browser automation. It drives its own local browser profile against a worktree's `php artisan serve` and the demo accounts, for the per-task UI check. Claude in Chrome and the built-in Claude browser are denied in `.claude/settings.json`.
+
+See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) for the day-to-day commands.
 ````
 
 - [ ] **Step 2: Check the README commands on a fresh checkout.**
@@ -1878,11 +1910,7 @@ Expected:
 
 ## Contract notes for controller
 
-1. **Docs gate without touching providers.** TD-033 implies a `viewApiDocs` Gate, but `app/Providers/*` and `bootstrap/providers.php` are not T14's (§4). T14 swaps Scramble's middleware for `App\Http\Middleware\AuthorizeApiDocs` in `config/scramble.php`, using `UserPolicy::viewAny`. As a consequence, no bearer `securityScheme` is added to the spec, since that requires a `Scramble::configure()` call in a provider. If the controller allows a T14 provider, add:
-
-   ```php
-   Scramble::configure()->withDocumentTransformers(fn (OpenApi $o) => $o->secure(SecurityScheme::http('bearer')));
-   ```
+1. **Docs gate without touching providers.** TD-033 implies a `viewApiDocs` Gate, but `app/Providers/*` and `bootstrap/providers.php` are not T14's (§4). T14 swaps Scramble's middleware for `App\Http\Middleware\AuthorizeApiDocs` in `config/scramble.php`, using `UserPolicy::viewAny`. **Resolved for Scramble 0.13:** the bearer `securityScheme` no longer needs a `Scramble::configure()` call in a provider. The `security_strategy` config key (`MiddlewareAuthSecurityStrategy`) adds it to every route behind `auth:sanctum` and marks `POST auth/tokens` as public.
 2. **Resolved:** the API.md URIs and verbs now come from the sibling route files: T00 `auth.php`, T05 `tickets.php`, T06 `assignment.php`, T07 `conversation.php`, T10 `notifications.php`, T11 `imports.php`, T12 `dashboard.php`, T13 `admin.php`. `ApiDocsTest` still forces the document to follow `route:list`.
 3. **Resolved:** request fields and responses now come from the sibling FormRequests and controllers:
    - token: `{email, password, device_name}` returns `201 {"data": {token, token_type, abilities}}`

@@ -108,14 +108,14 @@ final class ImportHeaderInvalid extends DomainException     { __construct(string
 
 - **Models** (§3.3): `User`, `Category`, `Ticket`, `TicketReply`, `Attachment`, `Holiday`, `TicketImport`, `TicketImportError`. Each has exactly the relations, scopes, helpers, `$fillable` and casts listed in §3.3. One addition: `Ticket::activitiesVisibleTo(User $user): MorphMany` (spec §15, TD-026; see Contract notes).
 - **Factories** (§3.3):
-  - `UserFactory`: `admin()`, `agent(array $categoryIds = [])`, `customer()`, `unavailable()`, plus the kit's `unverified()` and `withoutTwoFactor()`.
+  - `UserFactory`: `admin()`, `agent(array $categoryIds = [])`, `customer()`, `unavailable()`, plus the kit's `unverified()` and `withTwoFactor()`.
   - `CategoryFactory`.
   - `TicketFactory`: `assignedTo(User)`, `status(TicketStatus)`, `priority(TicketPriority)`, `breached()`, `approaching()`, `paused()`.
   - `TicketReplyFactory`: `internal()`.
   - `AttachmentFactory`, `HolidayFactory`.
 - **Seeders:** `RolesAndPermissionsSeeder` (idempotent, an exact sync to `Permission::forRole`), `DemoSeeder` (credentials in §3.3), and `DatabaseSeeder` calling both.
 - **Test bootstrap** `tests/Pest.php`:
-  - `Feature` uses `RefreshDatabase`; `Concurrency` uses `DatabaseTruncation`. Both get a `beforeEach` that seeds `RolesAndPermissionsSeeder` and calls `app(PermissionRegistrar::class)->forgetCachedPermissions()`.
+  - `Feature` uses `RefreshDatabase`; `Concurrency` uses `DatabaseTruncation`. Both get a `beforeEach` that seeds `RolesAndPermissionsSeeder` and calls `app(PermissionRegistrar::class)->forgetCachedPermissions()`. `Concurrency` also truncates in `afterEach`, because its committed rows would otherwise leak into the next `RefreshDatabase` test in the same process.
   - `Unit` uses plain PHPUnit (no app, no DB).
   - Global helper `concurrentConnection(): Illuminate\Database\Connection` (TD-032) returns a second session `mysql_concurrent` on the same database as the default connection. That holds under `--parallel` too.
 - **Resources** (§3.12): `UserSummaryResource` → `{id, name}`; `CategoryResource` → `{id, name, slug, is_active}`.
@@ -455,11 +455,11 @@ it('carries a stable status and code', function (DomainException $exception, int
         409, 'ticket_already_claimed', 'Ticket TKT-2026-000042 has already been claimed by another agent.',
     ],
     'agent not eligible (default message)' => [
-        fn () => new AgentNotEligible(),
+        fn () => new AgentNotEligible,
         422, 'agent_not_eligible', 'The selected user is not an available agent for this ticket.',
     ],
     'ticket closed (default message)' => [
-        fn () => new TicketClosed(),
+        fn () => new TicketClosed,
         422, 'ticket_closed', 'This ticket is closed and no longer accepts changes.',
     ],
     'import header invalid (custom message)' => [
@@ -1170,6 +1170,13 @@ mv database/migrations/*_create_activity_log_table.php database/migrations/2026_
 ```
 Expected: no output. `ls database/migrations | grep activity` lists the three new names.
 
+The activitylog 4.12 stubs are named classes whose `up()`/`down()` have no return type, which Larastan level 6 reports (`missingType.return`). Add `: void` to both methods in the three files:
+
+```bash
+sed -i -E 's/public function (up|down)\(\)$/public function \1(): void/' database/migrations/2026_10_30_000100_create_activity_log_table.php database/migrations/2026_10_30_000101_add_event_column_to_activity_log_table.php database/migrations/2026_10_30_000102_add_batch_uuid_column_to_activity_log_table.php && grep -c 'public function \(up\|down\)(): void' database/migrations/2026_10_30_00010*_*activity_log_table.php
+```
+Expected: each of the three files reports `2`.
+
 - [ ] **Step 5: Create `database/migrations/2026_10_30_000110_add_subject_created_at_index_to_activity_log_table.php`**
 
 ```php
@@ -1807,6 +1814,11 @@ pest()->extend(TestCase::class)
         $this->seed(RolesAndPermissionsSeeder::class);
         app(PermissionRegistrar::class)->forgetCachedPermissions();
     })
+    ->afterEach(function (): void {
+        // DatabaseTruncation only truncates before a test. Without this, the last concurrency test's
+        // committed rows would leak into the RefreshDatabase tests that run next in the same process.
+        $this->truncateTablesForAllConnections();
+    })
     ->in('Concurrency');
 
 // tests/Unit stays on plain PHPUnit: no application, no database (CLAUDE.md, Testing).
@@ -2202,7 +2214,7 @@ it('exposes the public category fields', function (): void {
 ```
 Expected: **FAIL** with `Class "App\Models\Category" not found` / `Class "App\Models\Ticket" not found` and `Call to undefined method Database\Factories\UserFactory::agent()`.
 
-- [ ] **Step 7: Replace `app/Models/User.php`** (if T00 0.1 Step 6 printed `0`, omit `TwoFactorAuthenticatable`, both `two_factor_*` hidden entries and the `two_factor_confirmed_at` cast)
+- [ ] **Step 7: Replace `app/Models/User.php`.** This extends T00's version (0.1 Step 22): the starter kit's `MustVerifyEmail` and `PasskeyUser` contracts, the `PasskeyAuthenticatable`/`TwoFactorAuthenticatable` traits, the `@property` block and the generic `HasApiTokens` tag all stay. The kit's `SecurityController` lists `$user->passkeys()`, and its auth routes use the `verified` middleware. T01 adds `is_available`/`last_assigned_at` to the `@property` block, `$fillable` and the casts, plus the relations and scopes.
 
 ```php
 <?php
@@ -2212,21 +2224,47 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\Role;
+use Carbon\CarbonImmutable;
 use Database\Factories\UserFactory;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Carbon;
+use Laravel\Fortify\Contracts\PasskeyUser;
+use Laravel\Fortify\PasskeyAuthenticatable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Sanctum\HasApiTokens;
+use Laravel\Sanctum\PersonalAccessToken;
+use Laravel\Sanctum\TransientToken;
 use Spatie\Permission\Traits\HasRoles;
 
-class User extends Authenticatable
+/**
+ * @property int $id
+ * @property string $name
+ * @property string $email
+ * @property Carbon|null $email_verified_at
+ * @property string $password
+ * @property string|null $two_factor_secret
+ * @property string|null $two_factor_recovery_codes
+ * @property Carbon|null $two_factor_confirmed_at
+ * @property string|null $remember_token
+ * @property bool $is_available
+ * @property CarbonImmutable|null $last_assigned_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ */
+class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
 {
+    // Session-authenticated requests carry a TransientToken, API requests a PersonalAccessToken.
+    /** @use HasApiTokens<PersonalAccessToken|TransientToken> */
+    use HasApiTokens;
+
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, HasRoles, Notifiable, TwoFactorAuthenticatable;
+    use HasFactory, HasRoles, Notifiable, PasskeyAuthenticatable, TwoFactorAuthenticatable;
 
     /** @var list<string> */
     protected $fillable = [
@@ -2819,7 +2857,7 @@ class TicketImportError extends Model
 }
 ```
 
-- [ ] **Step 15: Replace `database/factories/UserFactory.php`.** Two-factor columns default to null, so seeded demo users can log in; omit `withoutTwoFactor()` if T00 0.1 Step 6 printed `0`.
+- [ ] **Step 15: Replace `database/factories/UserFactory.php`.** As in the starter kit, two-factor columns default to null (so seeded demo users can log in) and `withTwoFactor()` turns them on; the kit's `AuthenticationTest` and `TwoFactorChallengeTest` call it.
 
 ```php
 <?php
@@ -2853,6 +2891,9 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
+            'two_factor_secret' => null,
+            'two_factor_recovery_codes' => null,
+            'two_factor_confirmed_at' => null,
             'is_available' => true,
             'last_assigned_at' => null,
         ];
@@ -2865,12 +2906,12 @@ class UserFactory extends Factory
         ]);
     }
 
-    public function withoutTwoFactor(): static
+    public function withTwoFactor(): static
     {
         return $this->state(fn (array $attributes): array => [
-            'two_factor_secret' => null,
-            'two_factor_recovery_codes' => null,
-            'two_factor_confirmed_at' => null,
+            'two_factor_secret' => encrypt('secret'),
+            'two_factor_recovery_codes' => encrypt(json_encode(['recovery-code-1'])),
+            'two_factor_confirmed_at' => now(),
         ]);
     }
 
@@ -3753,6 +3794,17 @@ erDiagram
         timestamp updated_at
     }
 
+    passkeys {
+        bigint id PK
+        bigint user_id FK "indexed, starter kit (Fortify passkeys)"
+        varchar name
+        varchar credential_id UK
+        json credential
+        timestamp last_used_at "nullable"
+        timestamp created_at
+        timestamp updated_at
+    }
+
     sessions {
         varchar id PK
         bigint user_id "nullable, indexed"
@@ -3824,6 +3876,7 @@ erDiagram
     tickets ||--o{ attachments : "ticket_id"
     ticket_replies |o--o{ attachments : "reply_id"
     users ||--o{ attachments : "uploaded_by"
+    users ||--o{ passkeys : "user_id (cascade)"
     users ||--o{ ticket_imports : "user_id"
     ticket_imports ||--o{ ticket_import_errors : "ticket_import_id"
     roles ||--o{ model_has_roles : "role_id"
@@ -3839,7 +3892,7 @@ erDiagram
     users |o..o{ sessions : "user_id (no FK)"
 ```
 
-`ticket_sequences` and `holidays` are standalone: the year and the date are their natural keys. `cache`, `cache_locks`, `jobs`, `job_batches`, `failed_jobs` and `password_reset_tokens` are framework infrastructure.
+`ticket_sequences` and `holidays` are standalone: the year and the date are their natural keys. `cache`, `cache_locks`, `jobs`, `job_batches`, `failed_jobs` and `password_reset_tokens` are framework infrastructure; `passkeys` belongs to the starter kit's Fortify passkey login.
 
 ## Indexes (TD-021)
 
@@ -3896,7 +3949,7 @@ git commit -m "docs(erd): add Mermaid ERD for domain, package and framework tabl
 - [ ] `RolesAndPermissionsSeeder` is idempotent and restores drift. `DemoSeeder` creates the documented accounts (password `password`), 3 categories and 60 mixed-state tickets with sequential numbers, and is idempotent.
 - [ ] `tests/Pest.php`:
   - seeds the baseline before every Feature and Concurrency test
-  - uses `RefreshDatabase` for Feature and `DatabaseTruncation` for Concurrency
+  - uses `RefreshDatabase` for Feature and `DatabaseTruncation` for Concurrency, and truncates again after each Concurrency test
   - provides `concurrentConnection()`
 - [ ] `UserSummaryResource` → `{id, name}`; `CategoryResource` → `{id, name, slug, is_active}`.
 - [ ] `docs/ERD.md` renders and covers every table, including the package and framework tables.
@@ -3924,4 +3977,5 @@ Expected: Pint `PASS`, PHPStan `[OK] No errors`, all tests green (T00's included
 7. **Resolved: `ticket_imports` gets no failure-message column.** T11 stores failures as `ticket_import_errors` rows.
 8. **`Ticket::slaState()` precedence:** Stopped (Resolved/Closed) is checked before Paused. T05's `SlaQuery::whereState(Paused)` should likewise restrict to active statuses.
 9. **Exceptions without named constructors** (`AgentNotEligible`, `TicketClosed`, `ImportHeaderInvalid`) take an optional message in the constructor. §3.2 lists no factory for them.
-10. **`UserFactory`** no longer sets two-factor columns by default (demo users must be able to log in). The kit's `withoutTwoFactor()` state is kept.
+10. **`UserFactory`** keeps the starter kit's two-factor handling: the columns default to null (demo users must be able to log in) and the kit's `withTwoFactor()` state is kept.
+11. **Larastan must read `casts()`** (contract impact on T00's `phpstan.neon`). The models declare `/** @return array<string, string> */` on `casts()`, so with Larastan 3.13's default `parseModelCastsMethod: false` it ignores the casts and types `$ticket->status`, `sla_*` etc. as `string`. Then `Ticket::isActive()` (T01), T02's `SlaCalculator` and `HolidayRepository`, and T04's `TicketPolicy` fail level 6 (24 errors: 1 in `Ticket`, 17 in T02, 6 in T04). T00's `phpstan.neon` needs `parseModelCastsMethod: true` under `parameters`. With it, T01–T04 pass level 6 with no errors.

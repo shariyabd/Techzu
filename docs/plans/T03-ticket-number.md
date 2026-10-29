@@ -71,6 +71,8 @@ Spec §5 and TD-022 sketch three statements: `INSERT IGNORE` the year row, `SELE
 
 `INSERT … ON DUPLICATE KEY UPDATE last_number = last_number + 1` takes the **exclusive** lock straight away, whether it inserts or updates, so there's no shared-to-exclusive upgrade and no deadlock. The follow-up `SELECT … FOR UPDATE` reads the value this transaction just wrote. That read doesn't wait, because the transaction already holds the lock, and it doesn't read from the REPEATABLE READ snapshot. The guarantees TD-022 asks for still hold: one row per year, serialization by row lock, a rollback undoes the increment, and `tickets.number` stays unique as the final guard. This divergence from the spec's pseudo-code was approved; TD-022 and spec §5 are being amended (see Contract notes).
 
+The statement is raw SQL through `affectingStatement()`, not `Query\Builder::upsert()`. So Laravel 13's new check, which makes `upsert()` throw `InvalidArgumentException` when `uniqueBy` is empty on MySQL/MariaDB, doesn't apply here. MySQL detects the duplicate through the `year` primary key either way. Keep it raw: the increment has to read the row's current value (`last_number = last_number + 1`) under the lock the insert takes.
+
 ---
 
 ## Subtask 3.1 — Generator, config and behavior tests
@@ -277,7 +279,7 @@ final class TicketNumberGenerator
 ```bash
 ./vendor/bin/pest tests/Feature/Services/Tickets/TicketNumberGeneratorTest.php
 ```
-Expected: **PASS** (10 tests: 8 named tests, one of which is a 3-row dataset).
+Expected: **PASS** (11 tests: 9 named tests, one of which is a 3-row dataset).
 
 - [ ] **Step 6: Run the gate**
 
@@ -464,7 +466,7 @@ git commit -m "test(tickets): prove ticket number row lock across connections" -
 ./vendor/bin/pest --parallel
 ./vendor/bin/pest tests/Feature/Services/Tickets tests/Concurrency/TicketNumberConcurrencyTest.php
 ```
-Expected: Pint passes, PHPStan prints `[OK] No errors`, all Pest tests pass, and the last command reports 14 passing tests. `resources/js` is untouched, so no frontend build is needed.
+Expected: Pint passes, PHPStan prints `[OK] No errors`, all Pest tests pass, and the last command reports 15 passing tests (11 + 4). `resources/js` is untouched, so no frontend build is needed.
 
 ---
 

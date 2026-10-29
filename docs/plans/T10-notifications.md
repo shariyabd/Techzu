@@ -75,7 +75,7 @@ TicketImportFinished(TicketImport $import)
 User (Notifiable; scopeAdmins), Ticket (customer_id, assigned_agent_id, number, subject, sla_due_at), TicketReply (is_internal, body), TicketImport (user_id, original_name, succeeded_rows, failed_rows)
 // T00
 HandleInertiaRequests::share() key 'notifications' (T00 default: unread_count 0)
-resources/js/config/navigation.ts: re-exports `type NavItem = { title; href; icon?: Component; order; visible: (page: SharedProps) => boolean }` (T00 `@/types/navigation`); AppSidebar renders `<component :is="item.icon" v-if="item.icon" />`
+resources/js/config/navigation.ts: re-exports `type NavItem = { title; href; icon?: Component; order; visible: (page: SharedProps) => boolean }` (defined in T00's `@/config/navigation`; the kit's own `@/types/navigation` keeps `BreadcrumbItem`); AppSidebar renders `<component :is="item.icon" v-if="item.icon" />`
 resources/js/types/shared.ts: `SharedProps` with `notifications.unread_count: number`
 // T04
 Tests\Support\AuthorizationMatrix::for($this)->actingAsRole(Role)/asGuest()/expectAccess($method, $uri, $status, $payload = [])
@@ -1992,8 +1992,20 @@ export type NotificationItem = {
 /** Laravel's paginated resource collection shape, as the Inertia prop receives it. */
 export type NotificationPage = {
     data: NotificationItem[];
-    links: { first: string | null; last: string | null; prev: string | null; next: string | null };
-    meta: { current_page: number; last_page: number; per_page: number; total: number; from: number | null; to: number | null };
+    links: {
+        first: string | null;
+        last: string | null;
+        prev: string | null;
+        next: string | null;
+    };
+    meta: {
+        current_page: number;
+        last_page: number;
+        per_page: number;
+        total: number;
+        from: number | null;
+        to: number | null;
+    };
 };
 ```
 
@@ -2003,7 +2015,7 @@ export type NotificationPage = {
 <script setup lang="ts">
 import type { SharedProps } from '@/types/shared';
 import { usePage } from '@inertiajs/vue3';
-import { Bell } from 'lucide-vue-next';
+import { Bell } from '@lucide/vue';
 import { computed } from 'vue';
 
 // No props: T00's sidebar renders NavItem icons as `<component :is="item.icon" />`, so the bell must stand alone.
@@ -2011,7 +2023,9 @@ const page = usePage<SharedProps>();
 
 const unread = computed(() => page.props.notifications.unread_count);
 
-const badge = computed(() => (unread.value > 99 ? '99+' : String(unread.value)));
+const badge = computed(() =>
+    unread.value > 99 ? '99+' : String(unread.value),
+);
 </script>
 
 <template>
@@ -2056,10 +2070,9 @@ export default items;
 <script setup lang="ts">
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import AppLayout from '@/layouts/AppLayout.vue';
 import type { NotificationItem, NotificationPage } from '@/types/notifications';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Bell, CheckCheck } from 'lucide-vue-next';
+import { Bell, CheckCheck } from '@lucide/vue';
 import { computed } from 'vue';
 
 const props = defineProps<{
@@ -2067,16 +2080,26 @@ const props = defineProps<{
     unreadOnly: boolean;
 }>();
 
-const breadcrumbs = [{ title: 'Notifications', href: '/notifications' }];
+defineOptions({
+    layout: {
+        breadcrumbs: [{ title: 'Notifications', href: '/notifications' }],
+    },
+});
 
-const hasUnread = computed(() => props.items.data.some((item) => item.read_at === null));
+const hasUnread = computed(() =>
+    props.items.data.some((item) => item.read_at === null),
+);
 
 function formatDate(value: string | null): string {
     return value === null ? '' : new Date(value).toLocaleString();
 }
 
 function markRead(item: NotificationItem): void {
-    router.post(`/notifications/${item.id}/read`, {}, { preserveScroll: true, preserveState: true });
+    router.post(
+        `/notifications/${item.id}/read`,
+        {},
+        { preserveScroll: true, preserveState: true },
+    );
 }
 
 function open(item: NotificationItem): void {
@@ -2087,7 +2110,11 @@ function open(item: NotificationItem): void {
     };
 
     if (item.read_at === null) {
-        router.post(`/notifications/${item.id}/read`, {}, { preserveScroll: true, onSuccess: go });
+        router.post(
+            `/notifications/${item.id}/read`,
+            {},
+            { preserveScroll: true, onSuccess: go },
+        );
     } else {
         go();
     }
@@ -2098,76 +2125,146 @@ function markAll(): void {
 }
 
 function toggleUnread(): void {
-    router.get('/notifications', props.unreadOnly ? {} : { unread: 1 }, { preserveState: true, replace: true });
+    router.get('/notifications', props.unreadOnly ? {} : { unread: 1 }, {
+        preserveState: true,
+        replace: true,
+    });
 }
 </script>
 
 <template>
     <Head title="Notifications" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto flex w-full max-w-3xl flex-col gap-4 p-4">
-            <Card>
-                <CardHeader class="flex flex-row flex-wrap items-center justify-between gap-2">
-                    <CardTitle class="flex items-center gap-2 text-base">
-                        <Bell class="size-4" aria-hidden="true" />
-                        Notifications
-                    </CardTitle>
-                    <div class="flex gap-2">
-                        <Button type="button" variant="outline" size="sm" :aria-pressed="unreadOnly" @click="toggleUnread">
-                            {{ unreadOnly ? 'Show all' : 'Unread only' }}
-                        </Button>
-                        <Button type="button" size="sm" :disabled="!hasUnread" @click="markAll">
-                            <CheckCheck class="size-4" aria-hidden="true" />
-                            Mark all read
-                        </Button>
-                    </div>
-                </CardHeader>
-
-                <CardContent>
-                    <p v-if="items.data.length === 0" class="py-8 text-center text-sm text-muted-foreground">
-                        {{ unreadOnly ? 'No unread notifications.' : 'No notifications yet.' }}
-                    </p>
-
-                    <ul v-else class="divide-y divide-border">
-                        <li v-for="item in items.data" :key="item.id" class="flex items-start gap-3 py-3">
-                            <span
-                                :class="['mt-1.5 size-2 shrink-0 rounded-full', item.read_at === null ? 'bg-primary' : 'bg-transparent']"
-                                aria-hidden="true"
-                            />
-                            <button type="button" class="min-w-0 flex-1 text-left" @click="open(item)">
-                                <span :class="['block text-sm', item.read_at === null ? 'font-semibold' : 'font-normal']">{{ item.title }}</span>
-                                <span class="block truncate text-sm text-muted-foreground">{{ item.body }}</span>
-                                <time :datetime="item.created_at ?? undefined" class="block text-xs text-muted-foreground">
-                                    {{ formatDate(item.created_at) }}
-                                </time>
-                            </button>
-                            <Button v-if="item.read_at === null" type="button" variant="ghost" size="sm" @click="markRead(item)">Mark read</Button>
-                        </li>
-                    </ul>
-
-                    <nav
-                        v-if="items.meta.last_page > 1"
-                        class="mt-4 flex items-center justify-between text-sm"
-                        aria-label="Notification pages"
+    <div class="mx-auto flex w-full max-w-3xl flex-col gap-4 p-4">
+        <Card>
+            <CardHeader
+                class="flex flex-row flex-wrap items-center justify-between gap-2"
+            >
+                <CardTitle class="flex items-center gap-2 text-base">
+                    <Bell class="size-4" aria-hidden="true" />
+                    Notifications
+                </CardTitle>
+                <div class="flex gap-2">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        :aria-pressed="unreadOnly"
+                        @click="toggleUnread"
                     >
-                        <Link v-if="items.links.prev" :href="items.links.prev" preserve-scroll class="underline">Previous</Link>
-                        <span v-else />
-                        <span class="text-muted-foreground">Page {{ items.meta.current_page }} of {{ items.meta.last_page }}</span>
-                        <Link v-if="items.links.next" :href="items.links.next" preserve-scroll class="underline">Next</Link>
-                        <span v-else />
-                    </nav>
-                </CardContent>
-            </Card>
-        </div>
-    </AppLayout>
+                        {{ unreadOnly ? 'Show all' : 'Unread only' }}
+                    </Button>
+                    <Button
+                        type="button"
+                        size="sm"
+                        :disabled="!hasUnread"
+                        @click="markAll"
+                    >
+                        <CheckCheck class="size-4" aria-hidden="true" />
+                        Mark all read
+                    </Button>
+                </div>
+            </CardHeader>
+
+            <CardContent>
+                <p
+                    v-if="items.data.length === 0"
+                    class="py-8 text-center text-sm text-muted-foreground"
+                >
+                    {{
+                        unreadOnly
+                            ? 'No unread notifications.'
+                            : 'No notifications yet.'
+                    }}
+                </p>
+
+                <ul v-else class="divide-y divide-border">
+                    <li
+                        v-for="item in items.data"
+                        :key="item.id"
+                        class="flex items-start gap-3 py-3"
+                    >
+                        <span
+                            :class="[
+                                'mt-1.5 size-2 shrink-0 rounded-full',
+                                item.read_at === null
+                                    ? 'bg-primary'
+                                    : 'bg-transparent',
+                            ]"
+                            aria-hidden="true"
+                        />
+                        <button
+                            type="button"
+                            class="min-w-0 flex-1 text-left"
+                            @click="open(item)"
+                        >
+                            <span
+                                :class="[
+                                    'block text-sm',
+                                    item.read_at === null
+                                        ? 'font-semibold'
+                                        : 'font-normal',
+                                ]"
+                                >{{ item.title }}</span
+                            >
+                            <span
+                                class="block truncate text-sm text-muted-foreground"
+                                >{{ item.body }}</span
+                            >
+                            <time
+                                :datetime="item.created_at ?? undefined"
+                                class="block text-xs text-muted-foreground"
+                            >
+                                {{ formatDate(item.created_at) }}
+                            </time>
+                        </button>
+                        <Button
+                            v-if="item.read_at === null"
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            @click="markRead(item)"
+                            >Mark read</Button
+                        >
+                    </li>
+                </ul>
+
+                <nav
+                    v-if="items.meta.last_page > 1"
+                    class="mt-4 flex items-center justify-between text-sm"
+                    aria-label="Notification pages"
+                >
+                    <Link
+                        v-if="items.links.prev"
+                        :href="items.links.prev"
+                        preserve-scroll
+                        class="underline"
+                        >Previous</Link
+                    >
+                    <span v-else />
+                    <span class="text-muted-foreground"
+                        >Page {{ items.meta.current_page }} of
+                        {{ items.meta.last_page }}</span
+                    >
+                    <Link
+                        v-if="items.links.next"
+                        :href="items.links.next"
+                        preserve-scroll
+                        class="underline"
+                        >Next</Link
+                    >
+                    <span v-else />
+                </nav>
+            </CardContent>
+        </Card>
+    </div>
 </template>
 ```
 
 - [ ] **Step 6: Type check and build, expect PASS**
 
 ```bash
-npx vue-tsc --noEmit && npm run build
+npm run build && npm run check && npx vue-tsc --noEmit
 ```
 Expected: `vue-tsc` exits 0; Vite prints `✓ built in …`. `NavItem` comes from `@/config/navigation`, which re-exports it from `@/types/navigation` (T00). `SharedProps.notifications.unread_count` is typed by T00 in `@/types/shared`.
 
@@ -2228,3 +2325,4 @@ Expected: Pint shows no changes; PHPStan `[OK] No errors`; Pest is all green, in
 7. Following the events (README §3.6), the notifications expose `public readonly` constructor properties and rely on `SerializesModels`, which supports readonly properties.
 8. The inbox page prop is named `items`, not `notifications`. Inertia merges page props over shared props shallowly, so a page prop called `notifications` would replace the shared `notifications.unread_count` and blank the bell on that page. The endpoint test asserts that both are present.
 9. Resolved: the matrix uses T04's `AuthorizationMatrix::for($this)` with `actingAsRole()`, `asGuest()` and `expectAccess()`.
+10. Laravel 13: queued notifications now honour `#[DeleteWhenMissingModels]` (and `$deleteWhenMissingModels`) on the notification class (`SendQueuedNotifications::__construct`). These notifications don't use it: the product flow closes tickets instead of deleting them, and users with tickets can't be deleted (TD-025), so a model missing when the job runs is a real fault and should fail the job visibly, not vanish. The queue name and `afterCommit` still reach the job from the `Queueable` properties set in `BaseNotification::__construct` (`NotificationSender::queueNotification` reads the `queue` property; `SendQueuedNotifications` copies `afterCommit`). Laravel 13's new default password-reset subject ("Reset your password") doesn't affect T10: no test asserts it.

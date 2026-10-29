@@ -1872,7 +1872,7 @@ it('rejects an agent POST before validation runs', function (): void {
 });
 ```
 
-  > The guest `POST` on the web returns a redirect, not 419, because Laravel skips CSRF verification while running tests.
+  > The guest `POST` on the web returns a redirect, not 419, because Laravel 13's `PreventRequestForgery` (the renamed CSRF middleware; `VerifyCsrfToken`/`ValidateCsrfToken` are deprecated aliases) skips verification while running unit tests.
 
 - [ ] **Step 3: Run both and expect FAIL.**
   `./vendor/bin/pest tests/Feature/Imports/TicketImportHttpTest.php tests/Feature/Authorization/ImportAuthorizationTest.php`
@@ -2409,7 +2409,12 @@ UI components come from the starter kit: `@/components/ui/button`, `card`, `labe
 - [ ] **Step 1: Create** `resources/js/types/imports.ts`.
 
 ```ts
-export type ImportStatusValue = 'pending' | 'processing' | 'completed' | 'completed_with_errors' | 'failed';
+export type ImportStatusValue =
+    | 'pending'
+    | 'processing'
+    | 'completed'
+    | 'completed_with_errors'
+    | 'failed';
 
 export interface ImportUser {
     id: number;
@@ -2444,7 +2449,12 @@ export interface TicketImportErrorItem {
 /** Laravel's paginated ResourceCollection response: { data, links, meta }. */
 export interface ResourcePage<T> {
     data: T[];
-    links: { first: string | null; last: string | null; prev: string | null; next: string | null };
+    links: {
+        first: string | null;
+        last: string | null;
+        prev: string | null;
+        next: string | null;
+    };
     meta: {
         current_page: number;
         last_page: number;
@@ -2482,7 +2492,10 @@ const classes = computed((): string => {
 </script>
 
 <template>
-    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium" :class="classes">
+    <span
+        class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+        :class="classes"
+    >
         {{ label }}
     </span>
 </template>
@@ -2504,16 +2517,33 @@ defineProps<{
 </script>
 
 <template>
-    <nav v-if="meta.last_page > 1" class="flex items-center justify-between gap-2 text-sm" aria-label="Pagination">
+    <nav
+        v-if="meta.last_page > 1"
+        class="flex items-center justify-between gap-2 text-sm"
+        aria-label="Pagination"
+    >
         <span class="text-muted-foreground">
-            Page {{ meta.current_page }} of {{ meta.last_page }} · {{ meta.total }} total
+            Page {{ meta.current_page }} of {{ meta.last_page }} ·
+            {{ meta.total }} total
         </span>
         <div class="flex gap-2">
             <Button v-if="links.prev" variant="outline" size="sm" as-child>
-                <Link :href="links.prev" :only="only" preserve-scroll preserve-state>Previous</Link>
+                <Link
+                    :href="links.prev"
+                    :only="only"
+                    preserve-scroll
+                    preserve-state
+                    >Previous</Link
+                >
             </Button>
             <Button v-if="links.next" variant="outline" size="sm" as-child>
-                <Link :href="links.next" :only="only" preserve-scroll preserve-state>Next</Link>
+                <Link
+                    :href="links.next"
+                    :only="only"
+                    preserve-scroll
+                    preserve-state
+                    >Next</Link
+                >
             </Button>
         </div>
     </nav>
@@ -2528,14 +2558,22 @@ import { Head, Link } from '@inertiajs/vue3';
 import ImportPagination from '@/components/imports/ImportPagination.vue';
 import ImportStatusBadge from '@/components/imports/ImportStatusBadge.vue';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
 import type { ResourcePage, TicketImportItem } from '@/types/imports';
 
 defineProps<{ imports: ResourcePage<TicketImportItem> }>();
 
-const breadcrumbs: BreadcrumbItem[] = [{ title: 'Imports', href: '/admin/imports' }];
+defineOptions({
+    layout: {
+        breadcrumbs: [{ title: 'Imports', href: '/admin/imports' }],
+    },
+});
 
 function formatDate(value: string | null): string {
     return value ? new Date(value).toLocaleString() : '—';
@@ -2545,61 +2583,88 @@ function formatDate(value: string | null): string {
 <template>
     <Head title="Ticket imports" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-4 p-4">
-            <div class="flex items-center justify-between gap-4">
-                <h1 class="text-xl font-semibold">Ticket imports</h1>
-                <Button as-child>
-                    <Link href="/admin/imports/create">New import</Link>
-                </Button>
-            </div>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>History</CardTitle>
-                    <CardDescription>Every CSV upload, newest first.</CardDescription>
-                </CardHeader>
-                <CardContent class="flex flex-col gap-4">
-                    <p v-if="imports.data.length === 0" class="text-sm text-muted-foreground">No imports yet.</p>
-
-                    <div v-else class="overflow-x-auto">
-                        <table class="w-full text-left text-sm">
-                            <thead class="border-b text-xs uppercase text-muted-foreground">
-                                <tr>
-                                    <th class="py-2 pr-4">File</th>
-                                    <th class="py-2 pr-4">Status</th>
-                                    <th class="py-2 pr-4 text-right">Rows</th>
-                                    <th class="py-2 pr-4 text-right">Imported</th>
-                                    <th class="py-2 pr-4 text-right">Rejected</th>
-                                    <th class="py-2 pr-4">Uploaded by</th>
-                                    <th class="py-2">Uploaded</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr v-for="item in imports.data" :key="item.id" class="border-b last:border-0">
-                                    <td class="py-2 pr-4">
-                                        <Link :href="`/admin/imports/${item.id}`" class="font-medium underline-offset-4 hover:underline">
-                                            {{ item.original_name }}
-                                        </Link>
-                                    </td>
-                                    <td class="py-2 pr-4">
-                                        <ImportStatusBadge :status="item.status" :label="item.status_label" />
-                                    </td>
-                                    <td class="py-2 pr-4 text-right tabular-nums">{{ item.total_rows }}</td>
-                                    <td class="py-2 pr-4 text-right tabular-nums">{{ item.succeeded_rows }}</td>
-                                    <td class="py-2 pr-4 text-right tabular-nums">{{ item.failed_rows }}</td>
-                                    <td class="py-2 pr-4">{{ item.user?.name ?? '—' }}</td>
-                                    <td class="py-2">{{ formatDate(item.created_at) }}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <ImportPagination :links="imports.links" :meta="imports.meta" />
-                </CardContent>
-            </Card>
+    <div class="flex flex-col gap-4 p-4">
+        <div class="flex items-center justify-between gap-4">
+            <h1 class="text-xl font-semibold">Ticket imports</h1>
+            <Button as-child>
+                <Link href="/admin/imports/create">New import</Link>
+            </Button>
         </div>
-    </AppLayout>
+
+        <Card>
+            <CardHeader>
+                <CardTitle>History</CardTitle>
+                <CardDescription
+                    >Every CSV upload, newest first.</CardDescription
+                >
+            </CardHeader>
+            <CardContent class="flex flex-col gap-4">
+                <p
+                    v-if="imports.data.length === 0"
+                    class="text-sm text-muted-foreground"
+                >
+                    No imports yet.
+                </p>
+
+                <div v-else class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead
+                            class="border-b text-xs text-muted-foreground uppercase"
+                        >
+                            <tr>
+                                <th class="py-2 pr-4">File</th>
+                                <th class="py-2 pr-4">Status</th>
+                                <th class="py-2 pr-4 text-right">Rows</th>
+                                <th class="py-2 pr-4 text-right">Imported</th>
+                                <th class="py-2 pr-4 text-right">Rejected</th>
+                                <th class="py-2 pr-4">Uploaded by</th>
+                                <th class="py-2">Uploaded</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="item in imports.data"
+                                :key="item.id"
+                                class="border-b last:border-0"
+                            >
+                                <td class="py-2 pr-4">
+                                    <Link
+                                        :href="`/admin/imports/${item.id}`"
+                                        class="font-medium underline-offset-4 hover:underline"
+                                    >
+                                        {{ item.original_name }}
+                                    </Link>
+                                </td>
+                                <td class="py-2 pr-4">
+                                    <ImportStatusBadge
+                                        :status="item.status"
+                                        :label="item.status_label"
+                                    />
+                                </td>
+                                <td class="py-2 pr-4 text-right tabular-nums">
+                                    {{ item.total_rows }}
+                                </td>
+                                <td class="py-2 pr-4 text-right tabular-nums">
+                                    {{ item.succeeded_rows }}
+                                </td>
+                                <td class="py-2 pr-4 text-right tabular-nums">
+                                    {{ item.failed_rows }}
+                                </td>
+                                <td class="py-2 pr-4">
+                                    {{ item.user?.name ?? '—' }}
+                                </td>
+                                <td class="py-2">
+                                    {{ formatDate(item.created_at) }}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <ImportPagination :links="imports.links" :meta="imports.meta" />
+            </CardContent>
+        </Card>
+    </div>
 </template>
 ```
 
@@ -2611,25 +2676,39 @@ import { Head, Link, useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
 
 const props = defineProps<{
     maxUploadKb: number;
     columns: { required: string[]; optional: string[] };
 }>();
 
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Imports', href: '/admin/imports' },
-    { title: 'New import', href: '/admin/imports/create' },
-];
+defineOptions({
+    layout: {
+        breadcrumbs: [
+            { title: 'Imports', href: '/admin/imports' },
+            { title: 'New import', href: '/admin/imports/create' },
+        ],
+    },
+});
 
 const form = useForm<{ file: File | null }>({ file: null });
 
 const maxMb = computed((): number => Math.round(props.maxUploadKb / 1024));
-const headerExample = computed((): string => [...props.columns.optional.slice(0, 1), ...props.columns.required, ...props.columns.optional.slice(1)].join(','));
+const headerExample = computed((): string =>
+    [
+        ...props.columns.optional.slice(0, 1),
+        ...props.columns.required,
+        ...props.columns.optional.slice(1),
+    ].join(','),
+);
 
 function onFileChange(event: Event): void {
     const input = event.target as HTMLInputElement;
@@ -2644,88 +2723,137 @@ function submit(): void {
 <template>
     <Head title="New ticket import" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex max-w-3xl flex-col gap-4 p-4">
-            <h1 class="text-xl font-semibold">Import tickets from CSV</h1>
+    <div class="flex max-w-3xl flex-col gap-4 p-4">
+        <h1 class="text-xl font-semibold">Import tickets from CSV</h1>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>File format</CardTitle>
-                    <CardDescription>The first row must be a header. Columns may be in any order.</CardDescription>
-                </CardHeader>
-                <CardContent class="flex flex-col gap-3 text-sm">
-                    <p>
-                        <span class="font-medium">Required:</span>
-                        <code v-for="column in columns.required" :key="column" class="mx-1 rounded bg-muted px-1">{{ column }}</code>
-                    </p>
-                    <p>
-                        <span class="font-medium">Optional:</span>
-                        <code v-for="column in columns.optional" :key="column" class="mx-1 rounded bg-muted px-1">{{ column }}</code>
-                    </p>
-                    <ul class="list-disc space-y-1 pl-5 text-muted-foreground">
-                        <li><code>priority</code>: low, medium, high or critical.</li>
-                        <li><code>category</code>: the slug of an active category.</li>
-                        <li><code>customer_email</code>: must belong to an existing customer account.</li>
-                        <li><code>status</code>: open (default), in_progress, waiting_for_customer, resolved or closed.</li>
-                        <li>
-                            <code>created_at</code>: a past date such as <code>2026-10-29 17:00</code>, read in business
-                            time. The SLA is measured from it.
-                        </li>
-                        <li>
-                            <code>external_reference</code>: up to 64 characters. A row whose reference was already
-                            imported is reported as a duplicate.
-                        </li>
-                    </ul>
-                    <pre class="overflow-x-auto rounded bg-muted p-2 text-xs">{{ headerExample }}</pre>
-                </CardContent>
-            </Card>
+        <Card>
+            <CardHeader>
+                <CardTitle>File format</CardTitle>
+                <CardDescription
+                    >The first row must be a header. Columns may be in any
+                    order.</CardDescription
+                >
+            </CardHeader>
+            <CardContent class="flex flex-col gap-3 text-sm">
+                <p>
+                    <span class="font-medium">Required:</span>
+                    <code
+                        v-for="column in columns.required"
+                        :key="column"
+                        class="mx-1 rounded bg-muted px-1"
+                        >{{ column }}</code
+                    >
+                </p>
+                <p>
+                    <span class="font-medium">Optional:</span>
+                    <code
+                        v-for="column in columns.optional"
+                        :key="column"
+                        class="mx-1 rounded bg-muted px-1"
+                        >{{ column }}</code
+                    >
+                </p>
+                <ul class="list-disc space-y-1 pl-5 text-muted-foreground">
+                    <li>
+                        <code>priority</code>: low, medium, high or critical.
+                    </li>
+                    <li>
+                        <code>category</code>: the slug of an active category.
+                    </li>
+                    <li>
+                        <code>customer_email</code>: must belong to an existing
+                        customer account.
+                    </li>
+                    <li>
+                        <code>status</code>: open (default), in_progress,
+                        waiting_for_customer, resolved or closed.
+                    </li>
+                    <li>
+                        <code>created_at</code>: a past date such as
+                        <code>2026-10-29 17:00</code>, read in business time.
+                        The SLA is measured from it.
+                    </li>
+                    <li>
+                        <code>external_reference</code>: up to 64 characters. A
+                        row whose reference was already imported is reported as
+                        a duplicate.
+                    </li>
+                </ul>
+                <pre class="overflow-x-auto rounded bg-muted p-2 text-xs">{{
+                    headerExample
+                }}</pre>
+            </CardContent>
+        </Card>
 
-            <Card>
-                <CardContent class="pt-6">
-                    <form class="flex flex-col gap-4" @submit.prevent="submit">
-                        <div class="grid gap-2">
-                            <Label for="file">CSV file (up to {{ maxMb }} MB)</Label>
-                            <input
-                                id="file"
-                                type="file"
-                                accept=".csv,text/csv,text/plain"
-                                class="block w-full text-sm file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-primary-foreground"
-                                @change="onFileChange"
-                            />
-                            <InputError :message="form.errors.file" />
-                        </div>
+        <Card>
+            <CardContent class="pt-6">
+                <form class="flex flex-col gap-4" @submit.prevent="submit">
+                    <div class="grid gap-2">
+                        <Label for="file"
+                            >CSV file (up to {{ maxMb }} MB)</Label
+                        >
+                        <input
+                            id="file"
+                            type="file"
+                            accept=".csv,text/csv,text/plain"
+                            class="block w-full text-sm file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-primary-foreground"
+                            @change="onFileChange"
+                        />
+                        <InputError :message="form.errors.file" />
+                    </div>
 
-                        <div v-if="form.progress" class="h-2 w-full overflow-hidden rounded bg-muted" role="progressbar">
-                            <div class="h-full bg-primary transition-all" :style="{ width: `${form.progress.percentage ?? 0}%` }" />
-                        </div>
+                    <div
+                        v-if="form.progress"
+                        class="h-2 w-full overflow-hidden rounded bg-muted"
+                        role="progressbar"
+                    >
+                        <div
+                            class="h-full bg-primary transition-all"
+                            :style="{
+                                width: `${form.progress.percentage ?? 0}%`,
+                            }"
+                        />
+                    </div>
 
-                        <div class="flex items-center gap-2">
-                            <Button type="submit" :disabled="form.processing || form.file === null">Start import</Button>
-                            <Button variant="ghost" as-child>
-                                <Link href="/admin/imports">Cancel</Link>
-                            </Button>
-                        </div>
-                    </form>
-                </CardContent>
-            </Card>
-        </div>
-    </AppLayout>
+                    <div class="flex items-center gap-2">
+                        <Button
+                            type="submit"
+                            :disabled="form.processing || form.file === null"
+                            >Start import</Button
+                        >
+                        <Button variant="ghost" as-child>
+                            <Link href="/admin/imports">Cancel</Link>
+                        </Button>
+                    </div>
+                </form>
+            </CardContent>
+        </Card>
+    </div>
 </template>
 ```
 
-- [ ] **Step 6: Create** `resources/js/pages/admin/imports/Show.vue`. It polls every 2 s with Inertia 2's `usePoll`, reloading only the two props, and stops once the import has finished.
+- [ ] **Step 6: Create** `resources/js/pages/admin/imports/Show.vue`. It polls every 2 s with Inertia 3's `usePoll(interval, reloadOptions, { autoStart })` (`@inertiajs/vue3` `types/usePoll.d.ts`), reloading only the two props, and stops once the import has finished.
 
 ```vue
 <script setup lang="ts">
-import { Head, Link, usePoll } from '@inertiajs/vue3';
-import { computed, watch } from 'vue';
+import { Head, Link, setLayoutProps, usePoll } from '@inertiajs/vue3';
+import { computed, watch, watchEffect } from 'vue';
 import ImportPagination from '@/components/imports/ImportPagination.vue';
 import ImportStatusBadge from '@/components/imports/ImportStatusBadge.vue';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import AppLayout from '@/layouts/AppLayout.vue';
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
 import type { BreadcrumbItem } from '@/types';
-import type { ResourcePage, TicketImportErrorItem, TicketImportItem } from '@/types/imports';
+import type {
+    ResourcePage,
+    TicketImportErrorItem,
+    TicketImportItem,
+} from '@/types/imports';
 
 const props = defineProps<{
     ticketImport: TicketImportItem;
@@ -2734,10 +2862,22 @@ const props = defineProps<{
 
 const breadcrumbs = computed((): BreadcrumbItem[] => [
     { title: 'Imports', href: '/admin/imports' },
-    { title: props.ticketImport.original_name, href: `/admin/imports/${props.ticketImport.id}` },
+    {
+        title: props.ticketImport.original_name,
+        href: `/admin/imports/${props.ticketImport.id}`,
+    },
 ]);
 
-const { stop } = usePoll(2000, { only: ['ticketImport', 'importErrors'] }, { autoStart: !props.ticketImport.is_finished });
+// The breadcrumbs depend on props, so they're pushed to the default AppLayout (app.ts) reactively.
+watchEffect(() => {
+    setLayoutProps({ breadcrumbs: breadcrumbs.value });
+});
+
+const { stop } = usePoll(
+    2000,
+    { only: ['ticketImport', 'importErrors'] },
+    { autoStart: !props.ticketImport.is_finished },
+);
 
 watch(
     () => props.ticketImport.is_finished,
@@ -2771,94 +2911,153 @@ function subjectOf(error: TicketImportErrorItem): string {
 <template>
     <Head :title="`Import: ${ticketImport.original_name}`" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-4 p-4">
-            <div class="flex flex-wrap items-center justify-between gap-4">
-                <div class="flex items-center gap-3">
-                    <h1 class="text-xl font-semibold">{{ ticketImport.original_name }}</h1>
-                    <ImportStatusBadge :status="ticketImport.status" :label="ticketImport.status_label" />
-                </div>
-                <Button v-if="ticketImport.failed_rows > 0 || ticketImport.status === 'failed'" variant="outline" as-child>
-                    <a :href="`/admin/imports/${ticketImport.id}/errors/download`">Download errors (CSV)</a>
-                </Button>
+    <div class="flex flex-col gap-4 p-4">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <h1 class="text-xl font-semibold">
+                    {{ ticketImport.original_name }}
+                </h1>
+                <ImportStatusBadge
+                    :status="ticketImport.status"
+                    :label="ticketImport.status_label"
+                />
             </div>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>Progress</CardTitle>
-                    <CardDescription v-if="!ticketImport.is_finished">Updates automatically every few seconds.</CardDescription>
-                    <CardDescription v-else>Finished {{ ticketImport.finished_at ? new Date(ticketImport.finished_at).toLocaleString() : '' }}</CardDescription>
-                </CardHeader>
-                <CardContent class="flex flex-col gap-4">
-                    <div
-                        class="h-3 w-full overflow-hidden rounded bg-muted"
-                        role="progressbar"
-                        :aria-valuenow="ticketImport.progress_percent"
-                        aria-valuemin="0"
-                        aria-valuemax="100"
-                    >
-                        <div class="h-full bg-primary transition-all" :style="{ width: `${ticketImport.progress_percent}%` }" />
-                    </div>
-                    <dl class="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                        <div v-for="counter in counters" :key="counter.label" class="rounded-lg border p-3">
-                            <dt class="text-xs text-muted-foreground">{{ counter.label }}</dt>
-                            <dd class="text-2xl font-semibold tabular-nums">{{ counter.value }}</dd>
-                        </div>
-                    </dl>
-                </CardContent>
-            </Card>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>Rejected rows</CardTitle>
-                    <CardDescription>
-                        Row numbers match the spreadsheet; the header is row 1. Fix these rows and upload them again.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent class="flex flex-col gap-4">
-                    <p v-if="importErrors.data.length === 0" class="text-sm text-muted-foreground">No rejected rows.</p>
-
-                    <div v-else class="overflow-x-auto">
-                        <table class="w-full text-left text-sm">
-                            <thead class="border-b text-xs uppercase text-muted-foreground">
-                                <tr>
-                                    <th class="py-2 pr-4">Row</th>
-                                    <th class="py-2 pr-4">Subject</th>
-                                    <th class="py-2">Problems</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr v-for="error in importErrors.data" :key="error.id" class="border-b align-top last:border-0">
-                                    <td class="py-2 pr-4 tabular-nums">{{ error.row_number }}</td>
-                                    <td class="py-2 pr-4">{{ subjectOf(error) }}</td>
-                                    <td class="py-2">
-                                        <ul class="list-disc pl-4">
-                                            <li v-for="message in messages(error)" :key="message">{{ message }}</li>
-                                        </ul>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <ImportPagination :links="importErrors.links" :meta="importErrors.meta" :only="['importErrors']" />
-                </CardContent>
-            </Card>
-
-            <div>
-                <Button variant="ghost" as-child>
-                    <Link href="/admin/imports">Back to imports</Link>
-                </Button>
-            </div>
+            <Button
+                v-if="
+                    ticketImport.failed_rows > 0 ||
+                    ticketImport.status === 'failed'
+                "
+                variant="outline"
+                as-child
+            >
+                <a :href="`/admin/imports/${ticketImport.id}/errors/download`"
+                    >Download errors (CSV)</a
+                >
+            </Button>
         </div>
-    </AppLayout>
+
+        <Card>
+            <CardHeader>
+                <CardTitle>Progress</CardTitle>
+                <CardDescription v-if="!ticketImport.is_finished"
+                    >Updates automatically every few seconds.</CardDescription
+                >
+                <CardDescription v-else
+                    >Finished
+                    {{
+                        ticketImport.finished_at
+                            ? new Date(
+                                  ticketImport.finished_at,
+                              ).toLocaleString()
+                            : ''
+                    }}</CardDescription
+                >
+            </CardHeader>
+            <CardContent class="flex flex-col gap-4">
+                <div
+                    class="h-3 w-full overflow-hidden rounded bg-muted"
+                    role="progressbar"
+                    :aria-valuenow="ticketImport.progress_percent"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                >
+                    <div
+                        class="h-full bg-primary transition-all"
+                        :style="{ width: `${ticketImport.progress_percent}%` }"
+                    />
+                </div>
+                <dl class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                    <div
+                        v-for="counter in counters"
+                        :key="counter.label"
+                        class="rounded-lg border p-3"
+                    >
+                        <dt class="text-xs text-muted-foreground">
+                            {{ counter.label }}
+                        </dt>
+                        <dd class="text-2xl font-semibold tabular-nums">
+                            {{ counter.value }}
+                        </dd>
+                    </div>
+                </dl>
+            </CardContent>
+        </Card>
+
+        <Card>
+            <CardHeader>
+                <CardTitle>Rejected rows</CardTitle>
+                <CardDescription>
+                    Row numbers match the spreadsheet; the header is row 1. Fix
+                    these rows and upload them again.
+                </CardDescription>
+            </CardHeader>
+            <CardContent class="flex flex-col gap-4">
+                <p
+                    v-if="importErrors.data.length === 0"
+                    class="text-sm text-muted-foreground"
+                >
+                    No rejected rows.
+                </p>
+
+                <div v-else class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead
+                            class="border-b text-xs text-muted-foreground uppercase"
+                        >
+                            <tr>
+                                <th class="py-2 pr-4">Row</th>
+                                <th class="py-2 pr-4">Subject</th>
+                                <th class="py-2">Problems</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="error in importErrors.data"
+                                :key="error.id"
+                                class="border-b align-top last:border-0"
+                            >
+                                <td class="py-2 pr-4 tabular-nums">
+                                    {{ error.row_number }}
+                                </td>
+                                <td class="py-2 pr-4">
+                                    {{ subjectOf(error) }}
+                                </td>
+                                <td class="py-2">
+                                    <ul class="list-disc pl-4">
+                                        <li
+                                            v-for="message in messages(error)"
+                                            :key="message"
+                                        >
+                                            {{ message }}
+                                        </li>
+                                    </ul>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <ImportPagination
+                    :links="importErrors.links"
+                    :meta="importErrors.meta"
+                    :only="['importErrors']"
+                />
+            </CardContent>
+        </Card>
+
+        <div>
+            <Button variant="ghost" as-child>
+                <Link href="/admin/imports">Back to imports</Link>
+            </Button>
+        </div>
+    </div>
 </template>
 ```
 
 - [ ] **Step 7: Create** `resources/js/config/navigation/imports.ts`.
 
 ```ts
-import { FileUp } from 'lucide-vue-next';
+import { FileUp } from '@lucide/vue';
 import type { NavItem } from '@/config/navigation';
 
 const items: NavItem[] = [
@@ -2875,7 +3074,7 @@ export default items;
 ```
 
 - [ ] **Step 8: Type-check and build.**
-  `npx vue-tsc --noEmit && npm run build`
+  `npm run build && npm run check && npx vue-tsc --noEmit`
   Expected: no type errors, and Vite prints `✓ built in …`. A missing page or type shows up here as an error naming the file.
 
 - [ ] **Step 9: Commit.**
@@ -2952,7 +3151,7 @@ Manual check, with a worker running `php artisan queue:work --queue=imports`:
 6. **`batch_id` timing.** On the sync driver the batch's `finally` runs before `dispatch()` returns. So `batch_id` is also stamped inside `finally`.
 7. **Show prop name.** It is `ticketImport`, not `import`, because `import` is reserved in Vue template expressions.
 8. **Unpinned frontend contracts.**
-   - No client route helper (Ziggy or Wayfinder) is specified, so the pages use literal paths.
+   - The kit ships Wayfinder (`@/routes/...`, `@/actions/...`), but README §3 doesn't pin a client route helper for feature pages, so the pages use literal paths. They then don't depend on the generated Wayfinder files being regenerated for T11's routes.
    - The shape of `Paginated<T>` (`types/tickets.ts`) isn't pinned, so T11 defines a local `ResourcePage<T>`.
 9. **Unspecified fillables.** `TicketImport` and `TicketImportError` have no fillables in the contract. This plan assigns attributes one by one.
 10. **Resolved:** T04 added `TicketImportPolicy::view(User, TicketImport)`. The show, errors-index and errors-download routes use `->can('view', 'import')`, and only the index uses `viewAny`.

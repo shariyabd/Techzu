@@ -1465,10 +1465,10 @@ git commit -m "test(conversation): cover internal-note leakage and route access"
 
 No JS test runner exists (TD-030): the checks are `vue-tsc` and `npm run build`, plus a manual smoke run.
 
-- [ ] **Step 1: Run the type check before changing anything, to record the baseline**
+- [ ] **Step 1: Build and type-check before changing anything, to record the baseline.** Build first: the kit's Wayfinder Vite plugin generates the gitignored `resources/js/{routes,actions,wayfinder}` during the build. Without them, `vue-tsc` fails with `TS2307: Cannot find module '@/routes'` in the kit's own components.
 
 ```bash
-npx vue-tsc --noEmit
+npm run build && npx vue-tsc --noEmit
 ```
 Expected: PASS (exit 0) on the T05 stubs.
 
@@ -1524,7 +1524,7 @@ export function checkFiles(files: File[]): string[] {
 <script setup lang="ts">
 import { formatBytes } from '@/lib/attachments';
 import type { AttachmentItem } from '@/types/tickets';
-import { Download, Paperclip } from 'lucide-vue-next';
+import { Download, Paperclip } from '@lucide/vue';
 
 defineProps<{
     attachments: AttachmentItem[];
@@ -1563,7 +1563,7 @@ import { Label } from '@/components/ui/label';
 import { ATTACHMENT_ACCEPT, attachmentHint, checkFiles } from '@/lib/attachments';
 import type { ReplyItem, TicketCan, TicketDetail } from '@/types/tickets';
 import { useForm } from '@inertiajs/vue3';
-import { Lock, MessageSquare } from 'lucide-vue-next';
+import { Lock, MessageSquare } from '@lucide/vue';
 import { computed, ref } from 'vue';
 
 const props = defineProps<{
@@ -1731,12 +1731,12 @@ function submit(): void {
 </template>
 ```
 
-- [ ] **Step 5: Type check and build, expect PASS**
+- [ ] **Step 5: Build and type check, expect PASS**
 
 ```bash
-npx vue-tsc --noEmit && npm run build
+npm run build && npx vue-tsc --noEmit
 ```
-Expected: `vue-tsc` exits 0; Vite prints `✓ built in …`. If `vue-tsc` reports a missing field on `ReplyItem`, `AttachmentItem` or `TicketDetail`, the T05 types differ from the fields listed in the Contract notes: stop and report; don't edit `types/tickets.ts`.
+Expected: Vite prints `✓ built in …`; `vue-tsc` exits 0. If `vue-tsc` reports a missing field on `ReplyItem`, `AttachmentItem` or `TicketDetail`, the T05 types differ from the fields listed in the Contract notes: stop and report; don't edit `types/tickets.ts`.
 
 - [ ] **Step 6: Manual smoke run** (`composer run dev`, demo data from `DemoSeeder`)
   - As `agent1@example.com`: open a ticket, post a reply with a PDF, then post an internal note. The note renders with the dashed amber border and the "Internal note" badge.

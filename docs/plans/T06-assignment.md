@@ -1182,7 +1182,7 @@ final class AssignTicketAutomatically
 }
 ```
 
-- [ ] **Step 5: create `app/Jobs/AutoAssignTicket.php`**
+- [ ] **Step 5: create `app/Jobs/AutoAssignTicket.php`.** Laravel 13 also accepts queue settings as attributes (`Illuminate\Queue\Attributes\Tries`, `Backoff`, `Queue`). Keep the `$tries` / `$backoff` properties and `onQueue()`, because the Step 1 test reads `$job->tries`, `$job->backoff` and `$job->queue`. The job carries only an id and re-reads the ticket, so Laravel 13's `#[DeleteWhenMissingModels]` handling doesn't apply to it. A missing ticket is a quiet `return`.
 
 ```php
 <?php
@@ -1775,12 +1775,12 @@ const assign = (): void => {
 </template>
 ```
 
-- [ ] **Step 11: type-check and build**
+- [ ] **Step 11: build and type-check.** Build first: the kit's Wayfinder Vite plugin generates `resources/js/{routes,actions,wayfinder}` during the build, and those folders are gitignored. On a fresh worktree, `vue-tsc` run first fails with `TS2307: Cannot find module '@/routes'` in the kit's own components.
 
 ```bash
-npx vue-tsc --noEmit && npm run build
+npm run build && npx vue-tsc --noEmit
 ```
-Expected: no type errors; build succeeds.
+Expected: Vite prints `✓ built in …`; `vue-tsc` exits 0.
 
 - [ ] **Step 12: check the Show page still renders with the real panel**
 
@@ -1812,6 +1812,7 @@ declare(strict_types=1);
 use App\Enums\Role;
 use App\Enums\TicketStatus;
 use App\Models\Ticket;
+use App\Models\User;
 use Tests\Support\AuthorizationMatrix;
 
 beforeEach(function (): void {
@@ -1852,7 +1853,7 @@ it('enforces the assignment matrix', function (string $role, string $ownership, 
         'own' => $role === 'customer'
             ? $factory->create(['customer_id' => $user->id, 'assigned_agent_id' => null])
             : $factory->assignedTo($user)->create(),
-        'colleague' => $factory->assignedTo(App\Models\User::factory()->agent()->create())->create(),
+        'colleague' => $factory->assignedTo(User::factory()->agent()->create())->create(),
         'unassigned', 'other' => $factory->create(['assigned_agent_id' => null]),
     };
 

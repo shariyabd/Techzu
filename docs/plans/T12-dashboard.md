@@ -83,6 +83,8 @@ Task-internal additions:
 
 **Cache scope.** All staff share one key, `dashboard:staff`, because they see the same numbers. A non-staff viewer, who can only reach this service by calling it directly since the gate blocks them, gets `dashboard:customer:{id}`. Their figures are limited to their own tickets (`visibleTo`) and `by_agent` is empty.
 
+**Cache payload.** The cached value is a plain array of ints and strings, never objects. Laravel 13's `config/cache.php` ships `'serializable_classes' => false`, so a cached model, Collection or Carbon instance would come back from the Redis or database store as `__PHP_Incomplete_Class` (upgrade guide, "Cache serializable_classes Configuration"). Keep `for()` returning arrays only; `myTickets()` is uncached, so its models never reach the cache.
+
 ## 4. Subtasks & mini-waves
 
 | Subtask | Files | Depends on | Parallel-safe with |
@@ -925,7 +927,11 @@ export interface DashboardTicket {
     subject: string;
     status: { value: string; label: string };
     priority: { value: PriorityValue; label: string };
-    sla: { state: 'within' | 'approaching' | 'breached' | 'paused' | 'stopped'; label: string; due_at: string | null };
+    sla: {
+        state: 'within' | 'approaching' | 'breached' | 'paused' | 'stopped';
+        label: string;
+        due_at: string | null;
+    };
 }
 ```
 
@@ -959,11 +965,18 @@ const valueClass = computed((): string => {
 </script>
 
 <template>
-    <Link :href="href" class="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    <Link
+        :href="href"
+        class="block rounded-xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+    >
         <Card class="h-full transition-colors hover:bg-muted/50">
             <CardContent class="flex flex-col gap-1 pt-6">
                 <span class="text-sm text-muted-foreground">{{ label }}</span>
-                <span class="text-3xl font-semibold tabular-nums" :class="valueClass">{{ value }}</span>
+                <span
+                    class="text-3xl font-semibold tabular-nums"
+                    :class="valueClass"
+                    >{{ value }}</span
+                >
             </CardContent>
         </Card>
     </Link>
@@ -977,9 +990,13 @@ const valueClass = computed((): string => {
 import { Head, Link, usePoll } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import StatCard from '@/components/dashboard/StatCard.vue';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import AppLayout from '@/layouts/AppLayout.vue';
-import type { BreadcrumbItem } from '@/types';
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
 import type { DashboardStats, DashboardTicket } from '@/types/dashboard';
 
 const props = defineProps<{
@@ -987,24 +1004,62 @@ const props = defineProps<{
     myTickets: DashboardTicket[];
 }>();
 
-const breadcrumbs: BreadcrumbItem[] = [{ title: 'Dashboard', href: '/dashboard' }];
+defineOptions({
+    layout: {
+        breadcrumbs: [{ title: 'Dashboard', href: '/dashboard' }],
+    },
+});
 
 // The server caches for 60 s, so polling faster would only re-read the cache.
 usePoll(60_000, { only: ['stats', 'myTickets'] });
 
 const cards = computed(() => [
-    { label: 'Open tickets', value: props.stats.totals.open, href: '/tickets?scope=active', tone: 'default' as const },
-    { label: 'Unassigned', value: props.stats.totals.unassigned, href: '/tickets?scope=active&unassigned=1', tone: 'warning' as const },
-    { label: 'Critical', value: props.stats.totals.critical, href: '/tickets?scope=active&priority[]=critical', tone: 'danger' as const },
-    { label: 'SLA breached', value: props.stats.totals.breached, href: '/tickets?scope=active&sla_state=breached', tone: 'danger' as const },
-    { label: 'Approaching SLA', value: props.stats.totals.approaching, href: '/tickets?scope=active&sla_state=approaching', tone: 'warning' as const },
-    { label: 'Resolved (30 days)', value: props.stats.totals.resolved, href: '/tickets?scope=resolved', tone: 'success' as const },
+    {
+        label: 'Open tickets',
+        value: props.stats.totals.open,
+        href: '/tickets?scope=active',
+        tone: 'default' as const,
+    },
+    {
+        label: 'Unassigned',
+        value: props.stats.totals.unassigned,
+        href: '/tickets?scope=active&unassigned=1',
+        tone: 'warning' as const,
+    },
+    {
+        label: 'Critical',
+        value: props.stats.totals.critical,
+        href: '/tickets?scope=active&priority[]=critical',
+        tone: 'danger' as const,
+    },
+    {
+        label: 'SLA breached',
+        value: props.stats.totals.breached,
+        href: '/tickets?scope=active&sla_state=breached',
+        tone: 'danger' as const,
+    },
+    {
+        label: 'Approaching SLA',
+        value: props.stats.totals.approaching,
+        href: '/tickets?scope=active&sla_state=approaching',
+        tone: 'warning' as const,
+    },
+    {
+        label: 'Resolved (30 days)',
+        value: props.stats.totals.resolved,
+        href: '/tickets?scope=resolved',
+        tone: 'success' as const,
+    },
 ]);
 
-const totalActive = computed((): number => props.stats.by_priority.reduce((sum, row) => sum + row.count, 0));
+const totalActive = computed((): number =>
+    props.stats.by_priority.reduce((sum, row) => sum + row.count, 0),
+);
 
 function share(count: number): number {
-    return totalActive.value === 0 ? 0 : Math.round((count / totalActive.value) * 100);
+    return totalActive.value === 0
+        ? 0
+        : Math.round((count / totalActive.value) * 100);
 }
 
 function slaClass(state: DashboardTicket['sla']['state']): string {
@@ -1022,118 +1077,205 @@ function formatDue(value: string | null): string {
     return value ? new Date(value).toLocaleString() : '—';
 }
 
-const priorityLabels: Record<string, string> = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' };
+const priorityLabels: Record<string, string> = {
+    critical: 'Critical',
+    high: 'High',
+    medium: 'Medium',
+    low: 'Low',
+};
 </script>
 
 <template>
     <Head title="Dashboard" />
 
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-6 p-4">
-            <section aria-labelledby="my-tickets-heading">
-                <Card>
-                    <CardHeader>
-                        <CardTitle id="my-tickets-heading">My tickets</CardTitle>
-                        <CardDescription>Your active tickets, soonest deadline first.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <p v-if="myTickets.length === 0" class="text-sm text-muted-foreground">Nothing is assigned to you right now.</p>
-                        <ul v-else class="divide-y">
-                            <li v-for="ticket in myTickets" :key="ticket.number" class="flex flex-wrap items-center justify-between gap-2 py-2">
-                                <Link :href="`/tickets/${ticket.number}`" class="min-w-0 flex-1 truncate underline-offset-4 hover:underline">
-                                    <span class="font-mono text-xs text-muted-foreground">{{ ticket.number }}</span>
-                                    <span class="ml-2 font-medium">{{ ticket.subject }}</span>
-                                </Link>
-                                <span class="text-xs text-muted-foreground">{{ ticket.priority.label }} · {{ ticket.status.label }}</span>
-                                <span class="text-xs font-medium" :class="slaClass(ticket.sla.state)">
-                                    {{ ticket.sla.label }} · due {{ formatDue(ticket.sla.due_at) }}
-                                </span>
-                            </li>
-                        </ul>
-                    </CardContent>
-                </Card>
-            </section>
+    <div class="flex flex-col gap-6 p-4">
+        <section aria-labelledby="my-tickets-heading">
+            <Card>
+                <CardHeader>
+                    <CardTitle id="my-tickets-heading">My tickets</CardTitle>
+                    <CardDescription
+                        >Your active tickets, soonest deadline
+                        first.</CardDescription
+                    >
+                </CardHeader>
+                <CardContent>
+                    <p
+                        v-if="myTickets.length === 0"
+                        class="text-sm text-muted-foreground"
+                    >
+                        Nothing is assigned to you right now.
+                    </p>
+                    <ul v-else class="divide-y">
+                        <li
+                            v-for="ticket in myTickets"
+                            :key="ticket.number"
+                            class="flex flex-wrap items-center justify-between gap-2 py-2"
+                        >
+                            <Link
+                                :href="`/tickets/${ticket.number}`"
+                                class="min-w-0 flex-1 truncate underline-offset-4 hover:underline"
+                            >
+                                <span
+                                    class="font-mono text-xs text-muted-foreground"
+                                    >{{ ticket.number }}</span
+                                >
+                                <span class="ml-2 font-medium">{{
+                                    ticket.subject
+                                }}</span>
+                            </Link>
+                            <span class="text-xs text-muted-foreground"
+                                >{{ ticket.priority.label }} ·
+                                {{ ticket.status.label }}</span
+                            >
+                            <span
+                                class="text-xs font-medium"
+                                :class="slaClass(ticket.sla.state)"
+                            >
+                                {{ ticket.sla.label }} · due
+                                {{ formatDue(ticket.sla.due_at) }}
+                            </span>
+                        </li>
+                    </ul>
+                </CardContent>
+            </Card>
+        </section>
 
-            <section aria-label="Totals" class="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
-                <StatCard v-for="card in cards" :key="card.label" :label="card.label" :value="card.value" :href="card.href" :tone="card.tone" />
-            </section>
+        <section
+            aria-label="Totals"
+            class="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6"
+        >
+            <StatCard
+                v-for="card in cards"
+                :key="card.label"
+                :label="card.label"
+                :value="card.value"
+                :href="card.href"
+                :tone="card.tone"
+            />
+        </section>
 
-            <div class="grid gap-6 lg:grid-cols-2">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Active tickets by priority</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <table class="w-full text-left text-sm">
-                            <thead class="border-b text-xs uppercase text-muted-foreground">
-                                <tr>
-                                    <th class="py-2 pr-4">Priority</th>
-                                    <th class="py-2 pr-4 text-right">Tickets</th>
-                                    <th class="py-2">Share</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr v-for="row in stats.by_priority" :key="row.priority" class="border-b last:border-0">
-                                    <td class="py-2 pr-4">
-                                        <Link :href="`/tickets?scope=active&priority[]=${row.priority}`" class="underline-offset-4 hover:underline">
-                                            {{ priorityLabels[row.priority] }}
-                                        </Link>
-                                    </td>
-                                    <td class="py-2 pr-4 text-right tabular-nums">{{ row.count }}</td>
-                                    <td class="py-2">
-                                        <div class="h-2 w-full rounded bg-muted" :aria-label="`${share(row.count)}%`">
-                                            <div class="h-full rounded bg-primary" :style="{ width: `${share(row.count)}%` }" />
-                                        </div>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </CardContent>
-                </Card>
+        <div class="grid gap-6 lg:grid-cols-2">
+            <Card>
+                <CardHeader>
+                    <CardTitle>Active tickets by priority</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <table class="w-full text-left text-sm">
+                        <thead
+                            class="border-b text-xs text-muted-foreground uppercase"
+                        >
+                            <tr>
+                                <th class="py-2 pr-4">Priority</th>
+                                <th class="py-2 pr-4 text-right">Tickets</th>
+                                <th class="py-2">Share</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="row in stats.by_priority"
+                                :key="row.priority"
+                                class="border-b last:border-0"
+                            >
+                                <td class="py-2 pr-4">
+                                    <Link
+                                        :href="`/tickets?scope=active&priority[]=${row.priority}`"
+                                        class="underline-offset-4 hover:underline"
+                                    >
+                                        {{ priorityLabels[row.priority] }}
+                                    </Link>
+                                </td>
+                                <td class="py-2 pr-4 text-right tabular-nums">
+                                    {{ row.count }}
+                                </td>
+                                <td class="py-2">
+                                    <div
+                                        class="h-2 w-full rounded bg-muted"
+                                        :aria-label="`${share(row.count)}%`"
+                                    >
+                                        <div
+                                            class="h-full rounded bg-primary"
+                                            :style="{
+                                                width: `${share(row.count)}%`,
+                                            }"
+                                        />
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </CardContent>
+            </Card>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Active tickets by agent</CardTitle>
-                        <CardDescription>Includes agents with no active tickets.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <p v-if="stats.by_agent.length === 0" class="text-sm text-muted-foreground">No agents yet.</p>
-                        <table v-else class="w-full text-left text-sm">
-                            <thead class="border-b text-xs uppercase text-muted-foreground">
-                                <tr>
-                                    <th class="py-2 pr-4">Agent</th>
-                                    <th class="py-2 pr-4 text-right">Active</th>
-                                    <th class="py-2 text-right">Breached</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr v-for="row in stats.by_agent" :key="row.agent_id" class="border-b last:border-0">
-                                    <td class="py-2 pr-4">
-                                        <Link :href="`/tickets?scope=active&assigned_agent_id=${row.agent_id}`" class="underline-offset-4 hover:underline">
-                                            {{ row.name }}
-                                        </Link>
-                                    </td>
-                                    <td class="py-2 pr-4 text-right tabular-nums">{{ row.active }}</td>
-                                    <td class="py-2 text-right tabular-nums" :class="row.breached > 0 ? 'font-semibold text-red-600 dark:text-red-400' : ''">
-                                        {{ row.breached }}
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </CardContent>
-                </Card>
-            </div>
-
-            <p class="text-xs text-muted-foreground">Figures refresh every minute.</p>
+            <Card>
+                <CardHeader>
+                    <CardTitle>Active tickets by agent</CardTitle>
+                    <CardDescription
+                        >Includes agents with no active
+                        tickets.</CardDescription
+                    >
+                </CardHeader>
+                <CardContent>
+                    <p
+                        v-if="stats.by_agent.length === 0"
+                        class="text-sm text-muted-foreground"
+                    >
+                        No agents yet.
+                    </p>
+                    <table v-else class="w-full text-left text-sm">
+                        <thead
+                            class="border-b text-xs text-muted-foreground uppercase"
+                        >
+                            <tr>
+                                <th class="py-2 pr-4">Agent</th>
+                                <th class="py-2 pr-4 text-right">Active</th>
+                                <th class="py-2 text-right">Breached</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="row in stats.by_agent"
+                                :key="row.agent_id"
+                                class="border-b last:border-0"
+                            >
+                                <td class="py-2 pr-4">
+                                    <Link
+                                        :href="`/tickets?scope=active&assigned_agent_id=${row.agent_id}`"
+                                        class="underline-offset-4 hover:underline"
+                                    >
+                                        {{ row.name }}
+                                    </Link>
+                                </td>
+                                <td class="py-2 pr-4 text-right tabular-nums">
+                                    {{ row.active }}
+                                </td>
+                                <td
+                                    class="py-2 text-right tabular-nums"
+                                    :class="
+                                        row.breached > 0
+                                            ? 'font-semibold text-red-600 dark:text-red-400'
+                                            : ''
+                                    "
+                                >
+                                    {{ row.breached }}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </CardContent>
+            </Card>
         </div>
-    </AppLayout>
+
+        <p class="text-xs text-muted-foreground">
+            Figures refresh every minute.
+        </p>
+    </div>
 </template>
 ```
 
 - [ ] **Step 4: Create** `resources/js/config/navigation/dashboard.ts`.
 
 ```ts
-import { LayoutGrid } from 'lucide-vue-next';
+import { LayoutGrid } from '@lucide/vue';
 import type { NavItem } from '@/config/navigation';
 
 const items: NavItem[] = [
@@ -1150,7 +1292,7 @@ export default items;
 ```
 
 - [ ] **Step 5: Type-check and build.**
-  `npx vue-tsc --noEmit && npm run build`
+  `npm run build && npm run check && npx vue-tsc --noEmit`
   Expected: no type errors, and Vite prints `✓ built in …`.
 
 - [ ] **Step 6: Commit.**

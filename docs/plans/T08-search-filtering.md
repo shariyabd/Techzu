@@ -39,8 +39,9 @@
 | `resources/js/components/tickets/TicketFilterBar.vue` | replace the T05 stub; props `scope` and `filters` unchanged, plus an optional `options` |
 | `app/Services/Tickets/TicketPageData.php` | add one method, `filterOptions(User $viewer): array`; existing methods are unchanged (see Contract note 2) |
 | `resources/js/pages/tickets/Index.vue` | two prop lines and one binding (T08.5 Step 4) |
+| `app/Http/Controllers/Web/TicketController.php` | **one line only** in `index()`: `'filterOptions' => $this->pages->filterOptions($this->user($request)),` (T08.5 Step 4b; allowed by README §4) |
 
-**Must not touch:** `app/Http/Controllers/Web/TicketController.php`, `app/Http/Controllers/Api/V1/TicketController.php`, `routes/*`, `app/Services/Sla/SlaQuery.php`, `app/Models/*`, `app/Http/Resources/V1/TicketListResource.php`, every other method in `TicketListQuery`, `TicketPageData` and `IndexTicketsRequest`, `resources/js/types/tickets.ts`, `tests/Pest.php`, `phpunit.xml`, migrations.
+**Must not touch:** `app/Http/Controllers/Web/TicketController.php` beyond the one `filterOptions` line, `app/Http/Controllers/Api/V1/TicketController.php`, `routes/*`, `app/Services/Sla/SlaQuery.php`, `app/Models/*`, `app/Http/Resources/V1/TicketListResource.php`, every other method in `TicketListQuery`, `TicketPageData` and `IndexTicketsRequest`, `resources/js/types/tickets.ts`, `tests/Pest.php`, `phpunit.xml`, migrations.
 
 ## 3. Interfaces
 
@@ -1130,10 +1131,10 @@ git commit -m "test(search): cover FULLTEXT keyword search on committed rows" --
 
 ### T08.5 — Filter bar UI (replaces T05's `TicketFilterBar.vue` stub)
 
-- [ ] **Step 1: Baseline type check**
+- [ ] **Step 1: Baseline build and type check.** Build first: the kit's Wayfinder Vite plugin generates the gitignored `resources/js/{routes,actions,wayfinder}` during the build. Without them, `vue-tsc` fails with `TS2307: Cannot find module '@/routes'` in the kit's own components.
 
 ```bash
-npx vue-tsc --noEmit
+npm run build && npx vue-tsc --noEmit
 ```
 Expected: PASS (exit 0).
 
@@ -1161,7 +1162,7 @@ import type { TicketFilterOptions } from '@/types/ticket-filters';
 import type { SharedProps } from '@/types/shared';
 import type { Option } from '@/types/tickets';
 import { router, usePage } from '@inertiajs/vue3';
-import { RotateCcw, Search } from 'lucide-vue-next';
+import { RotateCcw, Search } from '@lucide/vue';
 import { computed, onBeforeUnmount, reactive, watch } from 'vue';
 
 const props = defineProps<{
@@ -1454,12 +1455,20 @@ const chipClass = (active: boolean): string =>
      <TicketFilterBar :scope="props.scope" :filters="props.filters" :options="props.filterOptions" />
      ```
 
-- [ ] **Step 5: Type check and build, expect PASS**
+- [ ] **Step 4b: Pass `filterOptions` from the web controller** (the one line README §4 allows)
+
+In `app/Http/Controllers/Web/TicketController.php`, add this as the last entry of the `Inertia::render('tickets/Index', [...])` array in `index()`. Change nothing else in the file:
+```php
+            'filterOptions' => $this->pages->filterOptions($this->user($request)),
+```
+Then check that it is the only change: `git diff --stat app/Http/Controllers/Web/TicketController.php` shows `1 insertion(+)`.
+
+- [ ] **Step 5: Build and type check, expect PASS**
 
 ```bash
-npx vue-tsc --noEmit && npm run build
+npm run build && npx vue-tsc --noEmit
 ```
-Expected: `vue-tsc` exits 0; Vite prints `✓ built in …`.
+Expected: Vite prints `✓ built in …`; `vue-tsc` exits 0.
 
 - [ ] **Step 6: Run T05's page test, expect PASS** (the stub's `data-stub` marker is gone, and T05's tests don't assert it)
 
@@ -1473,12 +1482,12 @@ Expected: PASS.
   - Toggle *Critical*, then pick *Breached*. The URL gains `priority[]=critical&sla_state=breached`. Back leaves the page rather than stepping through each change (`replace: true`).
   - Reload: the bar is restored from the `filters` prop. Switch to *Resolved & closed*: the status chips change to Resolved and Closed.
   - As `customer1@example.com`: the unassigned and customer controls are absent.
-  - The category and agent selects appear once the controller passes `filterOptions` (Contract note 2). Until then, they're hidden and every other filter works.
+  - The category and agent selects are shown for staff (Step 4b passes `filterOptions`) and hidden for customers.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add resources/js/types/ticket-filters.ts resources/js/components/tickets/TicketFilterBar.vue resources/js/pages/tickets/Index.vue
+git add resources/js/types/ticket-filters.ts resources/js/components/tickets/TicketFilterBar.vue resources/js/pages/tickets/Index.vue app/Http/Controllers/Web/TicketController.php
 git commit -m "feat(search): add filter bar with query-string sync" --trailer "Refs: T08.5"
 ```
 
@@ -1534,15 +1543,7 @@ Expected:
    - `TicketFilterBar.vue` replaces the stub.
 
    No controller changes. The earlier `baseIndexQuery()` assumption is gone.
-2. Open, one line outside T08's files: the web index has no way to pass `filterOptions`. `TicketPageData` has no index-props method, and the props are built in `Web\TicketController::index()`, which T08 must not touch.
-
-   T08 still ships the pieces:
-   - `TicketPageData::filterOptions(User)`, tested;
-   - the optional `filterOptions` prop in `Index.vue`;
-   - the optional `options` prop on the bar.
-
-   Every filter works without it, but the category and agent selects stay hidden. To enable them, add this one line to the `Inertia::render('tickets/Index', [...])` array in `Web\TicketController::index()`, either as a T05 follow-up or by allowing T08 to make it:
-   `'filterOptions' => $this->pages->filterOptions($this->user($request)),`
+2. Resolved: README §4 allows T08 exactly one line in `Web\TicketController::index()`, which passes `filterOptions` (T08.5 Step 4b). `TicketPageData::filterOptions(User)` is tested, and the bar's category and agent selects are shown for staff.
 3. Resolved: T00's `phpunit.xml` already has the `Database` suite (`tests/Database`), so `pest --parallel` runs the FULLTEXT test. `tests/Pest.php` (T01) configures only `Feature` and `Concurrency`, so the file declares `uses(TestCase::class, DatabaseMigrations::class)` itself.
 4. Resolved: "staff" in the filter options is `$viewer->can('createOnBehalf', Ticket::class)` (T04 policy). In the bar it's `auth.can.createOnBehalf`. No role checks and no `isStaff()`.
 5. Spec §12's signature `TicketFilter::apply(Builder, array $validated)` omits `$viewer` and `$now`. T08 follows README §3.4, which includes them.
