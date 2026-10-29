@@ -99,3 +99,43 @@ it('sends guests through unauthenticated', function (): void {
     $matrix->expectAccess('GET', "/_matrix/tickets/{$ticket->number}", 302);
     $matrix->expectAccess('GET', "/api/_matrix/tickets/{$ticket->number}", 401);
 });
+
+dataset('user administration routes', [
+    'web users index' => ['GET', 'admin.users.index', false, 200],
+    'web users create' => ['GET', 'admin.users.create', false, 200],
+    'web users store' => ['POST', 'admin.users.store', false, 302],
+    'web users edit' => ['GET', 'admin.users.edit', true, 200],
+    'web users update' => ['PATCH', 'admin.users.update', true, 302],
+    'web roles index' => ['GET', 'admin.roles.index', false, 200],
+    'api users index' => ['GET', 'api.v1.admin.users.index', false, 200],
+    'api users store' => ['POST', 'api.v1.admin.users.store', false, 201],
+    'api users update' => ['PATCH', 'api.v1.admin.users.update', true, 200],
+    'api roles index' => ['GET', 'api.v1.admin.roles.index', false, 200],
+]);
+
+it('lets only admins manage users and read the permission matrix', function (string $method, string $name, bool $needsUser, int $adminStatus, Role $role): void {
+    $matrix = AuthorizationMatrix::for($this);
+    $matrix->actingAsRole($role);
+    $target = User::factory()->customer()->create();
+    $uri = $needsUser ? route($name, $target) : route($name);
+    $payload = $method === 'GET' ? [] : [
+        'name' => 'Matrix User',
+        'email' => 'matrix.user@example.com',
+        'password' => 'password',
+        'role' => Role::Customer->value,
+    ];
+
+    $matrix->expectAccess($method, $uri, $role === Role::Admin ? $adminStatus : 403, $payload);
+})->with('user administration routes')->with([Role::Admin, Role::Agent, Role::Customer]);
+
+it('sends signed-in users away from the password reset screens', function (string $method, string $uri, Role $role): void {
+    $matrix = AuthorizationMatrix::for($this);
+    $matrix->actingAsRole($role);
+
+    $matrix->expectAccess($method, $uri, 302)->assertRedirect(route('home'));
+})->with([
+    'forgot form' => ['GET', '/forgot-password'],
+    'send link' => ['POST', '/forgot-password'],
+    'reset form' => ['GET', '/reset-password/some-token'],
+    'reset' => ['POST', '/reset-password'],
+])->with([Role::Admin, Role::Customer]);
