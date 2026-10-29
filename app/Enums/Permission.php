@@ -62,4 +62,27 @@ enum Permission: string
             ],
         };
     }
+
+    public function label(): string
+    {
+        return match ($this) {
+            self::TicketsCreate => 'Create tickets',
+            self::TicketsCreateOnBehalf => 'Create tickets on behalf of customers',
+            self::TicketsViewAny => 'View all tickets',
+            self::TicketsViewOwn => 'View own tickets',
+            self::TicketsReply => 'Reply to tickets',
+            self::TicketsNotesInternal => 'Read and write internal notes',
+            self::TicketsClaim => 'Claim unassigned tickets',
+            self::TicketsUpdateAny => 'Update any ticket',
+            self::TicketsUpdateAssigned => 'Update tickets assigned to them',
+            self::TicketsUpdateOwn => 'Update their own tickets',
+            self::TicketsAssignAny => 'Assign tickets to any agent',
+            self::TicketsHandoffOwn => 'Hand off their own tickets',
+            self::DashboardView => 'View the dashboard',
+            self::ImportsManage => 'Import tickets from CSV',
+            self::UsersManage => 'Manage users and roles',
+            self::CategoriesManage => 'Manage categories',
+            self::HolidaysManage => 'Manage holidays',
+        };
+    }
 }
