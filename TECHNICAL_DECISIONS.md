@@ -629,6 +629,8 @@ GitHub Actions runs: `composer install` → `pint --test` → `phpstan analyse` 
 
 **Trade-offs.** A ticket can become breached immediately after an upgrade. That's correct, and it gets escalated on the next scan.
 
+Because recalculation starts from `sla_started_at`, business time credited by an earlier, completed pause/resume cycle is lost when the priority later changes; an ongoing pause is kept. Keeping that credit would need an accumulated paused-minutes column.
+
 ---
 
 ### TD-044 — Escalation by a scheduled, idempotent scan (`sla:scan`, every minute)
