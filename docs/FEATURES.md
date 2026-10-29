@@ -106,7 +106,21 @@ The data model is the shared vocabulary every other feature builds on.
 _Pending._
 
 ## Ticket numbering (T03)
-_Pending._
+Every ticket gets a unique, human-readable number. This feature produces that number.
+
+**Format**
+- A number reads like `TKT-2026-000042`: a prefix, the year, and a sequence number padded to six digits. The prefix is configurable and defaults to TKT.
+- Once the sequence passes 999999 the number simply gets longer (seven digits, and so on). It never wraps or restarts mid-year.
+
+**Counting**
+- There is one counter per year. Each new number is the previous one plus one, so numbers within a year never repeat. They are normally consecutive; a gap can appear only in the rare case where saving the ticket fails at the very last step.
+- The first ticket of a year starts at 1, and the previous year's counter is left untouched.
+- The year is the year in the business timezone, not UTC. A ticket created at 18:00 UTC on 31 December is already in the next year for a business in Dhaka.
+- If the business timezone is missing or invalid, no number is issued and an error is raised instead of quietly falling back to UTC.
+
+**Safe under load**
+- A number is meant to be taken while the ticket is being saved, inside the same database transaction. If saving fails and the transaction is rolled back, the counter is rolled back too, so that number is given back and the next ticket reuses it.
+- When several tickets are created at the same moment, they wait their turn for the year's counter. Each gets a different number. If one has to wait too long for its turn, it fails with an error instead of receiving a duplicate number.
 
 ## Authorization (T04)
 _Pending._
