@@ -103,7 +103,47 @@ The data model is the shared vocabulary every other feature builds on.
 - Running the seed again when the demo data already exists adds nothing.
 
 ## SLA calculation (T02)
-_Pending._
+SLA calculation turns a ticket's priority into a due time and a warning time, counted only in open business time. It also says which escalation level a ticket should be at right now. It only calculates; other features decide when to call it.
+
+**Business hours and closed days**
+- The business is open Sunday to Thursday from 09:00 to 18:00. Friday and Saturday are closed.
+- Business time is worked out in the business timezone, Asia/Dhaka by default. Times are stored in UTC and converted for the calculation.
+- Any date can be marked as a holiday. On a holiday the business is closed for the whole day, whatever the weekly hours say.
+- The list of holidays is cached. Adding, changing or removing a holiday takes effect for new calculations only once the cached list is refreshed.
+- The weekly hours and the timezone are configurable; holidays are a stored list of dates. Invalid settings (an unknown timezone, a window that ends before it starts, overlapping windows, a malformed time or holiday date) are rejected rather than guessed at.
+
+**How a due time is computed**
+- Only open business time counts. Time outside opening hours, on closed days and on holidays is skipped.
+- If counting starts outside business hours, it begins at the next opening.
+- An amount of time that exactly fills the rest of a day ends at closing time on that day, not at opening time on the next one.
+- Zero minutes of business time means the due time is the start itself.
+- Times are treated to the whole second.
+- Safety limit: if no open business time is found within 366 days, the calculation fails with an error instead of looping forever. This only happens if the hours or holidays leave the business closed for a year.
+- Example: a Critical ticket created on Thursday at 17:00 has 1 hour left that day (until 18:00). Friday and Saturday are closed, so the remaining hour is counted from Sunday 09:00, and the ticket is due Sunday at 10:00.
+
+**Resolution times and the warning point**
+- Each priority has a resolution time in business time: Low 48 business hours, Medium 24, High 8, Critical 2.
+- The warning point is 75% of the resolution time, rounded down to whole minutes, and is counted in business time from the same start as the due time.
+- The resolution times and the warning percentage are configurable. Every priority must have a positive whole number of minutes and the percentage must be between 0 and 100, otherwise the setup is rejected.
+
+**New tickets**
+- A new ticket gets its start time, due time and warning time from its priority and its start.
+
+**Pause and resume**
+- Pausing records when the pause began. Pausing a ticket that is already paused changes nothing.
+- On resume, the business time that was left at the moment of the pause, both to the due time and to the warning point, is carried over. The remaining time is rounded down to whole minutes. The new due and warning times are that remaining time counted forward from the moment of resuming.
+- If the ticket was already past its due time (or warning point) when it was paused, nothing is left, so the new time is simply the moment of resuming.
+- Resuming a ticket that is not paused changes nothing.
+
+**Priority change**
+- The due and warning times are recomputed for the new priority, counting from the ticket's original start.
+- A pause that is still going on is kept as it is.
+- Time that an earlier, finished pause had credited is not kept: the recalculation starts over from the original start, so those credits are lost.
+
+**Escalation level**
+- The calculation can say which level the ticket should have now: none, approaching (at or after the warning point) or breached (at or after the due time).
+- While a ticket is paused, the level is judged at the moment the pause began, so it is frozen and does not worsen during the pause.
+- Recalculating after a priority change, and resuming, only ever lower a ticket's stored level, for example when a longer deadline moves it back from breached to approaching. They never raise it.
 
 ## Ticket numbering (T03)
 Every ticket gets a unique, human-readable number. This feature produces that number.
