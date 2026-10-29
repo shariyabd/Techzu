@@ -40,6 +40,8 @@ return new class extends Migration
             $table->index(['category_id', 'status']);
             $table->index(['priority', 'status']);
             $table->index('created_at');
+            $table->index(['status', 'resolved_at']);
+            $table->index('updated_at');
             $table->fullText(['subject', 'description']);
         });
     }
