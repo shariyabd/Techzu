@@ -6,6 +6,7 @@ namespace App\Services\Imports;
 
 use App\Exceptions\Domain\ImportHeaderInvalid;
 use Illuminate\Support\LazyCollection;
+use RuntimeException;
 use SplFileObject;
 
 final class TicketCsvReader
@@ -46,40 +47,81 @@ final class TicketCsvReader
         return $columns;
     }
 
-    /** @return array{rows: int, last_line: int} */
-    public function scan(string $path): array
+    /** @return array{rows: int, last_line: int, chunks: list<array{start_line: int, end_line: int, offset: int}>} */
+    public function scan(string $path, int $chunkSize): array
     {
+        $chunkSize = max(1, $chunkSize);
+        $handle = $this->openHandle($path);
         $rows = 0;
         $lastLine = 0;
+        $offsets = [];
+        $index = 0;
+        $position = 0;
 
-        foreach ($this->records($path, 1, PHP_INT_MAX) as $line => $values) {
-            $rows++;
-            $lastLine = $line;
+        while (($values = fgetcsv($handle, null, ',', '"', '')) !== false) {
+            if ($index >= 1 && ($index - 1) % $chunkSize === 0) {
+                $offsets[$index] = $position;
+            }
+
+            if ($index >= 1 && ! $this->isBlank($values)) {
+                $rows++;
+                $lastLine = $index;
+            }
+
+            $index++;
+            $position = (int) ftell($handle);
         }
 
-        return ['rows' => $rows, 'last_line' => $lastLine];
+        fclose($handle);
+        $chunks = [];
+
+        foreach ($offsets as $start => $offset) {
+            if ($start <= $lastLine) {
+                $chunks[] = ['start_line' => $start, 'end_line' => min($start + $chunkSize - 1, $lastLine), 'offset' => $offset];
+            }
+        }
+
+        return ['rows' => $rows, 'last_line' => $lastLine, 'chunks' => $chunks];
     }
 
     /** @return LazyCollection<int, list<string|null>> */
-    public function records(string $path, int $startLine, int $endLine): LazyCollection
+    public function records(string $path, int $startLine, int $endLine, int $offset): LazyCollection
     {
-        return LazyCollection::make(function () use ($path, $startLine, $endLine) {
-            $file = $this->open($path);
-            $file->seek($startLine);
+        return LazyCollection::make(function () use ($path, $startLine, $endLine, $offset) {
+            $handle = $this->openHandle($path);
+            fseek($handle, $offset);
 
-            while ($file->valid() && $file->key() <= $endLine) {
-                $values = $file->current();
+            try {
+                for ($index = $startLine; $index <= $endLine; $index++) {
+                    $values = fgetcsv($handle, null, ',', '"', '');
 
-                if (is_array($values) && ! $this->isBlank($values)) {
-                    yield $file->key() => array_values(array_map(
-                        static fn (mixed $value): ?string => $value === null ? null : (string) $value,
-                        $values,
-                    ));
+                    if ($values === false) {
+                        break;
+                    }
+
+                    if (! $this->isBlank($values)) {
+                        yield $index => array_map(
+                            static fn (mixed $value): ?string => $value === null ? null : (string) $value,
+                            $values,
+                        );
+                    }
                 }
-
-                $file->next();
+            } finally {
+                fclose($handle);
             }
         });
+    }
+
+    /** @return resource */
+    private function openHandle(string $path)
+    {
+        $handle = fopen($path, 'rb');
+
+        if ($handle === false) {
+            throw new RuntimeException('The import file could not be opened.');
+        }
+
+        return $handle;
     }
 
     private function open(string $path): SplFileObject

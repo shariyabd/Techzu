@@ -38,6 +38,11 @@ final class ImportTicketRowRules
         ];
     }
 
+    public function timezone(): string
+    {
+        return $this->timezone;
+    }
+
     public static function parseCreatedAt(?string $value, string $timezone): ?CarbonImmutable
     {
         if ($value === null || trim($value) === '') {
