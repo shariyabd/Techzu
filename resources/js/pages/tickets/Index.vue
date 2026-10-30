@@ -133,6 +133,9 @@ const showCustomer = computed(() => props.filterOptions.showPeopleFilters);
                     <TableHeader>
                         <TableRow>
                             <TableHead>Ticket</TableHead>
+                            <TableHead class="hidden md:table-cell"
+                                >Category</TableHead
+                            >
                             <TableHead>Status</TableHead>
                             <TableHead class="hidden md:table-cell"
                                 >Priority</TableHead
@@ -171,6 +174,9 @@ const showCustomer = computed(() => props.filterOptions.showPeopleFilters);
                                     >
                                 </Link>
                             </TableCell>
+                            <TableCell class="hidden md:table-cell">{{
+                                ticket.category?.name ?? '—'
+                            }}</TableCell>
                             <TableCell
                                 ><StatusBadge :status="ticket.status"
                             /></TableCell>

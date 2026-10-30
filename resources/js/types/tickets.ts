@@ -50,6 +50,7 @@ export type TicketDetail = {
     priority: EnumValue<TicketPriorityValue>;
     category: CategorySummary | null;
     customer: UserSummary | null;
+    created_by: UserSummary | null;
     assigned_agent: UserSummary | null;
     sla: TicketSla;
     escalation_level: number;

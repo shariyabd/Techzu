@@ -164,6 +164,19 @@ it('shows staff the internal data and the agent list', function (): void {
             ->where('ticket.can.allowedStatuses', ['in_progress', 'waiting_for_customer', 'resolved']));
 });
 
+it('passes the requested page counts to the ticket page', function (): void {
+    config(['tickets.per_page.default' => 2]);
+    $ticket = Ticket::factory()->status(TicketStatus::Open)->create(['customer_id' => $this->customer->id]);
+    TicketReply::factory()->count(5)->create(['ticket_id' => $ticket->id, 'author_id' => $this->agent->id, 'is_internal' => false]);
+
+    $this->actingAs($this->admin)->get('/tickets/'.$ticket->number.'?replies_pages=2&activities_pages=3')
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('repliesPages', 2)
+            ->where('activitiesPages', 3)
+            ->has('replies', 4)
+            ->where('repliesHasMore', true));
+});
+
 it('lets a customer edit the subject of their own open ticket', function (): void {
     $ticket = Ticket::factory()->status(TicketStatus::Open)->create(['customer_id' => $this->customer->id, 'subject' => 'Old']);
 

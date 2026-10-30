@@ -21,43 +21,72 @@ final class TicketPageData
 {
     public function loadSummary(Ticket $ticket): Ticket
     {
-        return $ticket->loadMissing(['category:id,name,slug,is_active', 'customer:id,name', 'assignedAgent:id,name']);
+        return $ticket->loadMissing(['category:id,name,slug,is_active', 'customer:id,name', 'creator:id,name', 'assignedAgent:id,name']);
     }
 
     public function loadForShow(Ticket $ticket, User $viewer): Ticket
     {
         $seesInternal = $viewer->can('viewInternal', $ticket);
 
-        $ticket->load([
+        return $ticket->load([
             'category:id,name,slug,is_active',
             'customer:id,name',
+            'creator:id,name',
             'assignedAgent:id,name',
-            'replies' => static fn (HasMany $q) => $q->visibleTo($viewer)
-                ->with([
-                    'author:id,name',
-                    'attachments' => static fn (HasMany $a) => $a->when(! $seesInternal, static fn ($b) => $b->where('is_internal', false))->orderBy('id'),
-                ])
-                ->orderBy('created_at')
-                ->orderBy('id'),
             'attachments' => static fn (HasMany $q) => $q->whereNull('reply_id')
                 ->when(! $seesInternal, static fn ($b) => $b->where('is_internal', false))
                 ->orderBy('id'),
         ]);
-
-        $ticket->replies->each(static fn (TicketReply $reply): TicketReply => $reply->setRelation('ticket', $ticket));
-
-        return $ticket;
     }
 
-    /** @return Collection<int, Activity> */
-    public function activities(Ticket $ticket, User $viewer, int $limit = 100): Collection
+    public function clampPages(int $pages): int
     {
-        return $ticket->activitiesVisibleTo($viewer)
+        return max(1, min($pages, max(1, (int) config('tickets.show.max_pages'))));
+    }
+
+    /** @return array{items: Collection<int, TicketReply>, has_more: bool} */
+    public function replies(Ticket $ticket, User $viewer, int $pages): array
+    {
+        $seesInternal = $viewer->can('viewInternal', $ticket);
+        $limit = $this->showLimit($pages);
+        $capped = $this->clampPages($pages) >= $this->clampPages(PHP_INT_MAX);
+
+        $fetched = $ticket->replies()
+            ->visibleTo($viewer)
+            ->with([
+                'author:id,name',
+                'attachments' => static fn (HasMany $a) => $a->when(! $seesInternal, static fn ($b) => $b->where('is_internal', false))->orderBy('id'),
+            ])
+            ->latest()
+            ->latest('id')
+            ->limit($limit + 1)
+            ->get();
+
+        $items = $fetched->take($limit)->reverse()->values();
+        $items->each(static fn (TicketReply $reply): TicketReply => $reply->setRelation('ticket', $ticket));
+
+        return ['items' => $items, 'has_more' => ! $capped && $fetched->count() > $limit];
+    }
+
+    /** @return array{items: Collection<int, Activity>, has_more: bool} */
+    public function activities(Ticket $ticket, User $viewer, int $pages): array
+    {
+        $limit = $this->showLimit($pages);
+        $capped = $this->clampPages($pages) >= $this->clampPages(PHP_INT_MAX);
+
+        $fetched = $ticket->activitiesVisibleTo($viewer)
             ->with('causer:id,name')
             ->latest()
             ->latest('id')
-            ->limit($limit)
+            ->limit($limit + 1)
             ->get();
+
+        return ['items' => $fetched->take($limit)->values(), 'has_more' => ! $capped && $fetched->count() > $limit];
+    }
+
+    private function showLimit(int $pages): int
+    {
+        return $this->clampPages($pages) * max(1, (int) config('tickets.per_page.default', 20));
     }
 
     /** @return LengthAwarePaginator<int, Activity> */

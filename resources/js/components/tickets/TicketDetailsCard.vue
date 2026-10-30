@@ -11,6 +11,12 @@ const escalationLabels: Record<number, string> = {
     2: 'Escalated (breached)',
 };
 
+const showCreatedBy = computed(
+    () =>
+        props.ticket.created_by != null &&
+        props.ticket.created_by.id !== props.ticket.customer?.id,
+);
+
 const showDue = computed(
     () =>
         props.ticket.sla.due_at !== null &&
@@ -29,6 +35,10 @@ const showDue = computed(
             >
                 <dt class="text-muted-foreground">Customer</dt>
                 <dd class="break-words">{{ ticket.customer?.name ?? '—' }}</dd>
+                <template v-if="showCreatedBy">
+                    <dt class="text-muted-foreground">Created by</dt>
+                    <dd class="break-words">{{ ticket.created_by?.name }}</dd>
+                </template>
                 <dt class="text-muted-foreground">Category</dt>
                 <dd>{{ ticket.category?.name ?? '—' }}</dd>
                 <dt class="text-muted-foreground">Agent</dt>
