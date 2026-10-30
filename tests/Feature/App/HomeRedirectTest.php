@@ -32,9 +32,3 @@ it('sends everyone else to their ticket list', function (): void {
 
     $this->actingAs(User::factory()->create())->get('/')->assertRedirect(route('tickets.index'));
 });
-
-it('falls back to the dashboard placeholder while tickets.index does not exist', function (): void {
-    Gate::define('viewDashboard', fn (User $user): bool => false);
-
-    $this->actingAs(User::factory()->create())->get('/')->assertRedirect(route('dashboard'));
-})->skip(fn (): bool => Route::has('tickets.index'), 'tickets.index exists (T05 merged)');
