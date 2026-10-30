@@ -300,9 +300,11 @@ The spatie permission tables (`roles`, `permissions`, `model_has_roles`, `model_
 | ticket_replies | `(ticket_id, is_internal, created_at)` | conversation timeline without internal notes |
 | attachments | `(ticket_id, is_internal)`, `(reply_id)` | attachment lists with visibility |
 | activity_log | `(subject_type, subject_id, created_at)` | ticket activity timeline (added on top of the package) |
+| activity_log | `(created_at)` | chunked retention prune |
 | users | `(is_available)` + `model_has_roles(role_id, model_id, model_type)` | eligible agents |
 | agent_category | `(category_id, user_id)` | agents per category |
-| notifications | `(notifiable_type, notifiable_id, read_at)` | unread count |
+| notifications | `(notifiable_type, notifiable_id, created_at)` | inbox page and unread count |
+| notifications | `(read_at, created_at)` | chunked prune of old read notifications |
 | ticket_imports | `(user_id, created_at)` | an admin's imports |
 | ticket_import_errors | `(ticket_import_id, row_number)` | paginated error report |
 
