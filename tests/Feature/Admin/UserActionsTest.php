@@ -5,11 +5,15 @@ declare(strict_types=1);
 use App\Actions\Admin\ChangeUserRole;
 use App\Actions\Admin\CreateUser;
 use App\Actions\Admin\UpdateUser;
+use App\Enums\ActivityType;
 use App\Enums\Role;
+use App\Enums\TicketStatus;
 use App\Exceptions\Domain\CannotChangeOwnRole;
 use App\Models\Category;
+use App\Models\Ticket;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
+use Spatie\Activitylog\Models\Activity;
 
 beforeEach(function (): void {
     $this->admin = User::factory()->admin()->create();
@@ -117,4 +121,18 @@ it('leaves every field untouched when the admin tries to demote themselves', fun
 
     expect($this->admin->fresh()?->name)->not->toBe('Should not stick')
         ->and($this->admin->fresh()?->getRoleNames()->all())->toBe([Role::Admin->value]);
+});
+
+it('unassigns the active tickets of a demoted agent and leaves finished ones alone', function (): void {
+    $agent = User::factory()->agent()->create();
+    $active = Ticket::factory()->status(TicketStatus::InProgress)->assignedTo($agent)->create();
+    $finished = Ticket::factory()->status(TicketStatus::Resolved)->assignedTo($agent)->create();
+
+    app(ChangeUserRole::class)->handle($this->admin, $agent, Role::Customer);
+
+    expect($active->fresh()?->assigned_agent_id)->toBeNull()
+        ->and($finished->fresh()?->assigned_agent_id)->toBe($agent->id);
+    $activity = Activity::query()->where('event', ActivityType::Unassigned->value)->sole();
+    expect($activity->subject_id)->toBe($active->id)
+        ->and($activity->causer_id)->toBe($this->admin->id);
 });

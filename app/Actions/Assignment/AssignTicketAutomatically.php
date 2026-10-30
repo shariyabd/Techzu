@@ -7,6 +7,7 @@ namespace App\Actions\Assignment;
 use App\Enums\AssignmentMethod;
 use App\Enums\TicketStatus;
 use App\Events\TicketAssigned;
+use App\Events\TicketAutoAssignmentFailed;
 use App\Events\TicketStatusChanged;
 use App\Models\Ticket;
 use App\Models\User;
@@ -47,6 +48,8 @@ final class AssignTicketAutomatically
                     'ticket' => $ticket->number,
                     'category_id' => $ticket->category_id,
                 ]);
+
+                TicketAutoAssignmentFailed::dispatch($ticket);
 
                 return null;
             }

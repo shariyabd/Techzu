@@ -7,6 +7,7 @@ namespace App\Actions\Assignment;
 use App\Enums\AssignmentMethod;
 use App\Events\TicketAssigned;
 use App\Exceptions\Domain\AgentNotEligible;
+use App\Exceptions\Domain\TicketClosed;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Services\Assignment\UnassignedTicketAssigner;
@@ -30,6 +31,10 @@ final class AssignTicket
 
             $locked = Ticket::query()->whereKey($ticket->getKey())->lockForUpdate()->firstOrFail();
             $ticket->setRawAttributes($locked->getAttributes(), true);
+            if (! $ticket->isActive()) {
+                throw new TicketClosed(sprintf('Ticket %s is finished and can no longer be assigned.', $ticket->number));
+            }
+
             $previousId = $ticket->assigned_agent_id;
 
             if ($previousId === $agent->getKey()) {
