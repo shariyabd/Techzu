@@ -13,7 +13,7 @@ defineProps<{ title: string; description?: string; icon?: Component }>();
 </script>
 
 <template>
-    <Empty class="border border-dashed">
+    <Empty class="rounded-xl border border-dashed bg-card">
         <EmptyHeader>
             <EmptyMedia v-if="icon" variant="icon"
                 ><component :is="icon" aria-hidden="true"

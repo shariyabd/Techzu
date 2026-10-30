@@ -1,27 +1,34 @@
 <script setup lang="ts">
 import AppContent from '@/components/AppContent.vue';
+import AppHeader from '@/components/AppHeader.vue';
 import AppShell from '@/components/AppShell.vue';
 import AppSidebar from '@/components/AppSidebar.vue';
 import AppSidebarHeader from '@/components/AppSidebarHeader.vue';
 import { Toaster } from '@/components/ui/sonner';
 import type { BreadcrumbItem } from '@/types';
 
-type Props = {
-    breadcrumbs?: BreadcrumbItem[];
-};
-
-withDefaults(defineProps<Props>(), {
-    breadcrumbs: () => [],
-});
+withDefaults(
+    defineProps<{
+        breadcrumbs?: BreadcrumbItem[];
+    }>(),
+    {
+        breadcrumbs: () => [],
+    },
+);
 </script>
 
 <template>
-    <AppShell variant="sidebar">
-        <AppSidebar />
-        <AppContent variant="sidebar" class="min-w-0 overflow-x-clip">
-            <AppSidebarHeader :breadcrumbs="breadcrumbs" />
-            <slot />
-        </AppContent>
+    <AppShell>
+        <AppHeader />
+        <div class="flex min-h-0 flex-1">
+            <AppSidebar />
+            <div class="flex min-w-0 flex-1 flex-col">
+                <AppSidebarHeader :breadcrumbs="breadcrumbs" />
+                <AppContent>
+                    <slot />
+                </AppContent>
+            </div>
+        </div>
         <Toaster rich-colors close-button position="top-right" />
     </AppShell>
 </template>

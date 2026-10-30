@@ -10,6 +10,7 @@ const items: NavItem[] = [
         icon: Tags,
         order: 70,
         group: 'admin',
+        railKey: 'admin',
         visible: (page) => page.auth.can.manageCategories,
     },
     {
@@ -18,6 +19,7 @@ const items: NavItem[] = [
         icon: CalendarDays,
         order: 71,
         group: 'admin',
+        railKey: 'admin',
         visible: (page) => page.auth.can.manageHolidays,
     },
     {
@@ -26,6 +28,7 @@ const items: NavItem[] = [
         icon: Users,
         order: 72,
         group: 'admin',
+        railKey: 'admin',
         visible: (page) => page.auth.can.manageUsers,
     },
     {
@@ -34,6 +37,7 @@ const items: NavItem[] = [
         icon: ShieldCheck,
         order: 73,
         group: 'admin',
+        railKey: 'admin',
         visible: (page) => page.auth.can.manageUsers,
     },
 ];

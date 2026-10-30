@@ -56,7 +56,7 @@ function remove(index: number): void {
                 <Paperclip aria-hidden="true" />
                 Attach files
             </Button>
-            <p :id="`${id}-hint`" class="text-xs text-muted-foreground">
+            <p :id="`${id}-hint`" class="min-w-0 text-xs text-muted-foreground">
                 {{ hint }}
             </p>
         </div>
@@ -64,7 +64,7 @@ function remove(index: number): void {
             <li
                 v-for="(file, index) in files"
                 :key="`${file.name}-${index}`"
-                class="flex items-center gap-2 rounded-md border px-2 py-1 text-sm"
+                class="flex items-center gap-2 rounded-full border bg-muted px-3 py-1 text-sm"
             >
                 <span class="min-w-0 flex-1 truncate">{{ file.name }}</span>
                 <span class="shrink-0 text-xs text-muted-foreground">{{

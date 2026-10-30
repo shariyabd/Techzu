@@ -2,6 +2,7 @@
 import { Head, Link, router } from '@inertiajs/vue3';
 import { Pencil, Plus, Search, Users } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
+import TableCard from '@/components/admin/TableCard.vue';
 import EmptyState from '@/components/EmptyState.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import ResourcePagination from '@/components/ResourcePagination.vue';
@@ -148,7 +149,7 @@ const agentProfile = (user: AdminUser): string => {
         </EmptyState>
 
         <template v-else>
-            <div class="overflow-x-auto rounded-md border">
+            <TableCard>
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -214,7 +215,7 @@ const agentProfile = (user: AdminUser): string => {
                         </TableRow>
                     </TableBody>
                 </Table>
-            </div>
+            </TableCard>
             <ResourcePagination
                 :links="users.links"
                 :meta="users.meta"

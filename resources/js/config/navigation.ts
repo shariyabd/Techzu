@@ -1,7 +1,10 @@
+import { FileUp, LayoutGrid, Settings, Ticket } from '@lucide/vue';
 import type { Component } from 'vue';
 import type { SharedProps } from '@/types/shared';
 
 export type NavGroup = 'support' | 'admin';
+
+export type RailKey = 'tickets' | 'dashboard' | 'imports' | 'admin';
 
 export type NavItem = {
     title: string;
@@ -9,6 +12,7 @@ export type NavItem = {
     icon?: Component;
     order: number;
     group?: NavGroup;
+    railKey?: RailKey;
     visible: (page: SharedProps) => boolean;
 };
 
@@ -43,4 +47,45 @@ export function groupedNavigationFor(props: SharedProps): NavSection[] {
             ),
         }))
         .filter((section) => section.items.length > 0);
+}
+
+const railDefinitions: { key: RailKey; label: string; icon: Component }[] = [
+    { key: 'tickets', label: 'Tickets', icon: Ticket },
+    { key: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
+    { key: 'imports', label: 'Imports', icon: FileUp },
+    { key: 'admin', label: 'Admin', icon: Settings },
+];
+
+export type RailEntry = {
+    key: RailKey;
+    label: string;
+    icon: Component;
+    href: string;
+    hrefs: string[];
+};
+
+export function railFor(props: SharedProps): RailEntry[] {
+    const visible = navigationFor(props);
+
+    return railDefinitions.flatMap((definition) => {
+        const items = visible.filter((item) => item.railKey === definition.key);
+
+        if (items.length === 0) {
+            return [];
+        }
+
+        return [
+            {
+                key: definition.key,
+                label: definition.label,
+                icon: definition.icon,
+                href: items[0].href,
+                hrefs: items.map((item) => item.href),
+            },
+        ];
+    });
+}
+
+export function canSearchTickets(props: SharedProps): boolean {
+    return navigationFor(props).some((item) => item.railKey === 'tickets');
 }

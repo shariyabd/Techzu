@@ -23,6 +23,7 @@ use App\Models\Ticket;
 use App\Models\User;
 use App\Services\Tickets\TicketListQuery;
 use App\Services\Tickets\TicketPageData;
+use App\Services\Tickets\TicketQueueCounts;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -36,7 +37,7 @@ final class TicketController extends Controller
         private readonly TicketPageData $pages,
     ) {}
 
-    public function index(IndexTicketsRequest $request, TicketListQuery $tickets): InertiaResponse
+    public function index(IndexTicketsRequest $request, TicketListQuery $tickets, TicketQueueCounts $queues): InertiaResponse
     {
         $validated = $request->validated();
 
@@ -45,6 +46,7 @@ final class TicketController extends Controller
             'scope' => $request->scope(),
             'filters' => (object) $validated,
             'filterOptions' => $this->pages->filterOptions($this->user($request), $request->scope()),
+            'queues' => $queues->for($this->user($request)),
         ]);
     }
 

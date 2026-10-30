@@ -13,6 +13,5 @@ export type SharedProps = {
     notifications: {
         unread_count: number;
     };
-    sidebarOpen: boolean;
     [key: string]: unknown;
 };

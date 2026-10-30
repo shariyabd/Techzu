@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useForm } from '@inertiajs/vue3';
-import { Lock } from '@lucide/vue';
+import { Lock, SendHorizontal } from '@lucide/vue';
 import { computed } from 'vue';
 import InputError from '@/components/InputError.vue';
 import SubmitButton from '@/components/SubmitButton.vue';
@@ -43,27 +43,18 @@ function submit(): void {
 </script>
 
 <template>
-    <form class="flex flex-col gap-4 border-t pt-4" @submit.prevent="submit">
+    <form
+        class="flex flex-col gap-3 border-t bg-card p-3 sm:p-4"
+        @submit.prevent="submit"
+    >
         <div class="grid gap-2">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-                <Label for="reply-body">{{
-                    form.is_internal ? 'Internal note' : 'Reply'
-                }}</Label>
-                <div v-if="can.addInternalNote" class="flex items-center gap-2">
-                    <Switch id="reply-internal" v-model="form.is_internal" />
-                    <Label
-                        for="reply-internal"
-                        class="flex items-center gap-1 text-sm font-normal"
-                    >
-                        <Lock class="size-3.5" aria-hidden="true" />
-                        Internal note (staff only)
-                    </Label>
-                </div>
-            </div>
+            <Label for="reply-body" class="sr-only">{{
+                form.is_internal ? 'Internal note' : 'Reply'
+            }}</Label>
             <Textarea
                 id="reply-body"
                 v-model="form.body"
-                rows="5"
+                rows="3"
                 required
                 maxlength="20000"
                 :placeholder="
@@ -71,25 +62,47 @@ function submit(): void {
                 "
                 :class="
                     form.is_internal
-                        ? 'border-amber-400 bg-amber-50/50 dark:border-amber-600 dark:bg-amber-950/30'
+                        ? 'border-tint-amber-border bg-tint-amber text-tint-amber-foreground'
                         : ''
                 "
             />
             <InputError :message="form.errors.body" />
         </div>
-        <AttachmentPicker
-            id="reply-attachments"
-            v-model="form.attachments"
-            :rules="attachmentRules"
-            :errors="attachmentErrors"
-        />
-        <div class="flex justify-end">
-            <SubmitButton
-                :processing="form.processing"
-                :disabled="form.body.trim() === ''"
+        <div class="flex flex-wrap items-start justify-between gap-3">
+            <AttachmentPicker
+                id="reply-attachments"
+                v-model="form.attachments"
+                :rules="attachmentRules"
+                :errors="attachmentErrors"
+                class="min-w-0 flex-1 basis-full sm:basis-0"
+            />
+            <div
+                class="flex w-full shrink-0 items-center justify-end gap-3 sm:w-auto"
             >
-                {{ form.is_internal ? 'Add internal note' : 'Send reply' }}
-            </SubmitButton>
+                <div
+                    v-if="can.addInternalNote"
+                    class="mr-auto flex items-center gap-2 sm:mr-0"
+                >
+                    <Switch id="reply-internal" v-model="form.is_internal" />
+                    <Label
+                        for="reply-internal"
+                        class="flex items-center gap-1 text-sm font-normal"
+                    >
+                        <Lock class="size-3.5" aria-hidden="true" />
+                        Internal note
+                    </Label>
+                </div>
+                <SubmitButton
+                    :processing="form.processing"
+                    :disabled="form.body.trim() === ''"
+                >
+                    <SendHorizontal
+                        v-if="!form.processing"
+                        aria-hidden="true"
+                    />
+                    {{ form.is_internal ? 'Add internal note' : 'Send reply' }}
+                </SubmitButton>
+            </div>
         </div>
     </form>
 </template>

@@ -9,6 +9,7 @@ const items: NavItem[] = [
         icon: FileUp,
         order: 80,
         group: 'admin',
+        railKey: 'imports',
         visible: (page) => page.auth.can.manageImports,
     },
 ];

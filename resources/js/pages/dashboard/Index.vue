@@ -122,44 +122,39 @@ const share = (count: number): number =>
             <StatCard v-for="card in cards" :key="card.label" v-bind="card" />
         </section>
 
-        <Card>
-            <CardHeader
-                ><CardTitle class="text-base">My tickets</CardTitle></CardHeader
-            >
-            <CardContent>
-                <EmptyState
-                    v-if="myTickets.length === 0"
-                    :icon="Inbox"
-                    title="Nothing assigned to you"
-                    description="Claim a ticket from the unassigned queue to start working on it."
-                />
-                <ul v-else class="divide-y">
-                    <li
-                        v-for="ticket in myTickets"
-                        :key="ticket.number"
-                        class="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"
+        <section aria-labelledby="my-tickets" class="flex flex-col gap-3">
+            <h2 id="my-tickets" class="text-base font-semibold">My tickets</h2>
+            <EmptyState
+                v-if="myTickets.length === 0"
+                :icon="Inbox"
+                title="Nothing assigned to you"
+                description="Claim a ticket from the unassigned queue to start working on it."
+            />
+            <ul v-else class="flex flex-col gap-2">
+                <li
+                    v-for="ticket in myTickets"
+                    :key="ticket.number"
+                    class="flex flex-col gap-2 rounded-xl border bg-card px-4 py-3 shadow-xs sm:flex-row sm:items-center sm:justify-between"
+                >
+                    <Link
+                        :href="ticketShow(ticket.number)"
+                        class="min-w-0 underline-offset-4 hover:underline"
                     >
-                        <Link
-                            :href="ticketShow(ticket.number)"
-                            class="min-w-0 underline-offset-4 hover:underline"
-                        >
-                            <span
-                                class="font-mono text-xs text-muted-foreground"
-                                >{{ ticket.number }}</span
-                            >
-                            <span class="ml-2 font-medium break-words">{{
-                                ticket.subject
-                            }}</span>
-                        </Link>
-                        <div class="flex shrink-0 flex-wrap items-center gap-2">
-                            <StatusBadge :status="ticket.status" />
-                            <PriorityBadge :priority="ticket.priority" />
-                            <SlaBadge :sla="ticket.sla" />
-                        </div>
-                    </li>
-                </ul>
-            </CardContent>
-        </Card>
+                        <span class="font-mono text-xs text-muted-foreground">{{
+                            ticket.number
+                        }}</span>
+                        <span class="ml-2 font-medium break-words">{{
+                            ticket.subject
+                        }}</span>
+                    </Link>
+                    <div class="flex shrink-0 flex-wrap items-center gap-2">
+                        <StatusBadge :status="ticket.status" />
+                        <PriorityBadge :priority="ticket.priority" />
+                        <SlaBadge :sla="ticket.sla" />
+                    </div>
+                </li>
+            </ul>
+        </section>
 
         <div class="grid gap-6 lg:grid-cols-2">
             <Card>
@@ -209,54 +204,49 @@ const share = (count: number): number =>
                         title="No agents yet"
                         description="Agents appear here once an admin creates them."
                     />
-                    <div v-else class="overflow-x-auto rounded-md border">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Agent</TableHead>
-                                    <TableHead class="text-right"
-                                        >Active</TableHead
-                                    >
-                                    <TableHead class="text-right"
-                                        >Breached</TableHead
-                                    >
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                <TableRow
-                                    v-for="row in stats.by_agent"
-                                    :key="row.agent_id"
+                    <Table v-else>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Agent</TableHead>
+                                <TableHead class="text-right">Active</TableHead>
+                                <TableHead class="text-right"
+                                    >Breached</TableHead
                                 >
-                                    <TableCell>
-                                        <Link
-                                            :href="
-                                                active({
-                                                    assigned_agent_id: String(
-                                                        row.agent_id,
-                                                    ),
-                                                })
-                                            "
-                                            class="underline-offset-4 hover:underline"
-                                            >{{ row.name }}</Link
-                                        >
-                                    </TableCell>
-                                    <TableCell
-                                        class="text-right tabular-nums"
-                                        >{{ row.active }}</TableCell
-                                    >
-                                    <TableCell
-                                        class="text-right tabular-nums"
-                                        :class="
-                                            row.breached > 0
-                                                ? 'font-semibold text-red-600 dark:text-red-400'
-                                                : 'text-muted-foreground'
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            <TableRow
+                                v-for="row in stats.by_agent"
+                                :key="row.agent_id"
+                            >
+                                <TableCell>
+                                    <Link
+                                        :href="
+                                            active({
+                                                assigned_agent_id: String(
+                                                    row.agent_id,
+                                                ),
+                                            })
                                         "
-                                        >{{ row.breached }}</TableCell
+                                        class="underline-offset-4 hover:underline"
+                                        >{{ row.name }}</Link
                                     >
-                                </TableRow>
-                            </TableBody>
-                        </Table>
-                    </div>
+                                </TableCell>
+                                <TableCell class="text-right tabular-nums">{{
+                                    row.active
+                                }}</TableCell>
+                                <TableCell
+                                    class="text-right tabular-nums"
+                                    :class="
+                                        row.breached > 0
+                                            ? 'font-semibold text-red-600 dark:text-red-400'
+                                            : 'text-muted-foreground'
+                                    "
+                                    >{{ row.breached }}</TableCell
+                                >
+                            </TableRow>
+                        </TableBody>
+                    </Table>
                 </CardContent>
             </Card>
         </div>

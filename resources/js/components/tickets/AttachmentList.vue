@@ -19,11 +19,11 @@ defineProps<{ attachments: AttachmentItem[] }>();
         >
             <a
                 :href="attachment.download_url"
-                class="group inline-flex max-w-full items-center gap-2 rounded-md border bg-background px-2.5 py-1.5 text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                class="group inline-flex max-w-full items-center gap-2 rounded-full border bg-surface px-3 py-1.5 text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             >
                 <Lock
                     v-if="attachment.is_internal"
-                    class="size-4 shrink-0 text-amber-600 dark:text-amber-400"
+                    class="size-4 shrink-0 text-tint-amber-foreground"
                     aria-label="Internal"
                 />
                 <Paperclip

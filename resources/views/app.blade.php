@@ -5,7 +5,13 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
         <script>
-            if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            var stored = null;
+            try {
+                stored = window.localStorage.getItem('appearance');
+            } catch (error) {
+                stored = null;
+            }
+            if (stored === 'dark' || (stored !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                 document.documentElement.classList.add('dark');
             }
         </script>
