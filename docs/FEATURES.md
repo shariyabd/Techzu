@@ -261,7 +261,7 @@ Ticket lifecycle covers creating a ticket, editing it, moving it through its sta
 - A subject edit records the old and new subject; a description edit records only that the description changed, not its text.
 - Customers never see internal-note entries. Every other entry is visible to the customer who owns the ticket.
 - If writing a timeline entry fails, the failure is reported but the change itself is not undone.
-- The ticket page shows the latest 100 entries. The API serves the timeline in pages, 20 by default and at most 100 per page.
+- The ticket page shows the newest entries first, one page at a time (20 by default), with a "Load older activity" button for the rest. The API serves the timeline in pages, 20 by default and at most 100 per page.
 
 **Ticket lists**
 - There are two lists. Active shows Open, In Progress and Waiting for Customer tickets (the default). Resolved shows Resolved and Closed tickets.
@@ -273,6 +273,9 @@ Ticket lifecycle covers creating a ticket, editing it, moving it through its sta
 
 **Viewing a ticket**
 - The ticket page shows the details, the conversation, the attachments, the timeline, and the actions the viewer may take (edit, change status, change priority, claim, assign, reply, internal note). The allowed status choices offered are only the moves that are both legal and permitted for that viewer.
+- The conversation is shown one page of the newest replies at a time (20 by default, oldest of those first), with a "Load older replies" button for the rest. Internal-note visibility is the same on every page.
+- The details show who opened the ticket when that is someone other than the customer (for example an agent filing on the customer's behalf). The ticket list shows each ticket's category.
+- The API ticket response includes the ticket's own attachments (name, type, size and download link), and who created it. Internal attachments are left out for customers.
 - Customers receive only public replies and public attachments, both on the ticket and on each reply. Internal replies and internal attachments are left out of what they receive.
 - A customer who asks for a ticket that is not theirs, or tries any action on it, gets "not found" rather than "forbidden", so they cannot learn whether it exists. A customer who can see a ticket but is not allowed an action on it (for example changing its priority) gets "forbidden".
 
@@ -287,7 +290,9 @@ Every ticket has at most one assigned agent. A ticket can get its agent in three
 **Manual assignment and hand-off**
 - Someone with the assign-any permission can assign any ticket to an agent or reassign it. An agent with the hand-off permission can pass on only the tickets currently assigned to them.
 - The chosen person must be an available agent: they must have the agent role and be marked available. Anyone else is refused with a "not an eligible agent" error. Manual assignment does not check the agent's categories.
+- Resolved and closed tickets cannot be assigned; the attempt is refused and nothing changes.
 - Assigning a ticket to the agent who already has it changes nothing and records nothing.
+- When an administrator changes an agent to another role, that agent's active tickets become unassigned (an "unassigned" entry is added to each ticket's history) so other agents can claim them. Their finished tickets are left as they are.
 - Manual assignment does not change the ticket's status.
 - A customer who may not view the ticket gets "not found"; a viewer who may see it but not assign it gets "forbidden".
 
@@ -296,7 +301,7 @@ Every ticket has at most one assigned agent. A ticket can get its agent in three
 - Assignment runs in the background and is attempted up to three times in total if it fails, with a growing wait between attempts (10 seconds, then 1 minute, then 5 minutes). Only one assignment job per ticket is queued at a time.
 - Before assigning, the job checks again that the ticket still exists, is still unassigned and is still active. Otherwise it does nothing.
 - The candidates are available agents who are assigned to the ticket's category. The agent with the fewest active tickets wins. Ties go to the agent who was assigned a ticket least recently, with agents who were never assigned anything first, then to the lowest user id. This spreads work evenly and rotates between equally busy agents.
-- If no agent is eligible, the ticket simply stays in the unassigned queue and a log entry notes it. This is not an error, and agents can still claim it.
+- If no agent is eligible, the ticket simply stays in the unassigned queue and a log entry notes it. This is not an error, and agents can still claim it. All admins are also told, by inbox and email, that the ticket needs manual assignment; the customer is not told.
 - If someone claimed the ticket while the job was running, the automatic assignment backs off and changes nothing.
 - Like a claim, an automatic assignment moves an Open ticket to In Progress.
 
@@ -372,6 +377,7 @@ People are told about ticket events by email and in an in-app inbox. Every notif
 
 **Who is told what**
 - A ticket is created: the customer gets a confirmation. When automatic assignment is turned off, the admins are also told that a new ticket is waiting to be assigned (except the admin who created it).
+- Automatic assignment finds no eligible agent: all admins are told the ticket needs manual assignment.
 - A ticket is assigned (claim, manual or automatic): the agent is told it is theirs, and the customer is told which agent is handling it. The person who made the assignment is not told about their own action.
 - A public reply: if the author is not the customer, the customer is told. If the customer wrote it, the assigned agent is told, or the admins when nobody is assigned. The author is never notified of their own reply.
 - An internal note: the assigned agent is told (not the author), by inbox only. The customer is never told about internal notes and never receives their text.
@@ -395,7 +401,7 @@ Administrators can bring existing tickets in from a CSV file. The import runs in
 - It must be a CSV (or text) file, up to 50 MB by default. The first row is the header.
 - Columns: external reference, subject, description, priority, category, customer email, status, created at. The required columns are subject, description, priority, category and customer email. Header names are matched without regard to case, and a leading byte-order mark is ignored.
 - A header with a missing required column, an unknown column or a repeated column fails the whole import at once with a message saying which. An empty file fails the same way.
-- Blank lines are skipped. Rows are worked through in chunks (500 rows by default) and a chunk failing unexpectedly is recorded without stopping the others.
+- Blank lines are skipped. Rows are worked through in chunks (500 rows by default), each starting directly at its place in the file, and a chunk failing unexpectedly is recorded without stopping the others.
 
 **Row rules** (each row is checked on its own, and bad rows never stop good ones)
 - Subject is required (up to 255 characters), description is required, priority must be a valid priority, and category must be the short name (slug) of an active category. Priority, status, category and email are read without regard to case, and surrounding spaces are trimmed.
@@ -403,6 +409,7 @@ Administrators can bring existing tickets in from a CSV file. The import runs in
 - The external reference is optional (up to 64 characters) and must be unique among all tickets. This stops the same row from being imported twice, including when two imports race.
 - Status is optional and defaults to Open. Created at is optional and defaults to now; it is read in the business time zone, must be a valid date and must not be in the future.
 - A row with the wrong number of columns is rejected.
+- A row without an external reference but with a created-at date is rejected as a duplicate when the same customer already has a ticket with the same subject and created-at time ("Duplicate of an existing ticket."), or when an earlier row in the same chunk of the file has the same customer, subject and created-at time ("Duplicate of row N."). A row is only remembered for the "Duplicate of row N." check once it was actually imported, so that message never points at a row that failed. The check is a read made before the insert: identical rows that sit in different chunks of the file and are processed in parallel by several workers can both be imported. Uploading the same file again imports nothing new when the earlier rows were already imported by the time the new upload is processed. A row without a created-at date takes the time of import, so it cannot be recognised as a duplicate.
 
 **What an imported ticket gets**
 - It receives a normal ticket number, counted in the year of its created-at date, and its SLA clock starts from that created-at date, so an old ticket may already be approaching or breached when it arrives. Waiting for Customer starts paused; Resolved and Closed get their resolved (and closed) time set to the time of import and have no running SLA.
@@ -435,7 +442,7 @@ Agents and admins have a dashboard; customers do not, and anyone without access 
 - Unassigned: active tickets with no agent.
 - Critical: active tickets with critical priority.
 - Breached: active tickets with a running SLA clock past their due time. Approaching: running tickets past their warning time but not yet due. Paused tickets are in neither.
-- Resolved: tickets resolved or closed in the last 30 days.
+- Resolved: tickets resolved or closed in the last 30 days by default (configurable).
 
 **Breakdowns**
 - By priority: the number of active tickets for each priority, most urgent first, with zero shown where there are none.
@@ -477,7 +484,10 @@ The interactive API documentation is available to signed-in users who may manage
 Loading a related record on demand is blocked outside production, so a page that would run one query per row fails during development and testing instead of quietly slowing down. Ticket, user and notification lists run the same number of queries whether they show a few rows or many, and every list is paginated with a capped page size of 100.
 
 **Indexes**
-The tickets table has indexes for the common filters and for the SLA checks: status with due date, status with warning date, assignee with status, customer with creation date, category with status, priority with status, status with resolution date, creation date, and last update; ticket numbers and external references are unique; subject and description have a full-text index for search. These indexes exist, but it has not yet been shown by an execution-plan check that the filtered staff lists and the SLA scan actually use their dedicated indexes: the database currently prefers the creation-date index or a walk of the primary key. Treat the speed-up for those two paths as unverified.
+The tickets table has indexes for the common filters and for the SLA checks: status with due date, status with warning date, assignee with status, customer with creation date, category with status, priority with status, status with resolution date, creation date, and last update; ticket numbers and external references are unique; subject and description have a full-text index for search. Notifications are indexed by recipient and creation date, so the inbox shows the newest first without sorting. A test runs the real customer and staff lists, the filters, the SLA scan, the dashboard, the activity timeline and the inbox against a few thousand tickets and checks with the database's execution plan that none of them scans a whole table.
+
+**Housekeeping**
+Growing tables are cleaned up automatically every night. Activity entries older than a year are removed, read notifications older than 90 days are removed (unread ones are kept), and finished queue batches and failed jobs older than a week are removed. Removing old activity entries and old read notifications is done in small batches so it never locks the table for long. Removing finished queue batches and failed jobs is done by Laravel's own cleanup commands, each as a single delete that is not batched. The periods are configurable.
 
 ## Password reset
 Guests who forgot their password can set a new one through a link sent by email. The login page has a "Forgot password?" link to the request page.
