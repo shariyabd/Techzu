@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { Head, setLayoutProps } from '@inertiajs/vue3';
-import { watchEffect } from 'vue';
+import { Head } from '@inertiajs/vue3';
 import UserForm from '@/components/admin/UserForm.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import { Card, CardContent } from '@/components/ui/card';
@@ -8,19 +7,20 @@ import { edit, index } from '@/routes/admin/users';
 import type { BreadcrumbItem } from '@/types';
 import type { AdminUser, CategoryOption, RoleOption } from '@/types/users';
 
-const props = defineProps<{
+defineProps<{
     user: AdminUser;
     roles: RoleOption[];
     categories: CategoryOption[];
     isSelf: boolean;
 }>();
 
-watchEffect(() => {
-    const breadcrumbs: BreadcrumbItem[] = [
-        { title: 'Users', href: index() },
-        { title: props.user.name, href: edit(props.user.id) },
-    ];
-    setLayoutProps({ breadcrumbs });
+defineOptions({
+    layout: (pageProps: { user: { id: number; name: string } }) => ({
+        breadcrumbs: [
+            { title: 'Users', href: index() },
+            { title: pageProps.user.name, href: edit(pageProps.user.id) },
+        ] satisfies BreadcrumbItem[],
+    }),
 });
 </script>
 
