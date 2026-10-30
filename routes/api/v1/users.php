@@ -12,4 +12,5 @@ Route::middleware('auth:sanctum')->prefix('admin')->name('admin.')->group(functi
     Route::post('users', [UserController::class, 'store'])->name('users.store')->can('create', User::class);
     Route::patch('users/{user}', [UserController::class, 'update'])->name('users.update')->can('update', 'user');
     Route::get('roles', RoleController::class)->name('roles.index')->can('viewAny', User::class);
+    Route::patch('roles/{role}', [RoleController::class, 'update'])->name('roles.update')->can('managePermissions', User::class);
 });

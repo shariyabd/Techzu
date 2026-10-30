@@ -14,4 +14,5 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function (): v
     Route::get('users/{user}/edit', [UserController::class, 'edit'])->name('users.edit')->can('update', 'user');
     Route::patch('users/{user}', [UserController::class, 'update'])->name('users.update')->can('update', 'user');
     Route::get('roles', RoleController::class)->name('roles.index')->can('viewAny', User::class);
+    Route::patch('roles/{role}', [RoleController::class, 'update'])->name('roles.update')->can('managePermissions', User::class);
 });

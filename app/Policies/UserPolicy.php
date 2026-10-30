@@ -33,4 +33,9 @@ final class UserPolicy
     {
         return $user->can(Permission::UsersManage->value) && $model->isNot($user);
     }
+
+    public function managePermissions(User $user): bool
+    {
+        return $user->can(Permission::UsersManage->value);
+    }
 }

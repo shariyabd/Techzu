@@ -86,7 +86,7 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/AssignTicketRequest"
+                                "$ref": "#/components/schemas/AssignRequest"
                             }
                         }
                     }
@@ -436,7 +436,7 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/StoreCategoryRequest"
+                                "$ref": "#/components/schemas/StoreRequest"
                             }
                         }
                     }
@@ -494,7 +494,7 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/UpdateCategoryRequest"
+                                "$ref": "#/components/schemas/UpdateRequest"
                             }
                         }
                     }
@@ -828,7 +828,7 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/StoreHolidayRequest"
+                                "$ref": "#/components/schemas/App.Http.Requests.Holidays.StoreRequest"
                             }
                         }
                     }
@@ -886,7 +886,7 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/UpdateHolidayRequest"
+                                "$ref": "#/components/schemas/App.Http.Requests.Holidays.UpdateRequest"
                             }
                         }
                     }
@@ -1240,6 +1240,67 @@
                 }
             }
         },
+        "/admin/roles/{role}": {
+            "patch": {
+                "operationId": "v1.admin.roles.update",
+                "tags": [
+                    "Role"
+                ],
+                "parameters": [
+                    {
+                        "name": "role",
+                        "in": "path",
+                        "required": true,
+                        "description": "The role ID",
+                        "schema": {
+                            "$ref": "#/components/schemas/Role"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdatePermissionsRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`RoleResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/RoleResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
         "/tickets": {
             "get": {
                 "operationId": "v1.tickets.index",
@@ -1572,7 +1633,7 @@
                     "content": {
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/StoreTicketRequest"
+                                "$ref": "#/components/schemas/App.Http.Requests.Tickets.StoreRequest"
                             }
                         }
                     }
@@ -1675,7 +1736,7 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/UpdateTicketRequest"
+                                "$ref": "#/components/schemas/App.Http.Requests.Tickets.UpdateRequest"
                             }
                         }
                     }
@@ -1736,7 +1797,7 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/ChangeTicketStatusRequest"
+                                "$ref": "#/components/schemas/ChangeStatusRequest"
                             }
                         }
                     }
@@ -1797,7 +1858,7 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/ChangeTicketPriorityRequest"
+                                "$ref": "#/components/schemas/ChangePriorityRequest"
                             }
                         }
                     }
@@ -2023,7 +2084,7 @@
                     "content": {
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/StoreTicketImportRequest"
+                                "$ref": "#/components/schemas/App.Http.Requests.Imports.StoreRequest"
                             }
                         }
                     }
@@ -2393,7 +2454,7 @@
                     "content": {
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/StoreReplyRequest"
+                                "$ref": "#/components/schemas/App.Http.Requests.Conversation.StoreRequest"
                             }
                         }
                     }
@@ -2643,7 +2704,7 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/StoreUserRequest"
+                                "$ref": "#/components/schemas/App.Http.Requests.Users.StoreRequest"
                             }
                         }
                     }
@@ -2701,7 +2762,7 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/UpdateUserRequest"
+                                "$ref": "#/components/schemas/App.Http.Requests.Users.UpdateRequest"
                             }
                         }
                     }
@@ -2906,7 +2967,216 @@
                 ],
                 "title": "ApiTokenResource"
             },
-            "AssignTicketRequest": {
+            "App.Http.Requests.Conversation.StoreRequest": {
+                "type": "object",
+                "properties": {
+                    "body": {
+                        "type": "string",
+                        "maxLength": 20000
+                    },
+                    "is_internal": {
+                        "type": "boolean"
+                    },
+                    "attachments": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "format": "binary",
+                            "contentMediaType": "application/octet-stream",
+                            "description": "Maximum file size: 10240 kilobytes."
+                        },
+                        "maxItems": 5
+                    }
+                },
+                "required": [
+                    "body"
+                ],
+                "title": "App.Http.Requests.Conversation.StoreRequest"
+            },
+            "App.Http.Requests.Holidays.StoreRequest": {
+                "type": "object",
+                "properties": {
+                    "date": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "name": {
+                        "type": "string",
+                        "maxLength": 100
+                    }
+                },
+                "required": [
+                    "date",
+                    "name"
+                ],
+                "title": "App.Http.Requests.Holidays.StoreRequest"
+            },
+            "App.Http.Requests.Holidays.UpdateRequest": {
+                "type": "object",
+                "properties": {
+                    "date": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "name": {
+                        "type": "string",
+                        "maxLength": 100
+                    }
+                },
+                "required": [
+                    "date",
+                    "name"
+                ],
+                "title": "App.Http.Requests.Holidays.UpdateRequest"
+            },
+            "App.Http.Requests.Imports.StoreRequest": {
+                "type": "object",
+                "properties": {
+                    "file": {
+                        "type": "string",
+                        "format": "binary",
+                        "contentMediaType": "application/octet-stream",
+                        "description": "Maximum file size: 51200 kilobytes."
+                    }
+                },
+                "required": [
+                    "file"
+                ],
+                "title": "App.Http.Requests.Imports.StoreRequest"
+            },
+            "App.Http.Requests.Tickets.StoreRequest": {
+                "type": "object",
+                "properties": {
+                    "subject": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "description": {
+                        "type": "string",
+                        "maxLength": 20000
+                    },
+                    "priority": {
+                        "$ref": "#/components/schemas/TicketPriority"
+                    },
+                    "category_id": {
+                        "type": "integer"
+                    },
+                    "customer_email": {
+                        "type": "string"
+                    },
+                    "attachments": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "format": "binary",
+                            "contentMediaType": "application/octet-stream",
+                            "description": "Maximum file size: 10240 kilobytes."
+                        },
+                        "maxItems": 5
+                    }
+                },
+                "required": [
+                    "subject",
+                    "description",
+                    "priority",
+                    "category_id"
+                ],
+                "title": "App.Http.Requests.Tickets.StoreRequest"
+            },
+            "App.Http.Requests.Tickets.UpdateRequest": {
+                "type": "object",
+                "properties": {
+                    "subject": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "description": {
+                        "type": "string",
+                        "maxLength": 20000
+                    },
+                    "category_id": {
+                        "type": "string"
+                    }
+                },
+                "title": "App.Http.Requests.Tickets.UpdateRequest"
+            },
+            "App.Http.Requests.Users.StoreRequest": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "email": {
+                        "type": "string",
+                        "format": "email",
+                        "maxLength": 255
+                    },
+                    "password": {
+                        "type": "string"
+                    },
+                    "role": {
+                        "$ref": "#/components/schemas/Role"
+                    },
+                    "category_ids": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "uniqueItems": true
+                    },
+                    "is_available": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "name",
+                    "email",
+                    "password",
+                    "role"
+                ],
+                "title": "App.Http.Requests.Users.StoreRequest"
+            },
+            "App.Http.Requests.Users.UpdateRequest": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "email": {
+                        "type": "string",
+                        "format": "email",
+                        "maxLength": 255
+                    },
+                    "password": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "role": {
+                        "$ref": "#/components/schemas/Role"
+                    },
+                    "category_ids": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "uniqueItems": true
+                    },
+                    "is_available": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "name",
+                    "email",
+                    "role"
+                ],
+                "title": "App.Http.Requests.Users.UpdateRequest"
+            },
+            "AssignRequest": {
                 "type": "object",
                 "properties": {
                     "agent_id": {
@@ -2916,7 +3186,7 @@
                 "required": [
                     "agent_id"
                 ],
-                "title": "AssignTicketRequest"
+                "title": "AssignRequest"
             },
             "CategoryResource": {
                 "type": "object",
@@ -2942,7 +3212,7 @@
                 ],
                 "title": "CategoryResource"
             },
-            "ChangeTicketPriorityRequest": {
+            "ChangePriorityRequest": {
                 "type": "object",
                 "properties": {
                     "priority": {
@@ -2952,9 +3222,9 @@
                 "required": [
                     "priority"
                 ],
-                "title": "ChangeTicketPriorityRequest"
+                "title": "ChangePriorityRequest"
             },
-            "ChangeTicketStatusRequest": {
+            "ChangeStatusRequest": {
                 "type": "object",
                 "properties": {
                     "status": {
@@ -2964,7 +3234,7 @@
                 "required": [
                     "status"
                 ],
-                "title": "ChangeTicketStatusRequest"
+                "title": "ChangeStatusRequest"
             },
             "CurrentUserResource": {
                 "type": "object",
@@ -3098,6 +3368,29 @@
                 ],
                 "title": "NotificationResource"
             },
+            "Permission": {
+                "type": "string",
+                "enum": [
+                    "tickets.create",
+                    "tickets.create.on_behalf",
+                    "tickets.view.any",
+                    "tickets.view.own",
+                    "tickets.reply",
+                    "tickets.notes.internal",
+                    "tickets.claim",
+                    "tickets.update.any",
+                    "tickets.update.assigned",
+                    "tickets.update.own",
+                    "tickets.assign.any",
+                    "tickets.handoff.own",
+                    "dashboard.view",
+                    "imports.manage",
+                    "users.manage",
+                    "categories.manage",
+                    "holidays.manage"
+                ],
+                "title": "Permission"
+            },
             "Role": {
                 "type": "string",
                 "enum": [
@@ -3141,7 +3434,7 @@
                 ],
                 "title": "SlaState"
             },
-            "StoreCategoryRequest": {
+            "StoreRequest": {
                 "type": "object",
                 "properties": {
                     "name": {
@@ -3161,142 +3454,7 @@
                     "name",
                     "slug"
                 ],
-                "title": "StoreCategoryRequest"
-            },
-            "StoreHolidayRequest": {
-                "type": "object",
-                "properties": {
-                    "date": {
-                        "type": "string",
-                        "format": "date"
-                    },
-                    "name": {
-                        "type": "string",
-                        "maxLength": 100
-                    }
-                },
-                "required": [
-                    "date",
-                    "name"
-                ],
-                "title": "StoreHolidayRequest"
-            },
-            "StoreReplyRequest": {
-                "type": "object",
-                "properties": {
-                    "body": {
-                        "type": "string",
-                        "maxLength": 20000
-                    },
-                    "is_internal": {
-                        "type": "boolean"
-                    },
-                    "attachments": {
-                        "type": "array",
-                        "items": {
-                            "type": "string",
-                            "format": "binary",
-                            "contentMediaType": "application/octet-stream",
-                            "description": "Maximum file size: 10240 kilobytes."
-                        },
-                        "maxItems": 5
-                    }
-                },
-                "required": [
-                    "body"
-                ],
-                "title": "StoreReplyRequest"
-            },
-            "StoreTicketImportRequest": {
-                "type": "object",
-                "properties": {
-                    "file": {
-                        "type": "string",
-                        "format": "binary",
-                        "contentMediaType": "application/octet-stream",
-                        "description": "Maximum file size: 51200 kilobytes."
-                    }
-                },
-                "required": [
-                    "file"
-                ],
-                "title": "StoreTicketImportRequest"
-            },
-            "StoreTicketRequest": {
-                "type": "object",
-                "properties": {
-                    "subject": {
-                        "type": "string",
-                        "maxLength": 255
-                    },
-                    "description": {
-                        "type": "string",
-                        "maxLength": 20000
-                    },
-                    "priority": {
-                        "$ref": "#/components/schemas/TicketPriority"
-                    },
-                    "category_id": {
-                        "type": "integer"
-                    },
-                    "customer_email": {
-                        "type": "string"
-                    },
-                    "attachments": {
-                        "type": "array",
-                        "items": {
-                            "type": "string",
-                            "format": "binary",
-                            "contentMediaType": "application/octet-stream",
-                            "description": "Maximum file size: 10240 kilobytes."
-                        },
-                        "maxItems": 5
-                    }
-                },
-                "required": [
-                    "subject",
-                    "description",
-                    "priority",
-                    "category_id"
-                ],
-                "title": "StoreTicketRequest"
-            },
-            "StoreUserRequest": {
-                "type": "object",
-                "properties": {
-                    "name": {
-                        "type": "string",
-                        "maxLength": 255
-                    },
-                    "email": {
-                        "type": "string",
-                        "format": "email",
-                        "maxLength": 255
-                    },
-                    "password": {
-                        "type": "string"
-                    },
-                    "role": {
-                        "$ref": "#/components/schemas/Role"
-                    },
-                    "category_ids": {
-                        "type": "array",
-                        "items": {
-                            "type": "integer"
-                        },
-                        "uniqueItems": true
-                    },
-                    "is_available": {
-                        "type": "boolean"
-                    }
-                },
-                "required": [
-                    "name",
-                    "email",
-                    "password",
-                    "role"
-                ],
-                "title": "StoreUserRequest"
+                "title": "StoreRequest"
             },
             "TicketImportErrorResource": {
                 "type": "object",
@@ -3846,7 +4004,23 @@
                 ],
                 "title": "TicketStatus"
             },
-            "UpdateCategoryRequest": {
+            "UpdatePermissionsRequest": {
+                "type": "object",
+                "properties": {
+                    "permissions": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Permission"
+                        },
+                        "uniqueItems": true
+                    }
+                },
+                "required": [
+                    "permissions"
+                ],
+                "title": "UpdatePermissionsRequest"
+            },
+            "UpdateRequest": {
                 "type": "object",
                 "properties": {
                     "name": {
@@ -3866,81 +4040,7 @@
                     "name",
                     "slug"
                 ],
-                "title": "UpdateCategoryRequest"
-            },
-            "UpdateHolidayRequest": {
-                "type": "object",
-                "properties": {
-                    "date": {
-                        "type": "string",
-                        "format": "date"
-                    },
-                    "name": {
-                        "type": "string",
-                        "maxLength": 100
-                    }
-                },
-                "required": [
-                    "date",
-                    "name"
-                ],
-                "title": "UpdateHolidayRequest"
-            },
-            "UpdateTicketRequest": {
-                "type": "object",
-                "properties": {
-                    "subject": {
-                        "type": "string",
-                        "maxLength": 255
-                    },
-                    "description": {
-                        "type": "string",
-                        "maxLength": 20000
-                    },
-                    "category_id": {
-                        "type": "string"
-                    }
-                },
-                "title": "UpdateTicketRequest"
-            },
-            "UpdateUserRequest": {
-                "type": "object",
-                "properties": {
-                    "name": {
-                        "type": "string",
-                        "maxLength": 255
-                    },
-                    "email": {
-                        "type": "string",
-                        "format": "email",
-                        "maxLength": 255
-                    },
-                    "password": {
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
-                    "role": {
-                        "$ref": "#/components/schemas/Role"
-                    },
-                    "category_ids": {
-                        "type": "array",
-                        "items": {
-                            "type": "integer"
-                        },
-                        "uniqueItems": true
-                    },
-                    "is_available": {
-                        "type": "boolean"
-                    }
-                },
-                "required": [
-                    "name",
-                    "email",
-                    "role"
-                ],
-                "title": "UpdateUserRequest"
+                "title": "UpdateRequest"
             },
             "UserSummaryResource": {
                 "type": "object",
