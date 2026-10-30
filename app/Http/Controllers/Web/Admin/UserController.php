@@ -7,9 +7,9 @@ namespace App\Http\Controllers\Web\Admin;
 use App\Actions\Admin\CreateUser;
 use App\Actions\Admin\UpdateUser;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Admin\IndexUsersRequest;
-use App\Http\Requests\Admin\StoreUserRequest;
-use App\Http\Requests\Admin\UpdateUserRequest;
+use App\Http\Requests\Users\ListRequest;
+use App\Http\Requests\Users\StoreRequest;
+use App\Http\Requests\Users\UpdateRequest;
 use App\Http\Resources\V1\AdminUserResource;
 use App\Models\User;
 use App\Services\Users\UserDirectory;
@@ -22,7 +22,7 @@ final class UserController extends Controller
 {
     public function __construct(private readonly UserDirectory $directory) {}
 
-    public function index(IndexUsersRequest $request): Response
+    public function index(ListRequest $request): Response
     {
         $filters = $request->filters();
 
@@ -41,7 +41,7 @@ final class UserController extends Controller
         ]);
     }
 
-    public function store(StoreUserRequest $request, CreateUser $createUser): RedirectResponse
+    public function store(StoreRequest $request, CreateUser $createUser): RedirectResponse
     {
         $createUser->handle($this->admin($request), $request->userData());
 
@@ -58,7 +58,7 @@ final class UserController extends Controller
         ]);
     }
 
-    public function update(UpdateUserRequest $request, User $user, UpdateUser $updateUser): RedirectResponse
+    public function update(UpdateRequest $request, User $user, UpdateUser $updateUser): RedirectResponse
     {
         $updateUser->handle($this->admin($request), $user, $request->userData());
 

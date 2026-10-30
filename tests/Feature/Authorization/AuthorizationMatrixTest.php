@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\Permission;
 use App\Enums\Role;
 use App\Enums\TicketStatus;
 use App\Models\Category;
@@ -112,23 +113,31 @@ dataset('user administration routes', [
     'web users edit' => ['GET', 'admin.users.edit', true, 200],
     'web users update' => ['PATCH', 'admin.users.update', true, 302],
     'web roles index' => ['GET', 'admin.roles.index', false, 200],
+    'web roles update' => ['PATCH', 'admin.roles.update', false, 302],
     'api users index' => ['GET', 'api.v1.admin.users.index', false, 200],
     'api users store' => ['POST', 'api.v1.admin.users.store', false, 201],
     'api users update' => ['PATCH', 'api.v1.admin.users.update', true, 200],
     'api roles index' => ['GET', 'api.v1.admin.roles.index', false, 200],
+    'api roles update' => ['PATCH', 'api.v1.admin.roles.update', false, 200],
 ]);
 
-it('lets only admins manage users and read the permission matrix', function (string $method, string $name, bool $needsUser, int $adminStatus, Role $role): void {
+it('lets only admins manage users and update the permission matrix', function (string $method, string $name, bool $needsUser, int $adminStatus, Role $role): void {
     $matrix = AuthorizationMatrix::for($this);
     $matrix->actingAsRole($role);
     $target = User::factory()->customer()->create();
-    $uri = $needsUser ? route($name, $target) : route($name);
-    $payload = $method === 'GET' ? [] : [
-        'name' => 'Matrix User',
-        'email' => 'matrix.user@example.com',
-        'password' => 'password',
-        'role' => Role::Customer->value,
-    ];
+    $uri = $needsUser
+        ? route($name, $target)
+        : (str_contains($name, 'roles.update') ? route($name, Role::Agent->value) : route($name));
+    $payload = $method === 'GET'
+        ? []
+        : (str_contains($name, 'roles.update')
+            ? ['permissions' => [Permission::TicketsReply->value]]
+            : [
+                'name' => 'Matrix User',
+                'email' => 'matrix.user@example.com',
+                'password' => 'password',
+                'role' => Role::Customer->value,
+            ]);
 
     $matrix->expectAccess($method, $uri, $role === Role::Admin ? $adminStatus : 403, $payload);
 })->with('user administration routes')->with([Role::Admin, Role::Agent, Role::Customer]);

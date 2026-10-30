@@ -7,7 +7,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Actions\Assignment\AssignTicket;
 use App\Actions\Assignment\ClaimTicket;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Assignment\AssignTicketRequest;
+use App\Http\Requests\Assignment\AssignRequest;
 use App\Http\Resources\V1\TicketResource;
 use App\Models\Ticket;
 use App\Models\User;
@@ -28,7 +28,7 @@ final class AssignmentController extends Controller
         return TicketResource::make($this->pages->loadSummary($claimTicket->handle($this->user($request), $ticket)));
     }
 
-    public function assign(AssignTicketRequest $request, Ticket $ticket, AssignTicket $assignTicket): TicketResource
+    public function assign(AssignRequest $request, Ticket $ticket, AssignTicket $assignTicket): TicketResource
     {
         $ticket = $assignTicket->handle($this->user($request), $ticket, $request->targetAgent());
 

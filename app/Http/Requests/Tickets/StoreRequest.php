@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\File;
 
-final class StoreTicketRequest extends FormRequest
+final class StoreRequest extends FormRequest
 {
     public function authorize(): Response
     {

@@ -8,6 +8,8 @@ use Spatie\Permission\Models\Role;
 
 return [
 
+    'guard' => env('AUTH_GUARD', 'web'),
+
     'models' => [
 
         /*

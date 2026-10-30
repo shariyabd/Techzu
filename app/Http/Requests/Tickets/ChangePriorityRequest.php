@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Tickets;
 
-use App\Enums\TicketStatus;
+use App\Enums\TicketPriority;
 use App\Models\Ticket;
 use Illuminate\Auth\Access\Response;
 use Illuminate\Foundation\Http\FormRequest;
@@ -12,33 +12,27 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use LogicException;
 
-final class ChangeTicketStatusRequest extends FormRequest
+final class ChangePriorityRequest extends FormRequest
 {
     public function authorize(): Response
     {
         $gate = Gate::forUser($this->user());
         $view = $gate->inspect('view', $this->ticket());
 
-        if ($view->denied()) {
-            return $view;
-        }
-
-        $to = TicketStatus::tryFrom((string) $this->input('status'));
-
-        return $gate->inspect('changeStatus', [$this->ticket(), $to]);
+        return $view->denied() ? $view : $gate->inspect('changePriority', $this->ticket());
     }
 
     /** @return array<string, mixed> */
     public function rules(): array
     {
         return [
-            'status' => ['required', Rule::enum(TicketStatus::class)],
+            'priority' => ['required', Rule::enum(TicketPriority::class)],
         ];
     }
 
-    public function targetStatus(): TicketStatus
+    public function targetPriority(): TicketPriority
     {
-        return TicketStatus::from((string) $this->validated('status'));
+        return TicketPriority::from((string) $this->validated('priority'));
     }
 
     public function ticket(): Ticket
@@ -46,7 +40,7 @@ final class ChangeTicketStatusRequest extends FormRequest
         $ticket = $this->route('ticket');
 
         if (! $ticket instanceof Ticket) {
-            throw new LogicException('ChangeTicketStatusRequest requires a bound {ticket} route parameter.');
+            throw new LogicException('ChangePriorityRequest requires a bound {ticket} route parameter.');
         }
 
         return $ticket;

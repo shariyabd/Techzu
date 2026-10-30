@@ -89,7 +89,8 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 - Forgot/reset password uses Laravel's built-in Password broker and the `password_reset_tokens` table. It has one small `PasswordResetController` and its FormRequests, with no Fortify.
 - Mail uses the `log` mailer (TD-005), so the reset link appears in `storage/logs/laravel.log`. Switching to SMTP is only a matter of setting `MAIL_MAILER`.
 - Email verification is omitted. The demo has no SMTP, seeded accounts are trusted, and the PRD doesn't ask for it. This limitation is documented in the README.
-- Roles are fixed (`Admin`, `Agent`, `Customer`). Admins change a user's role through one Action. Permissions are defined in code (`Permission` enum + `RolesAndPermissionsSeeder`) and shown read-only: an editable matrix could grant customers access to internal notes.
+- Roles are fixed (`Admin`, `Agent`, `Customer`). Admins change a user's role through one Action. Permissions are defined in code (`Permission` enum + `RolesAndPermissionsSeeder`).
+- **Roles are fixed; the role → permission matrix is admin-editable (amended 2026-10-30, owner decision; see TD-010).** Internal notes stay out of reach for the customer role through a hard guard, so an editable matrix cannot leak them.
 
 **Moved to Laravel 13 (amended 2026-10-29, before any code was written).**
 - The only kit tag, v1.0.2 (Feb 2025), is the old Laravel 12 kit without Fortify or Wayfinder.
@@ -206,6 +207,17 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 - Permission checks rely on the package's cache. Tests must seed `RolesAndPermissionsSeeder` and reset the cache (`PermissionRegistrar::forgetCachedPermissions()`), which happens in a shared Pest `beforeEach`.
 - Finding agents means joining through `model_has_roles` (indexed by the package). Eligible-agent queries go through a single `User::scopeAvailableAgents()` scope.
 - The matrix is not editable at runtime, so the seeded mapping is always the one the matrix test runs against.
+
+**The role → permission matrix becomes admin-editable (amended 2026-10-30, owner decision).**
+- Admins who hold `users.manage` may change which permissions each seeded role has, through one admin Action (`UpdateRolePermissions`), from the web and the API. The matrix page loses its read-only marks and becomes checkboxes.
+- What stays fixed: the roles themselves, the `Permission` enum (new permission names still go into `RolesAndPermissionsSeeder` only), and what a Role *label* means.
+- Two hard guards in the Action: the customer role can never receive `tickets.notes.internal` (the internal-note leak boundary, TD-120), and the admin role can never lose `users.manage` (no lockout of permission management).
+- Changes take effect immediately for every signed-in user because the Action resets the spatie permission cache.
+- Sanctum token abilities are not re-issued after a matrix change. Nothing checks `tokenCan()`; Policies resolve live permissions through the package, so abilities stay informational (TD-003).
+
+**Alternatives rejected (for the amendment).**
+- *Editing the user ↔ permission relation directly.* Bypasses roles, makes the matrix test meaningless, and is the leak-prone design TD-002 originally avoided.
+- *Editable list of new permission names.* Arbitrary permission names could collide with policy checks; permissions stay a code-defined enum.
 
 ---
 

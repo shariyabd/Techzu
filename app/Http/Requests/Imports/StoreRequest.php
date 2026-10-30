@@ -8,7 +8,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\UploadedFile;
 use LogicException;
 
-final class StoreTicketImportRequest extends FormRequest
+final class StoreRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -28,7 +28,7 @@ final class StoreTicketImportRequest extends FormRequest
         $file = $this->file('file');
 
         if (! $file instanceof UploadedFile) {
-            throw new LogicException('StoreTicketImportRequest requires an uploaded file.');
+            throw new LogicException('StoreRequest requires an uploaded file.');
         }
 
         return $file;

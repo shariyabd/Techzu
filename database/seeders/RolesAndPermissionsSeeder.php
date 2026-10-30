@@ -13,17 +13,23 @@ use Spatie\Permission\PermissionRegistrar;
 
 final class RolesAndPermissionsSeeder extends Seeder
 {
+    private function guard(): string
+    {
+        return (string) config('permission.guard', 'web');
+    }
+
     public function run(PermissionRegistrar $registrar): void
     {
         $registrar->forgetCachedPermissions();
+        $guard = $this->guard();
 
         foreach (Permission::cases() as $permission) {
-            PermissionModel::findOrCreate($permission->value);
+            PermissionModel::findOrCreate($permission->value, $guard);
         }
 
         foreach (Role::cases() as $role) {
             /** @var RoleModel $model */
-            $model = RoleModel::findOrCreate($role->value);
+            $model = RoleModel::findOrCreate($role->value, $guard);
 
             $model->syncPermissions(array_map(
                 static fn (Permission $permission): string => $permission->value,

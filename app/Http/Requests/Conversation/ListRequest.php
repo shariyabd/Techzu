@@ -11,7 +11,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 use LogicException;
 
-final class IndexRepliesRequest extends FormRequest
+final class ListRequest extends FormRequest
 {
     public function authorize(): Response
     {
@@ -37,7 +37,7 @@ final class IndexRepliesRequest extends FormRequest
         $ticket = $this->route('ticket');
 
         if (! $ticket instanceof Ticket) {
-            throw new LogicException('IndexRepliesRequest requires a bound {ticket} route parameter.');
+            throw new LogicException('ListRequest requires a bound {ticket} route parameter.');
         }
 
         return $ticket;
@@ -48,7 +48,7 @@ final class IndexRepliesRequest extends FormRequest
         $user = $this->user();
 
         if (! $user instanceof User) {
-            throw new LogicException('IndexRepliesRequest requires an authenticated user.');
+            throw new LogicException('ListRequest requires an authenticated user.');
         }
 
         return $user;

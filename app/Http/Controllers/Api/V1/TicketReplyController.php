@@ -6,8 +6,8 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Conversation\AddReply;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Conversation\IndexRepliesRequest;
-use App\Http\Requests\Conversation\StoreReplyRequest;
+use App\Http\Requests\Conversation\ListRequest;
+use App\Http\Requests\Conversation\StoreRequest;
 use App\Http\Resources\V1\TicketReplyResource;
 use App\Models\Ticket;
 use App\Services\Conversation\ConversationQuery;
@@ -16,14 +16,14 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 final class TicketReplyController extends Controller
 {
-    public function index(Ticket $ticket, IndexRepliesRequest $request, ConversationQuery $conversation): AnonymousResourceCollection
+    public function index(Ticket $ticket, ListRequest $request, ConversationQuery $conversation): AnonymousResourceCollection
     {
         return TicketReplyResource::collection(
             $conversation->paginateFor($ticket, $request->actor(), $request->perPage()),
         );
     }
 
-    public function store(Ticket $ticket, StoreReplyRequest $request, AddReply $addReply): JsonResponse
+    public function store(Ticket $ticket, StoreRequest $request, AddReply $addReply): JsonResponse
     {
         $reply = $addReply->handle($request->actor(), $ticket, $request->replyBody(), $request->wantsInternal(), $request->attachmentFiles());
 

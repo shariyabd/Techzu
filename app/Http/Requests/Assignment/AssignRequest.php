@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use LogicException;
 
-final class AssignTicketRequest extends FormRequest
+final class AssignRequest extends FormRequest
 {
     public function authorize(): Response
     {
@@ -37,7 +37,7 @@ final class AssignTicketRequest extends FormRequest
         $ticket = $this->route('ticket');
 
         if (! $ticket instanceof Ticket) {
-            throw new LogicException('AssignTicketRequest requires a bound {ticket} route parameter.');
+            throw new LogicException('AssignRequest requires a bound {ticket} route parameter.');
         }
 
         return $ticket;

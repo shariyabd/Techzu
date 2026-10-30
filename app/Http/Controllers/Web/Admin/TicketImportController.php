@@ -6,7 +6,7 @@ namespace App\Http\Controllers\Web\Admin;
 
 use App\Actions\Imports\StartTicketImport;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Imports\StoreTicketImportRequest;
+use App\Http\Requests\Imports\StoreRequest;
 use App\Http\Resources\V1\TicketImportErrorResource;
 use App\Http\Resources\V1\TicketImportResource;
 use App\Models\TicketImport;
@@ -43,7 +43,7 @@ final class TicketImportController extends Controller
         ]);
     }
 
-    public function store(StoreTicketImportRequest $request, StartTicketImport $start): RedirectResponse
+    public function store(StoreRequest $request, StartTicketImport $start): RedirectResponse
     {
         $admin = $request->user();
         assert($admin instanceof User);

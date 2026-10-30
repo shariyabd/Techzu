@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Support;
 
+use App\Enums\Role;
 use App\Models\Attachment;
 use App\Models\Category;
 use App\Models\Holiday;
@@ -49,6 +50,7 @@ final class RouteAudit
             'import' => static fn (): string => (string) ImportCsvFixture::pendingImport(User::factory()->admin()->create())->id,
             'category' => static fn (): string => (string) Category::factory()->create()->id,
             'holiday' => static fn (): string => (string) Holiday::factory()->create()->id,
+            'role' => static fn (): string => Role::Agent->value,
         ];
     }
 

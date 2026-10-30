@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace App\Http\Requests\Admin;
+namespace App\Http\Requests\Holidays;
 
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Unique;
 
-final class UpdateHolidayRequest extends StoreHolidayRequest
+final class UpdateRequest extends StoreRequest
 {
     protected function uniqueDate(): Unique
     {

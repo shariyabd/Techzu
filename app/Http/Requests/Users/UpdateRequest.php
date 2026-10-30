@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace App\Http\Requests\Admin;
+namespace App\Http\Requests\Users;
 
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
-final class UpdateUserRequest extends StoreUserRequest
+final class UpdateRequest extends StoreRequest
 {
     /** @return array<string, mixed> */
     public function rules(): array

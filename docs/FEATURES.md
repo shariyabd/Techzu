@@ -530,7 +530,9 @@ Admins manage accounts from an admin users page and from the matching API. Only 
 - When a role really changes, all of the user's API tokens are revoked, because tokens carry the permissions the user had when they were issued. A user who stops being an agent also loses their category assignments.
 
 ## Permission matrix
-Admins can open a read-only page, and an API list, showing the three fixed roles (admin, agent, customer) in that order, with the permissions each one has.
-- The page shows a table of every permission against every role, with a mark where the role has it.
-- It reflects what was granted when the system was set up. Roles and permissions cannot be created, edited or removed from the application.
-- It is open to the same people who can manage users.
+Admins can open a page, and an API list, showing the three fixed roles (admin, agent, customer) in that order, with the permissions each one has.
+- The page shows a table of every permission against every role; each role's cell is a checkbox for that permission.
+- Admins who can manage users can check or uncheck a permission for a role. The change applies to every signed-in user immediately, without a new sign-in. The roles themselves, their names, and the exact list of possible permissions are fixed and cannot be created, edited or removed from the application.
+- Two permissions cannot be moved: the customer role can never receive the internal-notes permission, and the admin role always keeps user management, so the gate for managing the matrix itself can never be revoked.
+- The API mirrors the page: an authorized manager can submit the complete permission list for one role and gets the updated list back, and any attempt to grant internal notes to customers or to strip user management from admins is refused with a clear error while the role keeps its previous permissions.
+- The page and the API are open to the same people who can manage users.

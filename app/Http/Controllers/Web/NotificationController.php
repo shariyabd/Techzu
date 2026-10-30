@@ -7,7 +7,7 @@ namespace App\Http\Controllers\Web;
 use App\Actions\Notifications\MarkAllNotificationsRead;
 use App\Actions\Notifications\MarkNotificationRead;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Notifications\IndexNotificationsRequest;
+use App\Http\Requests\Notifications\ListRequest;
 use App\Http\Resources\V1\NotificationResource;
 use App\Models\User;
 use App\Services\Notifications\NotificationFeed;
@@ -18,7 +18,7 @@ use Inertia\Response;
 
 final class NotificationController extends Controller
 {
-    public function index(IndexNotificationsRequest $request, NotificationFeed $feed): Response
+    public function index(ListRequest $request, NotificationFeed $feed): Response
     {
         return Inertia::render('notifications/Index', [
             'items' => NotificationResource::collection($feed->for($this->user($request), $request->perPage(), $request->unreadOnly())),
