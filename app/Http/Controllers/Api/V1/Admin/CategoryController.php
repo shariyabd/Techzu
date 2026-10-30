@@ -8,8 +8,8 @@ use App\Actions\Admin\CreateCategory;
 use App\Actions\Admin\DeleteCategory;
 use App\Actions\Admin\UpdateCategory;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Admin\StoreCategoryRequest;
-use App\Http\Requests\Admin\UpdateCategoryRequest;
+use App\Http\Requests\Categories\StoreRequest;
+use App\Http\Requests\Categories\UpdateRequest;
 use App\Http\Resources\V1\AdminCategoryResource;
 use App\Models\Category;
 use App\Services\Admin\AdminCatalog;
@@ -24,7 +24,7 @@ final class CategoryController extends Controller
         return AdminCategoryResource::collection($catalog->categories());
     }
 
-    public function store(StoreCategoryRequest $request, CreateCategory $create): JsonResponse
+    public function store(StoreRequest $request, CreateCategory $create): JsonResponse
     {
         /** @var array{name: string, slug: string, is_active?: bool} $data */
         $data = $request->validated();
@@ -34,7 +34,7 @@ final class CategoryController extends Controller
             ->setStatusCode(201);
     }
 
-    public function update(UpdateCategoryRequest $request, Category $category, UpdateCategory $update): AdminCategoryResource
+    public function update(UpdateRequest $request, Category $category, UpdateCategory $update): AdminCategoryResource
     {
         /** @var array{name: string, slug: string, is_active?: bool} $data */
         $data = $request->validated();

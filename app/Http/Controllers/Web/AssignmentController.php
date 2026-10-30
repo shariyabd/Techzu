@@ -7,7 +7,7 @@ namespace App\Http\Controllers\Web;
 use App\Actions\Assignment\AssignTicket;
 use App\Actions\Assignment\ClaimTicket;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Assignment\AssignTicketRequest;
+use App\Http\Requests\Assignment\AssignRequest;
 use App\Models\Ticket;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
@@ -25,7 +25,7 @@ final class AssignmentController extends Controller
         return back()->with('success', "You claimed {$ticket->number}.");
     }
 
-    public function assign(AssignTicketRequest $request, Ticket $ticket, AssignTicket $assignTicket): RedirectResponse
+    public function assign(AssignRequest $request, Ticket $ticket, AssignTicket $assignTicket): RedirectResponse
     {
         $agent = $request->targetAgent();
 

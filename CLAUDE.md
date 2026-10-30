@@ -45,7 +45,7 @@ Laravel 13 · PHP 8.3 · MySQL 8 · Inertia 3 + Vue 3 (`<script setup lang="ts">
   - Actions use verb + noun (`ClaimTicket`).
   - Events use past tense (`TicketClaimed`).
   - Jobs use imperative form (`AutoAssignTicket`).
-  - FormRequests use `<Verb><Noun>Request`.
+  - FormRequests live in a per-feature folder (`app/Http/Requests/<Feature>/`) and use `<Verb>Request`: the folder names the feature, so the class name repeats no noun (e.g. `Requests/Tickets/StoreRequest`, `Requests/Roles/UpdatePermissionsRequest`).
 - Domain errors: throw subclasses of `App\Exceptions\Domain\DomainException`, each with a stable `code` (TD-110). No `abort()` inside Actions or Services.
 - Use `CarbonImmutable` for all time math. Store UTC, and compute in the business timezone.
 - **No comments in code (strict).** This applies to every file we write or rewrite: PHP, TypeScript/JavaScript, Vue, CSS, Blade, SQL, and config files (`.env.example`, `*.neon`, `*.yml`, `vite.config.ts`, `config/*.php`).

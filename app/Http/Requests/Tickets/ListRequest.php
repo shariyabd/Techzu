@@ -14,7 +14,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
-final class IndexTicketsRequest extends FormRequest
+final class ListRequest extends FormRequest
 {
     public function authorize(): Response
     {

@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rules\File;
 use LogicException;
 
-final class StoreReplyRequest extends FormRequest
+final class StoreRequest extends FormRequest
 {
     public function authorize(): Response
     {
@@ -59,7 +59,7 @@ final class StoreReplyRequest extends FormRequest
         $ticket = $this->route('ticket');
 
         if (! $ticket instanceof Ticket) {
-            throw new LogicException('StoreReplyRequest requires a bound {ticket} route parameter.');
+            throw new LogicException('StoreRequest requires a bound {ticket} route parameter.');
         }
 
         return $ticket;
@@ -70,7 +70,7 @@ final class StoreReplyRequest extends FormRequest
         $user = $this->user();
 
         if (! $user instanceof User) {
-            throw new LogicException('StoreReplyRequest requires an authenticated user.');
+            throw new LogicException('StoreRequest requires an authenticated user.');
         }
 
         return $user;

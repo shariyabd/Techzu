@@ -6,7 +6,7 @@ namespace App\Http\Requests\Notifications;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-final class IndexNotificationsRequest extends FormRequest
+final class ListRequest extends FormRequest
 {
     public function authorize(): bool
     {

@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace App\Http\Requests\Admin;
+namespace App\Http\Requests\Holidays;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\FormRequest;
 
-final class IndexHolidaysRequest extends FormRequest
+final class ListRequest extends FormRequest
 {
     public function authorize(): bool
     {

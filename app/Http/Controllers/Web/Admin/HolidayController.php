@@ -8,9 +8,9 @@ use App\Actions\Admin\CreateHoliday;
 use App\Actions\Admin\DeleteHoliday;
 use App\Actions\Admin\UpdateHoliday;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Admin\IndexHolidaysRequest;
-use App\Http\Requests\Admin\StoreHolidayRequest;
-use App\Http\Requests\Admin\UpdateHolidayRequest;
+use App\Http\Requests\Holidays\ListRequest;
+use App\Http\Requests\Holidays\StoreRequest;
+use App\Http\Requests\Holidays\UpdateRequest;
 use App\Http\Resources\V1\HolidayResource;
 use App\Models\Holiday;
 use App\Services\Admin\AdminCatalog;
@@ -21,7 +21,7 @@ use Inertia\Response;
 
 final class HolidayController extends Controller
 {
-    public function index(IndexHolidaysRequest $request, AdminCatalog $catalog): Response
+    public function index(ListRequest $request, AdminCatalog $catalog): Response
     {
         $year = $request->year();
 
@@ -36,7 +36,7 @@ final class HolidayController extends Controller
         return Inertia::render('admin/holidays/Create');
     }
 
-    public function store(StoreHolidayRequest $request, CreateHoliday $create): RedirectResponse
+    public function store(StoreRequest $request, CreateHoliday $create): RedirectResponse
     {
         /** @var array{date: string, name: string} $data */
         $data = $request->validated();
@@ -51,7 +51,7 @@ final class HolidayController extends Controller
         ]);
     }
 
-    public function update(UpdateHolidayRequest $request, Holiday $holiday, UpdateHoliday $update): RedirectResponse
+    public function update(UpdateRequest $request, Holiday $holiday, UpdateHoliday $update): RedirectResponse
     {
         /** @var array{date: string, name: string} $data */
         $data = $request->validated();

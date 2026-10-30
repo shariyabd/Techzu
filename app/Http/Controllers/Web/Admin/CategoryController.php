@@ -8,8 +8,8 @@ use App\Actions\Admin\CreateCategory;
 use App\Actions\Admin\DeleteCategory;
 use App\Actions\Admin\UpdateCategory;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Admin\StoreCategoryRequest;
-use App\Http\Requests\Admin\UpdateCategoryRequest;
+use App\Http\Requests\Categories\StoreRequest;
+use App\Http\Requests\Categories\UpdateRequest;
 use App\Http\Resources\V1\AdminCategoryResource;
 use App\Models\Category;
 use App\Services\Admin\AdminCatalog;
@@ -32,7 +32,7 @@ final class CategoryController extends Controller
         return Inertia::render('admin/categories/Create');
     }
 
-    public function store(StoreCategoryRequest $request, CreateCategory $create): RedirectResponse
+    public function store(StoreRequest $request, CreateCategory $create): RedirectResponse
     {
         /** @var array{name: string, slug: string, is_active?: bool} $data */
         $data = $request->validated();
@@ -48,7 +48,7 @@ final class CategoryController extends Controller
         ]);
     }
 
-    public function update(UpdateCategoryRequest $request, Category $category, UpdateCategory $update): RedirectResponse
+    public function update(UpdateRequest $request, Category $category, UpdateCategory $update): RedirectResponse
     {
         /** @var array{name: string, slug: string, is_active?: bool} $data */
         $data = $request->validated();

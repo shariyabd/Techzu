@@ -9,11 +9,11 @@ use App\Actions\Tickets\ChangeTicketStatus;
 use App\Actions\Tickets\CreateTicket;
 use App\Actions\Tickets\UpdateTicket;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Tickets\ChangeTicketPriorityRequest;
-use App\Http\Requests\Tickets\ChangeTicketStatusRequest;
-use App\Http\Requests\Tickets\IndexTicketsRequest;
-use App\Http\Requests\Tickets\StoreTicketRequest;
-use App\Http\Requests\Tickets\UpdateTicketRequest;
+use App\Http\Requests\Tickets\ChangePriorityRequest;
+use App\Http\Requests\Tickets\ChangeStatusRequest;
+use App\Http\Requests\Tickets\ListRequest;
+use App\Http\Requests\Tickets\StoreRequest;
+use App\Http\Requests\Tickets\UpdateRequest;
 use App\Http\Resources\V1\ActivityResource;
 use App\Http\Resources\V1\TicketListResource;
 use App\Http\Resources\V1\TicketResource;
@@ -33,14 +33,14 @@ final class TicketController extends Controller
         private readonly TicketPageData $pages,
     ) {}
 
-    public function index(IndexTicketsRequest $request, TicketListQuery $tickets): AnonymousResourceCollection
+    public function index(ListRequest $request, TicketListQuery $tickets): AnonymousResourceCollection
     {
         return TicketListResource::collection(
             $tickets->paginate($this->user($request), $request->validated(), CarbonImmutable::now()),
         );
     }
 
-    public function store(StoreTicketRequest $request, CreateTicket $createTicket): JsonResponse
+    public function store(StoreRequest $request, CreateTicket $createTicket): JsonResponse
     {
         $ticket = $createTicket->handle($this->user($request), $request->actionData(), $request->attachmentFiles());
 
@@ -54,21 +54,21 @@ final class TicketController extends Controller
         return TicketResource::make($this->pages->loadForShow($ticket, $this->user($request)))->withAttachments();
     }
 
-    public function update(UpdateTicketRequest $request, Ticket $ticket, UpdateTicket $updateTicket): TicketResource
+    public function update(UpdateRequest $request, Ticket $ticket, UpdateTicket $updateTicket): TicketResource
     {
         $ticket = $updateTicket->handle($this->user($request), $ticket, $request->validated());
 
         return TicketResource::make($this->pages->loadSummary($ticket));
     }
 
-    public function status(ChangeTicketStatusRequest $request, Ticket $ticket, ChangeTicketStatus $changeStatus): TicketResource
+    public function status(ChangeStatusRequest $request, Ticket $ticket, ChangeTicketStatus $changeStatus): TicketResource
     {
         $ticket = $changeStatus->handle($this->user($request), $ticket, $request->targetStatus());
 
         return TicketResource::make($this->pages->loadSummary($ticket));
     }
 
-    public function priority(ChangeTicketPriorityRequest $request, Ticket $ticket, ChangeTicketPriority $changePriority): TicketResource
+    public function priority(ChangePriorityRequest $request, Ticket $ticket, ChangeTicketPriority $changePriority): TicketResource
     {
         $ticket = $changePriority->handle($this->user($request), $ticket, $request->targetPriority());
 

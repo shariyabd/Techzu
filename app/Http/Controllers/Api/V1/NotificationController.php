@@ -7,7 +7,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Actions\Notifications\MarkAllNotificationsRead;
 use App\Actions\Notifications\MarkNotificationRead;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Notifications\IndexNotificationsRequest;
+use App\Http\Requests\Notifications\ListRequest;
 use App\Http\Resources\V1\NotificationResource;
 use App\Models\User;
 use App\Services\Notifications\NotificationFeed;
@@ -17,7 +17,7 @@ use Illuminate\Http\Response;
 
 final class NotificationController extends Controller
 {
-    public function index(IndexNotificationsRequest $request, NotificationFeed $feed): AnonymousResourceCollection
+    public function index(ListRequest $request, NotificationFeed $feed): AnonymousResourceCollection
     {
         return NotificationResource::collection($feed->for($this->user($request), $request->perPage(), $request->unreadOnly()));
     }

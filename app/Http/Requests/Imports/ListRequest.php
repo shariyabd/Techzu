@@ -6,7 +6,7 @@ namespace App\Http\Requests\Imports;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-final class IndexImportErrorsRequest extends FormRequest
+final class ListRequest extends FormRequest
 {
     public function authorize(): bool
     {

@@ -8,9 +8,9 @@ use App\Actions\Admin\CreateHoliday;
 use App\Actions\Admin\DeleteHoliday;
 use App\Actions\Admin\UpdateHoliday;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Admin\IndexHolidaysRequest;
-use App\Http\Requests\Admin\StoreHolidayRequest;
-use App\Http\Requests\Admin\UpdateHolidayRequest;
+use App\Http\Requests\Holidays\ListRequest;
+use App\Http\Requests\Holidays\StoreRequest;
+use App\Http\Requests\Holidays\UpdateRequest;
 use App\Http\Resources\V1\HolidayResource;
 use App\Models\Holiday;
 use App\Services\Admin\AdminCatalog;
@@ -20,12 +20,12 @@ use Illuminate\Http\Response;
 
 final class HolidayController extends Controller
 {
-    public function index(IndexHolidaysRequest $request, AdminCatalog $catalog): AnonymousResourceCollection
+    public function index(ListRequest $request, AdminCatalog $catalog): AnonymousResourceCollection
     {
         return HolidayResource::collection($catalog->holidays($request->year()));
     }
 
-    public function store(StoreHolidayRequest $request, CreateHoliday $create): JsonResponse
+    public function store(StoreRequest $request, CreateHoliday $create): JsonResponse
     {
         /** @var array{date: string, name: string} $data */
         $data = $request->validated();
@@ -33,7 +33,7 @@ final class HolidayController extends Controller
         return HolidayResource::make($create->handle($data))->response()->setStatusCode(201);
     }
 
-    public function update(UpdateHolidayRequest $request, Holiday $holiday, UpdateHoliday $update): HolidayResource
+    public function update(UpdateRequest $request, Holiday $holiday, UpdateHoliday $update): HolidayResource
     {
         /** @var array{date: string, name: string} $data */
         $data = $request->validated();

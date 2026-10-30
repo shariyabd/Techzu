@@ -9,11 +9,11 @@ use App\Actions\Tickets\ChangeTicketStatus;
 use App\Actions\Tickets\CreateTicket;
 use App\Actions\Tickets\UpdateTicket;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Tickets\ChangeTicketPriorityRequest;
-use App\Http\Requests\Tickets\ChangeTicketStatusRequest;
-use App\Http\Requests\Tickets\IndexTicketsRequest;
-use App\Http\Requests\Tickets\StoreTicketRequest;
-use App\Http\Requests\Tickets\UpdateTicketRequest;
+use App\Http\Requests\Tickets\ChangePriorityRequest;
+use App\Http\Requests\Tickets\ChangeStatusRequest;
+use App\Http\Requests\Tickets\ListRequest;
+use App\Http\Requests\Tickets\StoreRequest;
+use App\Http\Requests\Tickets\UpdateRequest;
 use App\Http\Resources\V1\ActivityResource;
 use App\Http\Resources\V1\AttachmentResource;
 use App\Http\Resources\V1\TicketListResource;
@@ -37,7 +37,7 @@ final class TicketController extends Controller
         private readonly TicketPageData $pages,
     ) {}
 
-    public function index(IndexTicketsRequest $request, TicketListQuery $tickets, TicketQueueCounts $queues): InertiaResponse
+    public function index(ListRequest $request, TicketListQuery $tickets, TicketQueueCounts $queues): InertiaResponse
     {
         $validated = $request->validated();
 
@@ -61,7 +61,7 @@ final class TicketController extends Controller
         ]);
     }
 
-    public function store(StoreTicketRequest $request, CreateTicket $createTicket): RedirectResponse
+    public function store(StoreRequest $request, CreateTicket $createTicket): RedirectResponse
     {
         $ticket = $createTicket->handle($this->user($request), $request->actionData(), $request->attachmentFiles());
 
@@ -96,21 +96,21 @@ final class TicketController extends Controller
         ]);
     }
 
-    public function update(UpdateTicketRequest $request, Ticket $ticket, UpdateTicket $updateTicket): RedirectResponse
+    public function update(UpdateRequest $request, Ticket $ticket, UpdateTicket $updateTicket): RedirectResponse
     {
         $updateTicket->handle($this->user($request), $ticket, $request->validated());
 
         return back()->with('success', 'Ticket updated.');
     }
 
-    public function status(ChangeTicketStatusRequest $request, Ticket $ticket, ChangeTicketStatus $changeStatus): RedirectResponse
+    public function status(ChangeStatusRequest $request, Ticket $ticket, ChangeTicketStatus $changeStatus): RedirectResponse
     {
         $ticket = $changeStatus->handle($this->user($request), $ticket, $request->targetStatus());
 
         return back()->with('success', "Status changed to {$ticket->status->label()}.");
     }
 
-    public function priority(ChangeTicketPriorityRequest $request, Ticket $ticket, ChangeTicketPriority $changePriority): RedirectResponse
+    public function priority(ChangePriorityRequest $request, Ticket $ticket, ChangeTicketPriority $changePriority): RedirectResponse
     {
         $ticket = $changePriority->handle($this->user($request), $ticket, $request->targetPriority());
 
