@@ -171,7 +171,7 @@ const chipClass = (active: boolean): string =>
 <template>
     <section
         aria-label="Filter tickets"
-        class="flex flex-col gap-4 rounded-lg border bg-card p-4"
+        class="flex flex-col gap-3 rounded-xl border bg-card p-3 shadow-xs"
     >
         <div
             class="grid gap-3 md:grid-cols-[minmax(0,1fr)_12rem_12rem_auto] md:items-end"

@@ -129,3 +129,13 @@ export type AttachmentRules = {
     max_kb: number;
     max_files: number;
 };
+
+export type QueueCount = { open: number; total: number };
+
+export type TicketQueues = {
+    active: QueueCount;
+    assigned_to_me: QueueCount | null;
+    unassigned: QueueCount | null;
+    resolved: QueueCount;
+    categories: ({ category_id: number } & QueueCount)[];
+};
