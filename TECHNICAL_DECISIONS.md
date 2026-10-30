@@ -177,7 +177,7 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
    - Capabilities are named `<resource>.<action>[.<scope>]` and referenced through `App\Enums\Permission`:
      - tickets: `tickets.create`, `tickets.create.on_behalf`, `tickets.view.any`, `tickets.view.own`, `tickets.reply`, `tickets.notes.internal`, `tickets.claim`, `tickets.update.any`, `tickets.update.assigned`, `tickets.update.own`, `tickets.assign.any`, `tickets.handoff.own`
      - admin areas: `dashboard.view`, `imports.manage`, `users.manage`, `categories.manage`, `holidays.manage`
-   - The role → permission mapping is defined in one place, `RolesAndPermissionsSeeder` (idempotent; it runs in deploys and in tests).
+   - The role → permission mapping is defined in one place, `Permission::forRole()`, and `RolesAndPermissionsSeeder` applies it (idempotent; it runs in deploys and in tests). The matrix is fixed and read-only: there is no runtime editing.
 2. **Policies: *on which record*.**
    - `TicketPolicy`, `TicketReplyPolicy`, `AttachmentPolicy` and the admin policies combine a capability with ownership or relationship facts. For example:
      ```php
@@ -192,7 +192,7 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 
 **Why.**
 - A standard, widely recognized package handles role and permission storage, caching and assignment, so we don't hand-roll it.
-- Capabilities can be adjusted per role without redeploying, for example letting agents import CSVs.
+- Capabilities are named and centralised, so a role's mapping changes in one place.
 - Ownership rules (own ticket, assigned to me, not internal) remain expressible. No permission package can model these on its own, which is why Policies remain the decision point.
 - Sanctum token abilities can mirror the permission names (TD-003).
 
@@ -205,7 +205,7 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 - Two concepts to understand (permission and policy). Mitigated by the strict rule that the Policy is always the entry point.
 - Permission checks rely on the package's cache. Tests must seed `RolesAndPermissionsSeeder` and reset the cache (`PermissionRegistrar::forgetCachedPermissions()`), which happens in a shared Pest `beforeEach`.
 - Finding agents means joining through `model_has_roles` (indexed by the package). Eligible-agent queries go through a single `User::scopeAvailableAgents()` scope.
-- If an admin edits permissions at runtime, they can weaken the matrix. The seeded mapping is the documented baseline, and the matrix test runs against it.
+- The matrix is not editable at runtime, so the seeded mapping is always the one the matrix test runs against.
 
 ---
 
@@ -239,7 +239,7 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 **Status:** Accepted
 
 **Decision.**
-- Ticket queries start from `Ticket::visibleTo($user)`, and route model binding for customers is scoped through it. Another customer's ticket therefore returns **404**.
+- Ticket queries start from `Ticket::visibleTo($user)`. When a customer may not view a ticket, `TicketPolicy` denies the request as not found (`Response::denyAsNotFound()`), so another customer's ticket returns **404**. Route binding is not what produces the 404.
 - Staff actions forbidden by a Policy return **403**.
 
 **Why.** A 403 confirms that `TKT-2026-000123` exists, which leaks information and enables enumeration. A 404 reveals nothing.
@@ -253,17 +253,18 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 ### TD-120 — Security hardening
 **Status:** Accepted
 
-| Concern | Measure |
-|---|---|
-| Server-side authorization | Every route goes through a Policy (`authorize()` / `can` middleware). The matrix test fails when a route is missing coverage. |
-| Internal-note leakage | Three independent layers, each tested: the query scope excludes internal replies for customers, the Resource omits them, and the notification listeners never notify customers about internal notes. |
-| Mass assignment | Explicit `$fillable`. Roles and permissions are assigned only through admin Actions (`syncRoles`); `assigned_agent_id`, SLA columns, `escalation_level` and `number` are never fillable from requests. They're set only by Actions. |
-| File uploads | Validated MIME type and extension (`File::types`), size limits, random UUID filenames, private disk, streamed downloads with `nosniff` and `Content-Disposition: attachment`. No public URLs (TD-061). |
-| Rate limiting | `throttle:api` (60/min), stricter limits on login and token issuance, and an upload throttle. |
-| Tokens | Sanctum tokens have abilities mirroring the user's permission names (TD-010), and `/auth/tokens/current` can revoke them. |
-| Inertia props | Only explicitly selected fields are shared. Never whole models with hidden columns. |
-| Search input | Parameter binding everywhere. FULLTEXT boolean-mode operators in the input are sanitized. Sort columns come from a whitelist. |
-| CSRF / XSS | Laravel CSRF for the web. Vue escapes output by default, and `v-html` is forbidden by the guardrails. |
+| Concern | Measure | Proven by |
+|---|---|---|
+| Server-side authorization | Every route goes through a Policy (`authorize()` / `can` middleware). The matrix test fails when a route is missing coverage. | `SecurityChecklistTest`: *requires authentication on every route that is not public by design*; *keeps guest-only routes to sign-in, registration and password reset*; *answers 403 to agents and customers on every parameterless admin route*. Feature matrices: `TicketRoutesAuthorizationTest`, `AuthorizationMatrixTest`. |
+| Internal-note leakage | Three independent layers, each tested: the query scope excludes internal replies for customers, the Resource omits them, and the notification listeners never notify customers about internal notes. | `TicketReplyTest` (*hides internal replies from customers and shows everything to staff*); `TicketReadLayerTest` (*loads only visible replies and attachments for the show page*); `InternalNoteLeakageTest` (*never sends a customer internal content from any page or endpoint*, *refuses to serialize an internal reply for a customer even when a query forgets visibleTo*); `NotificationRecipientsTest` (*sends the customer nothing at all for an internal note*). |
+| Mass assignment | Explicit `$fillable`. Roles and permissions are assigned only through admin Actions (`syncRoles`); `assigned_agent_id`, SLA columns, `escalation_level` and `number` are never fillable from requests. They're set only by Actions. | `SecurityChecklistTest`: *ignores privileged fields injected into ticket creation*. `RegisterTest`: *ignores any role sent with the registration form*. `TicketTest`: *never mass-assigns system-controlled ticket columns*. |
+| File uploads | Validated MIME type and extension (`File::types`), size limits, random UUID filenames, private disk, streamed downloads with `nosniff` and `Content-Disposition: attachment`. No public URLs (TD-061). | `SecurityChecklistTest`: *rejects a PHP script disguised as a PDF by its content*. `AttachmentStorerTest`: *stores files privately under a uuid name and records metadata*. `ReplyEndpointsTest`: *rejects disallowed or oversized files without storing anything*. `AttachmentDownloadTest`: *streams an attachment as a download with nosniff*. |
+| Rate limiting | `throttle:api` (60/min), stricter limits on login and token issuance, and an upload throttle. | `SecurityChecklistTest`: *runs every api/v1 route through the throttled api group*; *throttles every route that accepts uploads*. `LoginTest`: *throttles login after five attempts per minute*. `AuthTokenTest`: *throttles token issuance to five attempts per minute*. |
+| Tokens | Sanctum tokens have abilities mirroring the user's permission names (TD-010), and `/auth/tokens/current` can revoke them. | `AuthTokenTest`: *issues a token whose abilities mirror the user permission names*; *revokes only the current token*. |
+| Inertia props | Only explicitly selected fields are shared. Never whole models with hidden columns. | `InertiaSharedPropsTest`: *shares only whitelisted user fields, role names, placeholder abilities, flash and the unread count*. |
+| Search input | Parameter binding everywhere. FULLTEXT boolean-mode operators in the input are sanitized. Sort columns come from a whitelist. | `FulltextSearchTermTest`: *turns user input into a safe boolean-mode expression*; `TicketKeywordSearchTest`: *neutralises boolean operators and unbalanced quotes typed by the user*; `TicketIndexFilteringTest`: *rejects a sort column outside the whitelist*. |
+| 404 not 403 (TD-012) | Policies deny a customer as not found when the ticket is not theirs, so existence is never confirmed. | `ConversationRoutesAuthorizationTest`: *enforces the conversation matrix* (the customer-on-another-customer's-ticket rows answer 404). |
+| CSRF / XSS | Laravel CSRF for the web. Vue escapes output by default, and `v-html` is forbidden by the guardrails. | CSRF: framework default for the `web` group; not re-tested. XSS: `SecurityChecklistTest`: *never renders raw HTML in Vue*. |
 
 ---
 
@@ -319,7 +320,7 @@ Each index exists to serve a named query:
 
 **Alternatives rejected.** *Indexing every foreign key and filter column individually.* MySQL would often pick one single-column index and then filter the rest, which is worse for the combined `status + time` predicates our hot queries use.
 
-**Trade-offs.** Six secondary indexes on `tickets` slow inserts a little; that's negligible compared with the read volume of a help desk. T14 includes an `EXPLAIN` audit to confirm each index is actually used.
+**Trade-offs.** Nine secondary indexes on `tickets` slow inserts a little; that's negligible compared with the read volume of a help desk. An `EXPLAIN` audit test runs the real endpoints and the escalation scan and confirms each query uses its index.
 
 ---
 
@@ -525,7 +526,7 @@ Each index exists to serve a named query:
 
 **Decision.**
 - `dedoc/scramble` generates OpenAPI 3.1 from routes, FormRequests and Resources.
-- It's served at `/docs/api` (local or admin-only) and exported to `docs/api/openapi.json`.
+- It's served at `/docs/api` (local or admin-only) and exported to `docs/api/openapi.json`. The raw JSON is at `/docs/api.json`, and the gate is `AuthorizeApiDocs`, which applies `UserPolicy::viewAny`.
 - There's no hand-written API guide (amended 2026-10-29): Scramble is the only API documentation, and the README links to it.
 
 **Why.** The documentation is derived from the code that enforces the contract, so it can't drift, and it needs no docblock annotations to maintain.
@@ -562,6 +563,7 @@ GitHub Actions runs: `composer install` → `pint --test` → `phpstan analyse` 
   - `Resolved → Closed | InProgress` (reopen)
   - `Closed` is terminal
 - A customer reply on a ticket in `WaitingForCustomer` moves it to `InProgress`, with the system as actor.
+- Two sanctioned exceptions write status outside `ChangeTicketStatus`: the atomic claim and auto-assign conditional update that moves Open to In Progress (TD-051), and ticket creation by CSV import, which sets the status from the row.
 
 **Why.**
 - Invalid states (for example re-opening a closed ticket) are impossible to reach through the application.
@@ -1035,7 +1037,7 @@ The result is cached in `Cache::remember('dashboard:'.$scope, 60)`.
 | `config/business_hours.php` | timezone, weekly windows |
 | `config/tickets.php` | number prefix, auto-assign on/off, per-page max |
 | `config/attachments.php` | disk, allowed types/extensions, max size, max files |
-| `config/imports.php` | max upload size, chunk size, queue |
+| `config/imports.php` | max upload size, chunk size |
 
 **Why.**
 - Rules are discoverable in one place, can be changed per environment, and work with `config:cache`.

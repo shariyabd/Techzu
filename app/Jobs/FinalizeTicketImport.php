@@ -11,6 +11,8 @@ use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 final class FinalizeTicketImport implements ShouldQueue
 {
@@ -40,6 +42,23 @@ final class FinalizeTicketImport implements ShouldQueue
             $import->failed_rows > 0 => ImportStatus::CompletedWithErrors,
             default => ImportStatus::Completed,
         };
+
+        $this->finish($import, $status);
+    }
+
+    public function failed(Throwable $e): void
+    {
+        Log::error('Ticket import finalization failed.', ['import_id' => $this->importId, 'exception' => $e->getMessage()]);
+
+        $import = TicketImport::query()->find($this->importId);
+
+        if ($import !== null) {
+            $this->finish($import, ImportStatus::Failed);
+        }
+    }
+
+    private function finish(TicketImport $import, ImportStatus $status): void
+    {
         $updated = TicketImport::query()
             ->whereKey($import->id)
             ->where('status', ImportStatus::Processing->value)

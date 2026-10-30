@@ -4,17 +4,34 @@ What each feature does and the rules it follows, in plain language, for a reader
 
 Each task's documenter replaces its own section's `Pending` line when the task is done. If a later task changes a feature's logic, that task's documenter updates the affected section in place and changes nothing else.
 
-## Platform foundation (T00)
-_Pending._
+## Platform foundation
+The application serves two front doors over the same rules: web pages for people and a versioned JSON API for programs. Both use the same validation, the same business operations and the same permission checks.
 
-## Authentication (T00a)
+**Web and API**
+- Web pages use a server-side session. The API lives under /api/v1, always answers in JSON, and authenticates with bearer tokens.
+- When a business rule refuses an action, the API answers with the matching HTTP status and a body holding a message and a stable error code that clients can branch on. A web page goes back to where the user was and shows the message.
+- Business rule refusals are expected outcomes, so they are not reported as application errors.
+
+**Limits**
+- API requests are limited to 60 per minute per signed-in user (per address for guests). File uploads are limited to 20 per minute per user. Token requests are limited to 5 per minute per email and address pair.
+
+**Passwords**
+- In production a password needs at least 12 characters with upper and lower case letters, numbers, symbols and no known leak. Elsewhere only the basic length rule applies.
+
+**Scheduled work**
+- A scan for SLA deadlines runs every minute (see SLA escalation). Background work such as notifications, automatic assignment and imports runs on the queue.
+
+**Safety**
+- Destructive database commands are blocked in production.
+
+## Authentication
 Authentication is plain email-and-password sign-in with a server-side session. There are no extra security layers on top of it.
 
 **Logging in**
 - A user signs in with an email and a password, and can tick "remember me" to stay signed in beyond the browser session.
 - Wrong credentials give one generic error on the email field. It does not reveal whether the email exists.
 - Sign-in attempts are limited to 5 per minute from the same address. After that the user must wait before trying again.
-- After a successful sign-in the session is renewed. The user goes back to the page they originally asked for, or to the home page. The home page sends guests to the login page and every signed-in user to the dashboard.
+- After a successful sign-in the session is renewed. The user goes back to the page they originally asked for, or to the home page. The home page sends guests to the login page, customers to their ticket list, and staff (agents and admins) to the dashboard.
 
 **Signed-in users and the guest pages**
 - A signed-in user who opens the login or register page is sent to the home page instead.
@@ -28,6 +45,7 @@ Authentication is plain email-and-password sign-in with a server-side session. T
 - The password rule depends on the environment. In production it needs at least 12 characters with upper and lower case letters, numbers and symbols, and it must not appear in known data breaches. Outside production the default minimum of 8 characters applies.
 - The new account is signed in straight away and sent to the home page.
 - Self-registration gives the new account the customer role.
+- Registration is limited to 5 attempts per minute from the same address.
 
 **What is not included**
 - No two-factor authentication, passkeys, email verification, password confirmation step or account settings pages.
@@ -40,7 +58,7 @@ Authentication is plain email-and-password sign-in with a server-side session. T
 - A client can revoke the token it is using.
 - A client holding a token can fetch the details of the user the token belongs to.
 
-## Data model (T01)
+## Data model
 The data model is the shared vocabulary every other feature builds on.
 
 **Records and how they relate**
@@ -84,7 +102,7 @@ The data model is the shared vocabulary every other feature builds on.
 - Deleting an agent or category removes the agent-category links.
 
 **Timeline lines**
-- Ticket created; Ticket updated (with the changed fields); Assigned to X or Reassigned from X to Y; Claimed by X; Unassigned from X; Status changed from A to B; Priority changed from A to B; Category changed from A to B; Agent replied or Customer replied; Internal note added (staff only); SLA paused while waiting for the customer; SLA resumed; SLA breach approaching; Ticket escalated: SLA breached; Ticket imported from CSV (with the row number when known).
+- Ticket created; Ticket updated (with the changed fields); Assigned to X or Reassigned from X to Y; Claimed by X; Status changed from A to B; Priority changed from A to B; Category changed from A to B; Agent replied or Customer replied; Internal note added (staff only); SLA paused while waiting for the customer; SLA resumed; SLA breach approaching; Ticket escalated: SLA breached; Ticket imported from CSV.
 
 **Domain errors**
 - Invalid status change (422): the move is not in the allowed list.
@@ -102,14 +120,14 @@ The data model is the shared vocabulary every other feature builds on.
 - Sixty tickets are created with sequential numbers, mixed statuses and priorities, and some breached or approaching. Open tickets are unassigned; all others are assigned to an available agent who handles the ticket's category.
 - Running the seed again when the demo data already exists adds nothing.
 
-## SLA calculation (T02)
+## SLA calculation
 SLA calculation turns a ticket's priority into a due time and a warning time, counted only in open business time. It also says which escalation level a ticket should be at right now. It only calculates; other features decide when to call it.
 
 **Business hours and closed days**
 - The business is open Sunday to Thursday from 09:00 to 18:00. Friday and Saturday are closed.
 - Business time is worked out in the business timezone, Asia/Dhaka by default. Times are stored in UTC and converted for the calculation.
 - Any date can be marked as a holiday. On a holiday the business is closed for the whole day, whatever the weekly hours say.
-- The list of holidays is cached. Adding, changing or removing a holiday takes effect for new calculations only once the cached list is refreshed.
+- The list of holidays is cached. Adding, changing or removing a holiday takes effect immediately for new calculations, because the cached list is cleared on every change.
 - The weekly hours and the timezone are configurable; holidays are a stored list of dates. Invalid settings (an unknown timezone, a window that ends before it starts, overlapping windows, a malformed time or holiday date) are rejected rather than guessed at.
 
 **How a due time is computed**
@@ -145,7 +163,7 @@ SLA calculation turns a ticket's priority into a due time and a warning time, co
 - While a ticket is paused, the level is judged at the moment the pause began, so it is frozen and does not worsen during the pause.
 - Recalculating after a priority change, and resuming, only ever lower a ticket's stored level, for example when a longer deadline moves it back from breached to approaching. They never raise it.
 
-## Ticket numbering (T03)
+## Ticket numbering
 Every ticket gets a unique, human-readable number. This feature produces that number.
 
 **Format**
@@ -162,7 +180,7 @@ Every ticket gets a unique, human-readable number. This feature produces that nu
 - A number is meant to be taken while the ticket is being saved, inside the same database transaction. If saving fails and the transaction is rolled back, the counter is rolled back too, so that number is given back and the next ticket reuses it.
 - When several tickets are created at the same moment, they wait their turn for the year's counter. Each gets a different number. If one has to wait too long for its turn, it fails with an error instead of receiving a duplicate number.
 
-## Authorization (T04)
+## Authorization
 Every action is allowed or refused by a rule that combines what the user's role permits with who owns the ticket and what state it is in. The same rules are used for web pages and API requests.
 
 **Roles and what they can do**
@@ -180,7 +198,7 @@ Every action is allowed or refused by a rule that combines what the user's role 
 - Changing status: staff who manage the ticket can change it. A customer can act only on their own Resolved ticket, and only to close it or to reopen it (move it back to In Progress).
 - Changing priority: staff who manage the ticket only. Customers never can.
 - Managing a ticket means being an admin, or being the agent it is currently assigned to.
-- Claiming: any agent or admin can claim an active ticket (Open, In Progress or Waiting for customer), whether or not someone else holds it. Resolved and Closed tickets cannot be claimed.
+- Claiming: any agent or admin may try to claim an active ticket (Open, In Progress or Waiting for Customer), and the claim succeeds only while nobody holds it. Resolved and Closed tickets cannot be claimed.
 - Assigning: admins can assign any ticket. An agent can hand over only a ticket currently assigned to them.
 - Replying: customers on their own tickets, and staff, can reply. Nobody can reply, public or internal, on a Closed ticket.
 - Internal notes: only staff can write them, and not on a Closed ticket.
@@ -191,7 +209,7 @@ Every action is allowed or refused by a rule that combines what the user's role 
 
 **Admin-only areas**
 - Categories, holidays, users and CSV imports are open to admins only. Agents and customers are refused for every operation on them.
-- An admin cannot delete their own account.
+- Users cannot be deleted from the application.
 
 **Dashboard**
 - Agents and admins can open the dashboard. Customers cannot.
@@ -200,7 +218,7 @@ Every action is allowed or refused by a rule that combines what the user's role 
 - Each page receives a set of yes/no flags: may view the dashboard, manage imports, manage users, manage categories, manage holidays, and create tickets on behalf of a customer. They come from the same rules as above, so menus and buttons match what the server will allow.
 - Guests receive all of them as "no".
 
-## Ticket lifecycle (T05)
+## Ticket lifecycle
 Ticket lifecycle covers creating a ticket, editing it, moving it through its statuses, changing its priority, recording what happened on a timeline, and listing tickets. The same rules apply on the web pages and in the API.
 
 **Creating a ticket**
@@ -258,13 +276,13 @@ Ticket lifecycle covers creating a ticket, editing it, moving it through its sta
 - Customers receive only public replies and public attachments, both on the ticket and on each reply. Internal replies and internal attachments are left out of what they receive.
 - A customer who asks for a ticket that is not theirs, or tries any action on it, gets "not found" rather than "forbidden", so they cannot learn whether it exists. A customer who can see a ticket but is not allowed an action on it (for example changing its priority) gets "forbidden".
 
-## Assignment (T06)
+## Assignment
 Every ticket has at most one assigned agent. A ticket can get its agent in three ways: an agent claims it, a person with the right permission assigns or hands it off, or the system picks one automatically. Customers cannot assign tickets, and no assignment can be set through ticket creation or edit forms.
 
 **Claiming**
 - An agent claims an unassigned ticket for themselves. Only active tickets (not resolved or closed) can be claimed, and the agent needs the claim permission and must be able to see the ticket.
 - The claim only succeeds if the ticket is still unassigned at that moment. If another agent or the automatic assignment got there first, the claim is refused with an "already claimed" error and nothing changes. Two agents claiming at the same time can never both win.
-- Claiming a ticket that is Open moves it to In progress. A ticket in any other active status keeps its status.
+- Claiming a ticket that is Open moves it to In Progress. A ticket in any other active status keeps its status.
 
 **Manual assignment and hand-off**
 - Someone with the assign-any permission can assign any ticket to an agent or reassign it. An agent with the hand-off permission can pass on only the tickets currently assigned to them.
@@ -275,21 +293,21 @@ Every ticket has at most one assigned agent. A ticket can get its agent in three
 
 **Automatic assignment**
 - When a ticket is created, it is queued for automatic assignment, unless the ticket came from a CSV import, the setting for automatic assignment is turned off, or it already has an agent.
-- Assignment runs in the background and is retried up to three times (after 10 seconds, 1 minute and 5 minutes) if it fails. Only one assignment job per ticket is queued at a time.
+- Assignment runs in the background and is attempted up to three times in total if it fails, with a growing wait between attempts (10 seconds, then 1 minute, then 5 minutes). Only one assignment job per ticket is queued at a time.
 - Before assigning, the job checks again that the ticket still exists, is still unassigned and is still active. Otherwise it does nothing.
 - The candidates are available agents who are assigned to the ticket's category. The agent with the fewest active tickets wins. Ties go to the agent who was assigned a ticket least recently, with agents who were never assigned anything first, then to the lowest user id. This spreads work evenly and rotates between equally busy agents.
 - If no agent is eligible, the ticket simply stays in the unassigned queue and a log entry notes it. This is not an error, and agents can still claim it.
 - If someone claimed the ticket while the job was running, the automatic assignment backs off and changes nothing.
-- Like a claim, an automatic assignment moves an Open ticket to In progress.
+- Like a claim, an automatic assignment moves an Open ticket to In Progress.
 
 **What gets recorded**
-- Every assignment records the agent's "last assigned" time, which feeds the rotation rule above. The ticket's timeline shows who assigned it to whom and whether it was a claim, a manual assignment or an automatic one. The status change from Open to In progress is recorded as its own timeline entry.
+- Every assignment records the agent's "last assigned" time, which feeds the rotation rule above. The ticket's timeline shows who assigned it to whom and whether it was a claim, a manual assignment or an automatic one. The status change from Open to In Progress is recorded as its own timeline entry.
 
-## Conversation and attachments (T07)
+## Conversation and attachments
 A ticket carries a conversation of replies. A reply is either public or an internal note, and may carry attachments.
 
 **Posting a reply**
-- Anyone who can see a ticket and holds the reply permission can post a reply, except on a closed ticket. A closed ticket accepts no replies or notes and the attempt is refused with a "ticket closed" error. Resolved tickets still accept replies.
+- Anyone who can see a ticket and holds the reply permission can post a reply, except on a closed ticket. A closed ticket accepts no replies or notes: the permission check refuses the attempt as forbidden before anything is saved. The "ticket closed" error only appears in the rare case where the ticket closes while the reply is being saved. Resolved tickets still accept replies.
 - The reply text is required and can be up to 20,000 characters. Up to 5 files can be attached to one reply.
 - The author is always the signed-in user. Posting a reply also bumps the ticket's last-updated time.
 - Posting is limited to 20 requests per minute per user.
@@ -301,7 +319,7 @@ A ticket carries a conversation of replies. A reply is either public or an inter
 - The timeline records a public reply and an internal note as different kinds of entry, without the text.
 
 **Customer reply resumes the SLA**
-- When the ticket's own customer posts a public reply while the ticket is Waiting for customer, the ticket moves back to In progress and the paused SLA clock resumes, with the due time pushed out by the time spent waiting. A reply by anyone else, or an internal note, does not do this.
+- When the ticket's own customer posts a public reply while the ticket is Waiting for Customer, the ticket moves back to In Progress and the paused SLA clock resumes, with the due time pushed out by the time spent waiting. A reply by anyone else, or an internal note, does not do this.
 
 **Attachments**
 - Allowed types are PDF, PNG, JPG, JPEG, GIF, TXT, CSV, DOC, DOCX, XLS, XLSX and ZIP. A file may be up to 10 MB, and the type and the extension must both be allowed. These limits come from configuration.
@@ -314,16 +332,16 @@ A ticket carries a conversation of replies. A reply is either public or an inter
 **Reading the conversation**
 - The conversation is listed oldest first in pages (20 by default, up to 100 per page), and customers receive only the public part. The web ticket page also shows the upload limits to the user.
 
-## Search and filtering (T08)
+## Search and filtering
 The ticket list can be narrowed and sorted. It always shows only tickets the viewer is allowed to see, so a customer's filters can never reveal anyone else's tickets, and staff filters work inside the same visibility rules.
 
 **Lists and scopes**
-- The list has two scopes. Active shows tickets that are Open, In progress or Waiting for customer. Resolved shows Resolved and Closed tickets. Active is the default.
+- The list has two scopes. Active shows tickets that are Open, In Progress or Waiting for Customer. Resolved shows Resolved and Closed tickets. Active is the default.
 - Lists are paginated: 20 per page by default, never more than 100 per page. Filters stay in the page links.
 
 **Filters** (all optional and combinable)
 - Ticket number: matches numbers that start with what was typed, in any letter case.
-- Keyword: searches the subject and the description. Each word matches words that start with it (for example "print" finds "printer"), except words shorter than three characters, which must match exactly. At most 10 words are used, up to 200 characters are accepted, and search operator characters such as quotes, plus, minus and asterisks are stripped so typing them cannot change how the search behaves. Where full-text search is not available, a plain "contains" match is used instead.
+- Keyword: searches the subject and the description. Each word matches words that start with it (for example "print" finds "printer"). Words shorter than three characters are ignored by the search, because the database does not index words that short. At most 10 words are used, up to 200 characters are accepted, and search operator characters such as quotes, plus, minus and asterisks are stripped so typing them cannot change how the search behaves. Where full-text search is not available, a plain "contains" match is used instead.
 - Status and priority: one or several values. The status choices offered depend on the scope.
 - Category, assigned agent, customer: by id. A "no agent" option shows only unassigned tickets.
 - Created from and to: calendar dates inclusive of both days, interpreted in the business time zone. The end date cannot be before the start date.
@@ -336,11 +354,11 @@ The ticket list can be narrowed and sorted. It always shows only tickets the vie
 **What the page offers**
 - The filter form offers the statuses for the current scope, priorities, SLA states, sorts and active categories. Staff also get a list of agents to filter by and the customer and agent filters; customers do not see those.
 
-## SLA escalation (P4)
-A background scan runs every minute and raises the escalation level of tickets whose SLA clock is running out. The scan only ever raises a level. The level is lowered elsewhere: when a ticket leaves Waiting for customer or its priority changes, the deadlines are recalculated and the level drops if the ticket is no longer close to its new deadline, so it can escalate again later.
+## SLA escalation
+A background scan runs every minute and raises the escalation level of tickets whose SLA clock is running out. The scan only ever raises a level. The level is lowered elsewhere: when a ticket leaves Waiting for Customer or its priority changes, the deadlines are recalculated and the level drops if the ticket is no longer close to its new deadline, so it can escalate again later.
 
 **Which tickets are scanned**
-- Only active tickets whose SLA clock is running. Tickets whose clock is paused (Waiting for customer), and resolved or closed tickets, are never escalated.
+- Only active tickets whose SLA clock is running. Tickets whose clock is paused (Waiting for Customer), and resolved or closed tickets, are never escalated.
 - Approaching: the warning time has passed but the due time has not. The ticket moves to the "approaching" level.
 - Breached: the due time has passed. The ticket moves to the "breached" level and the moment of escalation is recorded on it. A ticket that was never flagged as approaching (for example because the scan was down) goes straight to breached.
 - A ticket is escalated once per level. Scanning it again changes nothing and sends nothing, and two scans running at once cannot escalate the same ticket twice. Scans do not overlap and run on only one server at a time.
@@ -349,7 +367,7 @@ A background scan runs every minute and raises the escalation level of tickets w
 - The timeline gets an entry, with no person attached because the system did it: "SLA approaching" or "escalated", with the due time.
 - Notifications go out (see Notifications and inbox): approaching warns the assigned agent, or the admins when nobody is assigned; breached tells the assigned agent and all admins.
 
-## Notifications and inbox (P4)
+## Notifications and inbox
 People are told about ticket events by email and in an in-app inbox. Every notification is sent in the background after the change has been saved, so a failed save never produces a message.
 
 **Who is told what**
@@ -361,7 +379,7 @@ People are told about ticket events by email and in an in-app inbox. Every notif
 - SLA approaching and breached: see SLA escalation.
 - An import finishes: the admin who started it is told how many tickets were imported and how many rows failed, by inbox only, with a link to the import.
 - Tickets created by a CSV import send no creation notifications.
-- The same person is never notified twice for one event, and the person who caused the event is left out.
+- The same person is never notified twice for one event, and the person who caused the event is not notified about their own action. The only exception is the confirmation a customer receives for a ticket they opened themselves.
 
 **Channels**
 - Ticket notifications go by email and into the inbox. Internal notes and import results go to the inbox only. Each notification has a title, a short text and a link to the ticket (or the import); a ticket notification carries the ticket number. Deadlines in messages are shown in the business time zone.
@@ -370,7 +388,7 @@ People are told about ticket events by email and in an in-app inbox. Every notif
 - Anyone who can view tickets (customers see their own, staff see all) has an inbox of their own notifications, newest first, 20 per page (up to 100). It can be limited to unread ones. The unread count is shown across the application.
 - A user can mark one notification read or mark all read. Marking someone else's notification is answered with "not found", so notifications can never be read or changed across users.
 
-## CSV ticket import (P4)
+## CSV ticket import
 Administrators can bring existing tickets in from a CSV file. The import runs in the background, so large files do not block the page, and its progress can be followed on screen or through the API. Only people with the import permission can start or view imports, and uploads are limited to 20 per minute per user.
 
 **The file**
@@ -387,7 +405,7 @@ Administrators can bring existing tickets in from a CSV file. The import runs in
 - A row with the wrong number of columns is rejected.
 
 **What an imported ticket gets**
-- It receives a normal ticket number, counted in the year of its created-at date, and its SLA clock starts from that created-at date, so an old ticket may already be approaching or breached when it arrives. Waiting for customer starts paused; Resolved and Closed get their resolved (and closed) time set to the time of import and have no running SLA.
+- It receives a normal ticket number, counted in the year of its created-at date, and its SLA clock starts from that created-at date, so an old ticket may already be approaching or breached when it arrives. Waiting for Customer starts paused; Resolved and Closed get their resolved (and closed) time set to the time of import and have no running SLA.
 - It is created by the importing admin on behalf of the customer, is not auto-assigned and sends no creation notifications. Its timeline shows that it was imported.
 
 **Progress and result**
@@ -395,7 +413,7 @@ Administrators can bring existing tickets in from a CSV file. The import runs in
 - Each rejected row is stored with its line number, the reasons and the original values. The error list can be paged through, and downloaded as a CSV that repeats the original columns beside the reasons. Cells that could start a spreadsheet formula are neutralised in that download.
 - When the import ends, the admin who started it is notified.
 
-## Categories and holidays administration (P4)
+## Categories and holidays administration
 Administrators with the matching permission maintain the lists that drive ticket handling. Everyone else gets "forbidden".
 
 **Categories**
@@ -409,11 +427,11 @@ Administrators with the matching permission maintain the lists that drive ticket
 - The list shows one year at a time, in date order, 50 per page; the current year in the business time zone is the default, and years from 2000 to 2100 are accepted.
 - Adding, changing or removing a holiday takes effect immediately for SLA calculation: the cached list of holidays used by the business calendar is cleared. Deadlines already stored on existing tickets are not recalculated.
 
-## Dashboard statistics (P4)
+## Dashboard statistics
 Agents and admins have a dashboard; customers do not, and anyone without access gets "forbidden". People who can open it are sent there when they open the home page.
 
 **Totals** (for all tickets, not only the viewer's)
-- Open: active tickets (Open, In progress, Waiting for customer).
+- Open: active tickets (Open, In Progress, Waiting for Customer).
 - Unassigned: active tickets with no agent.
 - Critical: active tickets with critical priority.
 - Breached: active tickets with a running SLA clock past their due time. Approaching: running tickets past their warning time but not yet due. Paused tickets are in neither.
@@ -429,10 +447,39 @@ Agents and admins have a dashboard; customers do not, and anyone without access 
 **Freshness**
 - The totals and breakdowns are shared by all viewers and kept for 60 seconds, so they can lag behind reality by up to a minute. The viewer's own ticket list is always current.
 
-## Security and performance (T14)
-_Pending._
+## Security and performance
+**Who can do what**
+Every action on tickets, replies, attachments and the admin areas is decided by a policy that combines the user's permissions with ownership: a customer only deals with their own tickets, an agent with what their permissions and assignments allow. The same rules apply on the web and through the API.
 
-## Password reset (P2)
+**Hiding what a customer may not see**
+When a customer is not allowed to view a ticket, the answer is "not found", never "forbidden", so the existence of other people's tickets is not revealed. Staff who can see a ticket but lack a specific permission get a normal "forbidden" for that action.
+
+**Internal notes**
+Internal replies and internal attachments are visible only to users with the internal-notes permission. A customer who asks for one directly gets "not found". Customers never receive them in ticket pages, API responses, notifications or the activity history.
+
+**Uploads**
+- Files are stored on a private disk, never in a publicly served folder, under a random generated name, so the original name cannot be guessed or used to overwrite anything. The original name is kept only for display and download.
+- Only the allowed file types are accepted: pdf, png, jpg, jpeg, gif, txt, csv, doc, docx, xls, xlsx and zip. The check looks at the extension and the real content type of the file, not only its name.
+- By default a single file may be up to 10 MB and one ticket or reply may carry up to 5 files. Both limits are configurable. A request that breaks a limit is rejected and nothing is stored; if storing fails part-way, the files already written are removed.
+- Downloads go through a check of the same rules as viewing the ticket, so internal attachments stay hidden from customers. The file is sent as a download with its original name, the stored content type and a header that stops browsers from guessing a different type.
+
+**Rate limits**
+- API requests: 60 per minute, counted per signed-in user (per address when not signed in).
+- Uploads: 20 per minute per user, applied to creating a ticket, posting a reply and uploading an import file, on the web and through the API.
+- API token requests: 5 per minute per email and address combination.
+- Login, password-reset requests and password resets: 5 per minute.
+Going over a limit returns a "too many requests" response.
+
+**API documentation**
+The interactive API documentation is available to signed-in users who may manage users, which in practice means administrators. In the local environment it is open to everyone.
+
+**Query efficiency**
+Loading a related record on demand is blocked outside production, so a page that would run one query per row fails during development and testing instead of quietly slowing down. Ticket, user and notification lists run the same number of queries whether they show a few rows or many, and every list is paginated with a capped page size of 100.
+
+**Indexes**
+The tickets table has indexes for the common filters and for the SLA checks: status with due date, status with warning date, assignee with status, customer with creation date, category with status, priority with status, status with resolution date, creation date, and last update; ticket numbers and external references are unique; subject and description have a full-text index for search. These indexes exist, but it has not yet been shown by an execution-plan check that the filtered staff lists and the SLA scan actually use their dedicated indexes: the database currently prefers the creation-date index or a walk of the primary key. Treat the speed-up for those two paths as unverified.
+
+## Password reset
 Guests who forgot their password can set a new one through a link sent by email. The login page has a "Forgot password?" link to the request page.
 
 **Requesting a link**
@@ -449,7 +496,7 @@ Guests who forgot their password can set a new one through a link sent by email.
 - On success the password is replaced, the "remember me" login is invalidated, and every API token of that user is revoked, so old devices must sign in again. The user is sent to the login page with the message "Your password has been reset. You can log in now." They are not signed in automatically.
 - Reset attempts are limited to 5 per minute from the same address.
 
-## User and role management (P2)
+## User and role management
 Admins manage accounts from an admin users page and from the matching API. Only users who hold the user-management permission (admins) can open any of it; everyone else is refused. Accounts are never deleted, so there is no delete option.
 
 **Listing users**
@@ -472,7 +519,7 @@ Admins manage accounts from an admin users page and from the matching API. Only 
 - An admin cannot change their own role, so an admin cannot lock themselves out by accident. The attempt is refused with a clear error.
 - When a role really changes, all of the user's API tokens are revoked, because tokens carry the permissions the user had when they were issued. A user who stops being an agent also loses their category assignments.
 
-## Permission matrix (P2)
+## Permission matrix
 Admins can open a read-only page, and an API list, showing the three fixed roles (admin, agent, customer) in that order, with the permissions each one has.
 - The page shows a table of every permission against every role, with a mark where the role has it.
 - It reflects what was granted when the system was set up. Roles and permissions cannot be created, edited or removed from the application.

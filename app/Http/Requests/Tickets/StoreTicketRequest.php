@@ -39,7 +39,7 @@ final class StoreTicketRequest extends FormRequest
                 ? ['required', 'string', 'email', $this->mustBeCustomer()]
                 : ['prohibited'],
             'attachments' => ['sometimes', 'array', 'max:'.(int) config('attachments.max_files', 5)],
-            'attachments.*' => [File::types($extensions)->max((int) config('attachments.max_kb', 10240))],
+            'attachments.*' => [File::types($extensions)->extensions($extensions)->max((int) config('attachments.max_kb', 10240))],
         ];
     }
 

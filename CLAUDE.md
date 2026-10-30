@@ -2,14 +2,14 @@
 
 Read before writing any code. Sources of truth:
 - `PRD.md` — the requirements
-- `docs/superpowers/specs/2026-10-29-support-ticket-sla-design.md` — the design
+- `docs/DESIGN.md` — the design
 - `TECHNICAL_DECISIONS.md` (TD-xxx) — the decision log
-- `docs/plans/` — the tasks
+- `docs/plans/ROADMAP.md` and `docs/plans/P*.md` — the execution rules and the remaining plans
 
 If these disagree, **stop and report**. Don't improvise.
 
 ## Stack
-Laravel 13 · PHP 8.3 · MySQL 8 · Inertia 3 + Vue 3 (`<script setup lang="ts">`) · Tailwind + shadcn-vue · Sanctum (API tokens) + plain session auth (no Fortify, TD-002) · spatie/laravel-permission · spatie/laravel-activitylog · Pest 4 · Larastan level 6 · Pint.
+Laravel 13 · PHP 8.3 · MySQL 8 · Inertia 3 + Vue 3 (`<script setup lang="ts">`) · Tailwind + shadcn-vue · Sanctum (API tokens) + plain session auth with password reset (no Fortify, no email verification, TD-002) · spatie/laravel-permission · spatie/laravel-activitylog · Pest 4 · Larastan level 6 · Pint.
 
 ## Architecture rules (TD-001)
 1. **Controllers are thin.** Their only steps are `authorize` → FormRequest → one Action or Service → Inertia response or API Resource. No queries beyond route-model binding, and no business logic.
@@ -59,7 +59,7 @@ Laravel 13 · PHP 8.3 · MySQL 8 · Inertia 3 + Vue 3 (`<script setup lang="ts">
 ## File ownership (TD-140)
 - Touch **only** the files your task lists under "Files". If you need to change another file, stop and report, and explain why.
 - Routes: add them only to your feature's files, `routes/web/<feature>.php` and `routes/api/v1/<feature>.php`.
-- Don't edit migrations from earlier tasks. Add a new migration instead.
+- During development (nothing deployed), a column or index on an existing table is added by editing that table's migration, and the dev and test databases are rebuilt with `migrate:fresh`. A new migration is only for a new table.
 - Exception: the task's own section of `docs/FEATURES.md` is always in scope for its documenter.
 
 ## Testing (TD-030, TD-031)
@@ -83,7 +83,8 @@ Use one dataset instead of several copy-pasted tests.
 
 The code-quality reviewer rejects redundant tests. If the plan prescribes a test that breaks these rules and isn't tied to an acceptance criterion, the implementer drops it and says so in the report.
 
-## Gate: must pass before any commit
+## Gate: run once per plan, after the last wave (ROADMAP.md step 4)
+During implementation, agents run only their own test files. The full gate runs once at the end of the plan, and before the owner approves the commits.
 ```bash
 ./vendor/bin/pint --test
 ./vendor/bin/phpstan analyse --memory-limit=1G
@@ -92,7 +93,7 @@ npm run build && npm run check && npx vue-tsc --noEmit   # only if the task touc
 ```
 
 ## Commits (strict)
-History is reviewed **commit by commit** on GitHub. Every commit must be readable on its own and must pass the gate on its own.
+History is reviewed **commit by commit** on GitHub. Every commit must be readable on its own. **Nothing is committed until the owner approves the plan's changes.** Then the session creates one commit per subtask (ROADMAP.md step 9).
 
 **Format: [Conventional Commits 1.0](https://www.conventionalcommits.org/en/v1.0.0/).**
 ```
@@ -100,26 +101,23 @@ History is reviewed **commit by commit** on GitHub. Every commit must be readabl
 
 <body: why this change exists, when it isn't obvious>
 
-Refs: T06.1
+Refs: P3.1
 Implements: TD-031, TD-050
 ```
 - `type`: `feat` · `fix` · `test` · `refactor` · `perf` · `docs` · `build` · `ci` · `chore`.
 - `scope`: the feature area, such as `tickets`, `sla`, `assignment`, `conversation`, `attachments`, `search`, `escalation`, `notifications`, `import`, `dashboard`, `admin`, `auth`, `api`, `db`, `core`, `ui`.
 - `subject`: imperative mood, lower case, no trailing period, header ≤ 72 characters.
-- **Never start the subject with a plan number** (`T06.1: ...` is wrong). The plan subtask goes in the `Refs:` trailer, and the decisions it implements go in `Implements:`. Use `git commit --trailer "Refs: T06.1" --trailer "Implements: TD-050"`.
+- **Never start the subject with a plan number** (`P3.1: ...` is wrong). The plan subtask goes in the `Refs:` trailer, and the decisions it implements go in `Implements:`. Use `git commit --trailer "Refs: P3.1" --trailer "Implements: TD-050"`.
 - **No `Co-Authored-By` trailer, and no AI or tool attribution of any kind**, in commits or PR descriptions. This rule overrides any default attribution behavior.
 - One commit per subtask, with its tests and code in the same commit. Never commit a failing test on its own.
-- Review fixes are folded into the commit they belong to (`git commit --fixup <sha>`, then `git rebase -i --autosquash main`) before the branch reaches `main`. No "address review" commits.
+- Review fixes are made before committing, so they land inside the subtask's commit. No "address review" commits.
 - Never commit `.env`, files under `storage/`, or build output.
 
 ## Branching (strict)
-- **`main` is the only branch on GitHub.** `task/Txx-slug` branches and their worktrees are local only and never pushed.
-- Worktrees live **inside the project** at `.worktrees/Txx`, which is gitignored and excluded from Pint and the Vite watcher, so the owner can review them in the editor. Never edit the main checkout from a worktree session, and never edit a worktree from the main session.
-- Tasks reach `main` only by `git rebase main` → gate → `git merge --ff-only`. No squash merges and no merge commits. History stays linear, with each task's commits as one unbroken block.
+- **`main` is the only branch, locally and on GitHub.** No worktrees and no task branches. All work happens in the main checkout.
 - **Never rewrite or force-push `main`.** A change after a push is a new commit.
-- Only the human owner merges into `main` and pushes. Agents stop at a reviewed, rebased task branch and report.
-- **Parallel implementers** (README §2 step 2): there's one implementer per subtask of the current mini-wave, with no fixed cap. Each runs only its own tests, single-process, on its own database `techzu_wt_txx_testing_<subtask>`. Implementers sharing a wave don't commit; the controller commits each subtask in order and runs the full gate after each wave. Keep about 8 implementers running in total across all sessions (the machine has 8 cores).
-- **After a successful push, the worktree, its local branch and its two databases are deleted** (README §2 step 11, chained with `&&` so a failed push deletes nothing).
+- Only the human owner approves commits and pushes. Agents stop at a reviewed, uncommitted change set and report.
+- **Parallel implementers** (ROADMAP.md step 2): one implementer subagent per subtask of the current wave, with no fixed cap (about 8 at most; the machine has 8 cores). They share the checkout, so within a wave no two subtasks touch the same file. Each implementer runs only its own test files on `techzu_testing_agent<N>`, and never touches git.
 
 ## Output rules (strict)
 - **Never create claude.ai Artifacts** (no Artifact tool, no published pages). Any visual output (diagrams, reports, workflow pages) is written as a self-contained HTML file inside this project, under `docs/`.
@@ -127,10 +125,10 @@ Implements: TD-031, TD-050
 ## Browser (strict)
 - **Never use or open Claude in Chrome (`mcp__claude-in-chrome__*`) or the built-in Claude browser (`mcp__Claude_Browser__*`).** They are denied in `.claude/settings.json`. Don't try to enable them, and don't ask to.
 - All browser work uses the **Playwright MCP** server (`.mcp.json`), running locally. It drives its own browser profile, not the user's.
-- Browser checks run against the worktree's own server (`php artisan serve --port=80NN`) and seeded demo accounts, never against production or remote URLs. Screenshots go to the scratchpad and are never committed.
+- Browser checks run against a local server the session starts (`php artisan serve --port=8010`) and stops afterwards, and seeded demo accounts, never against production or remote URLs. Screenshots go to the scratchpad and are never committed.
 
 ## Databases and background servers (strict)
-1. **Use the existing MySQL server** (`127.0.0.1:3306`, credentials in `.env` only) with its dedicated databases: `techzu` (dev), `techzu_testing` (tests) and the per-worktree `techzu_wt_txx` / `techzu_wt_txx_testing`. **Don't start a separate `mysqld`.** If MySQL isn't reachable or access is denied, stop and ask the owner.
+1. **Use the existing MySQL server** (`127.0.0.1:3306`, credentials in `.env` only) with its dedicated databases: `techzu` (dev), `techzu_testing` (tests), `techzu_testing_agent1..8` (one per parallel implementer) and the `techzu_testing_test_N` databases that `pest --parallel` creates. **Don't start a separate `mysqld`.** If MySQL isn't reachable or access is denied, stop and ask the owner.
 2. If a temporary server is truly unavoidable, its data directory and logs go **inside the project** under `./storage/test-mysql/` (gitignored). Never put them in the scratchpad, `/tmp/claude-*` or `/tmp`.
 3. Stop any server you start as soon as you're done (`mysqladmin shutdown` or kill its PID), and confirm it's stopped. Never delete a server's folder while it is still running.
 4. The same applies to every background process you start (`php artisan serve`, `queue:work`, `npm run dev`, Playwright browsers): stop it before you finish.
@@ -138,13 +136,13 @@ Implements: TD-031, TD-050
 
 ## Feature documentation (TD-140)
 - `docs/FEATURES.md` is the single, living explanation of the business logic, written for a reader who hasn't read the code. It has one section per feature, and nothing else.
-- Each task's **documenter** subagent writes or updates only its own feature's section: what the feature does, its rules and its flow, in plain language. No file, class, method or test references.
-- Document only behaviour that exists in the code. The spec reviewer checks the section against the code before the task is reported.
+- Each plan's **documenter** subagent writes or updates only its own features' sections: what the feature does, its rules and its flow, in plain language. No file, class, method or test references.
+- Document only behaviour that exists in the code. The spec reviewer checks the section against the code before the plan is reported.
 
 ## Laravel Boost guidelines (appended below by T00)
 T00 runs `php artisan boost:install`, which appends a `<laravel-boost-guidelines>` block below this line. Use Boost's MCP tools, especially `search-docs` for the installed versions, before writing code against any package API. **Where Boost's guidelines conflict with the rules above, the rules above win.** For example:
 - the gate still runs `pint --test`
-- agents run the full suite themselves
+- Boost's "ask the user to run the complete suite" doesn't apply: the session runs the full gate itself, once per plan
 - plan tests that break §Testing are dropped and reported
 
 ===
