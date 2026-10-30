@@ -2,6 +2,7 @@
 import { Head, Link, router } from '@inertiajs/vue3';
 import { Pencil, Plus, Tags } from '@lucide/vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
+import TableCard from '@/components/admin/TableCard.vue';
 import EmptyState from '@/components/EmptyState.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import ResourcePagination from '@/components/ResourcePagination.vue';
@@ -61,7 +62,7 @@ function remove(category: AdminCategory): void {
         </EmptyState>
 
         <template v-else>
-            <div class="overflow-x-auto rounded-md border">
+            <TableCard>
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -161,7 +162,7 @@ function remove(category: AdminCategory): void {
                         </TableRow>
                     </TableBody>
                 </Table>
-            </div>
+            </TableCard>
             <ResourcePagination
                 :links="categories.links"
                 :meta="categories.meta"

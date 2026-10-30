@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import { Check, Minus } from '@lucide/vue';
+import TableCard from '@/components/admin/TableCard.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import {
     Table,
@@ -48,7 +49,7 @@ const grants = (role: RolePermissions, permission: string): boolean =>
             </template>
         </PageHeader>
 
-        <div class="overflow-x-auto rounded-md border">
+        <TableCard>
             <Table>
                 <TableHeader>
                     <TableRow>
@@ -100,6 +101,6 @@ const grants = (role: RolePermissions, permission: string): boolean =>
                     </TableRow>
                 </TableBody>
             </Table>
-        </div>
+        </TableCard>
     </div>
 </template>

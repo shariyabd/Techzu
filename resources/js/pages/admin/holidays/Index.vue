@@ -8,6 +8,7 @@ import {
     Plus,
 } from '@lucide/vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
+import TableCard from '@/components/admin/TableCard.vue';
 import EmptyState from '@/components/EmptyState.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import ResourcePagination from '@/components/ResourcePagination.vue';
@@ -85,7 +86,7 @@ function remove(holiday: HolidayItem): void {
         </EmptyState>
 
         <template v-else>
-            <div class="overflow-x-auto rounded-md border">
+            <TableCard>
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -146,7 +147,7 @@ function remove(holiday: HolidayItem): void {
                         </TableRow>
                     </TableBody>
                 </Table>
-            </div>
+            </TableCard>
             <ResourcePagination
                 :links="holidays.links"
                 :meta="holidays.meta"

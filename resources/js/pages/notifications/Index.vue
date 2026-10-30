@@ -6,7 +6,6 @@ import EmptyState from '@/components/EmptyState.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import ResourcePagination from '@/components/ResourcePagination.vue';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Spinner } from '@/components/ui/spinner';
 import { formatDateTime, formatRelative } from '@/lib/format';
 import { index, read, readAll } from '@/routes/notifications';
@@ -108,7 +107,7 @@ function markAll(): void {
 
         <nav
             aria-label="Filter notifications"
-            class="inline-flex w-fit rounded-md border bg-muted p-0.5"
+            class="inline-flex w-fit rounded-lg border bg-card p-0.5 shadow-xs"
         >
             <Link
                 v-for="tab in tabs"
@@ -117,9 +116,9 @@ function markAll(): void {
                 preserve-state
                 :aria-current="tab.active ? 'page' : undefined"
                 :class="[
-                    'rounded px-3 py-1.5 text-sm font-medium',
+                    'rounded-md px-3 py-1.5 text-sm font-medium',
                     tab.active
-                        ? 'bg-background shadow-xs'
+                        ? 'bg-primary text-primary-foreground'
                         : 'text-muted-foreground hover:text-foreground',
                 ]"
                 >{{ tab.label }}</Link
@@ -139,63 +138,60 @@ function markAll(): void {
             "
         />
 
-        <Card v-else class="py-0">
-            <CardContent class="px-0">
-                <ul class="divide-y">
-                    <li
-                        v-for="item in items.data"
-                        :key="item.id"
-                        class="flex items-start gap-3 px-4 py-3"
+        <ul v-else class="flex flex-col gap-2">
+            <li
+                v-for="item in items.data"
+                :key="item.id"
+                :class="[
+                    'flex items-start gap-3 rounded-xl border px-4 py-3 shadow-xs',
+                    item.read_at === null
+                        ? 'bg-tint-green text-tint-green-foreground'
+                        : 'bg-card',
+                ]"
+            >
+                <span
+                    :class="[
+                        'mt-2 size-2 shrink-0 rounded-full',
+                        item.read_at === null ? 'bg-primary' : 'bg-transparent',
+                    ]"
+                    aria-hidden="true"
+                />
+                <button
+                    type="button"
+                    class="min-w-0 flex-1 rounded-sm text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    @click="open(item)"
+                >
+                    <span
+                        :class="[
+                            'block text-sm break-words',
+                            item.read_at === null ? 'font-semibold' : '',
+                        ]"
+                        >{{ item.title }}</span
                     >
-                        <span
-                            :class="[
-                                'mt-2 size-2 shrink-0 rounded-full',
-                                item.read_at === null
-                                    ? 'bg-primary'
-                                    : 'bg-transparent',
-                            ]"
-                            aria-hidden="true"
-                        />
-                        <button
-                            type="button"
-                            class="min-w-0 flex-1 rounded-sm text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                            @click="open(item)"
-                        >
-                            <span
-                                :class="[
-                                    'block text-sm break-words',
-                                    item.read_at === null
-                                        ? 'font-semibold'
-                                        : '',
-                                ]"
-                                >{{ item.title }}</span
-                            >
-                            <span
-                                class="block text-sm break-words text-muted-foreground"
-                                >{{ item.body }}</span
-                            >
-                            <time
-                                :datetime="item.created_at ?? undefined"
-                                :title="formatDateTime(item.created_at)"
-                                class="block pt-0.5 text-xs text-muted-foreground"
-                                >{{ formatRelative(item.created_at) }}</time
-                            >
-                        </button>
-                        <Button
-                            v-if="item.read_at === null"
-                            variant="ghost"
-                            size="sm"
-                            class="shrink-0"
-                            :disabled="busy !== null"
-                            @click="markRead(item)"
-                        >
-                            <Spinner v-if="busy === item.id" />
-                            Mark read
-                        </Button>
-                    </li>
-                </ul>
-            </CardContent>
-        </Card>
+                    <span
+                        class="block text-sm break-words text-muted-foreground"
+                        >{{ item.body }}</span
+                    >
+                    <time
+                        :datetime="item.created_at ?? undefined"
+                        :title="formatDateTime(item.created_at)"
+                        class="block pt-0.5 text-xs text-muted-foreground"
+                        >{{ formatRelative(item.created_at) }}</time
+                    >
+                </button>
+                <Button
+                    v-if="item.read_at === null"
+                    variant="ghost"
+                    size="sm"
+                    class="shrink-0"
+                    :disabled="busy !== null"
+                    @click="markRead(item)"
+                >
+                    <Spinner v-if="busy === item.id" />
+                    Mark read
+                </Button>
+            </li>
+        </ul>
 
         <ResourcePagination
             :links="items.links"

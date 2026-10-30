@@ -2,6 +2,7 @@
 import { Head, setLayoutProps, usePoll } from '@inertiajs/vue3';
 import { CheckCircle2, Download } from '@lucide/vue';
 import { computed, watch, watchEffect } from 'vue';
+import TableCard from '@/components/admin/TableCard.vue';
 import EmptyState from '@/components/EmptyState.vue';
 import ImportStatusBadge from '@/components/imports/ImportStatusBadge.vue';
 import PageHeader from '@/components/PageHeader.vue';
@@ -151,7 +152,7 @@ const subjectOf = (error: TicketImportErrorItem): string =>
                     title="No rejected rows"
                 />
                 <template v-else>
-                    <div class="overflow-x-auto rounded-md border">
+                    <TableCard>
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -193,7 +194,7 @@ const subjectOf = (error: TicketImportErrorItem): string =>
                                 </TableRow>
                             </TableBody>
                         </Table>
-                    </div>
+                    </TableCard>
                     <ResourcePagination
                         :links="importErrors.links"
                         :meta="importErrors.meta"

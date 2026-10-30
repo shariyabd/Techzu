@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import { FileUp, Plus } from '@lucide/vue';
+import TableCard from '@/components/admin/TableCard.vue';
 import EmptyState from '@/components/EmptyState.vue';
 import ImportStatusBadge from '@/components/imports/ImportStatusBadge.vue';
 import PageHeader from '@/components/PageHeader.vue';
@@ -53,7 +54,7 @@ defineProps<{ imports: Paginated<TicketImportItem> }>();
         </EmptyState>
 
         <template v-else>
-            <div class="overflow-x-auto rounded-md border">
+            <TableCard>
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -113,7 +114,7 @@ defineProps<{ imports: Paginated<TicketImportItem> }>();
                         </TableRow>
                     </TableBody>
                 </Table>
-            </div>
+            </TableCard>
             <ResourcePagination
                 :links="imports.links"
                 :meta="imports.meta"
