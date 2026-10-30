@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use App\Console\Commands\ScanSlaCommand;
 use App\Enums\EscalationLevel;
 use App\Enums\TicketStatus;
 use App\Events\TicketSlaApproaching;
@@ -110,7 +109,7 @@ it('re-checks under the row lock, so a ticket paused mid-scan is not escalated',
     $ticket = scanTicket(['sla_warning_at' => scanNow()->subHours(2), 'sla_due_at' => scanNow()->subHour()]);
     $chunkQueries = 0;
     DB::listen(function (QueryExecuted $query) use ($ticket, &$chunkQueries): void {
-        if (! str_contains($query->sql, 'limit '.ScanSlaCommand::CHUNK_SIZE)) {
+        if (! str_contains($query->sql, 'limit '.(int) config('sla.scan_chunk_size'))) {
             return;
         }
         if (++$chunkQueries === 2) {
@@ -129,7 +128,7 @@ it('re-checks under the row lock, so a ticket paused mid-scan is not escalated',
 });
 
 it('escalates every ticket when there is more than one chunk', function (): void {
-    $count = ScanSlaCommand::CHUNK_SIZE + 1;
+    $count = (int) config('sla.scan_chunk_size') + 1;
     Ticket::factory()
         ->count($count)
         ->recycle(User::factory()->customer()->create())

@@ -17,7 +17,7 @@ final class IndexNotificationsRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:'.(int) config('tickets.per_page.max', 100)],
             'page' => ['sometimes', 'integer', 'min:1'],
             'unread' => ['sometimes', 'boolean'],
         ];
@@ -25,7 +25,7 @@ final class IndexNotificationsRequest extends FormRequest
 
     public function perPage(): int
     {
-        return $this->integer('per_page', 20);
+        return $this->integer('per_page', (int) config('tickets.per_page.default', 20));
     }
 
     public function unreadOnly(): bool
