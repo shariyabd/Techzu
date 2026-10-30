@@ -9,6 +9,7 @@ const items: NavItem[] = [
         icon: Ticket,
         order: 20,
         group: 'support',
+        railKey: 'tickets',
         visible: () => true,
     },
 ];

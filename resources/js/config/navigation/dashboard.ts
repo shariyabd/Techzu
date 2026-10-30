@@ -9,6 +9,7 @@ const items: NavItem[] = [
         icon: LayoutGrid,
         order: 10,
         group: 'support',
+        railKey: 'dashboard',
         visible: (page) => page.auth.can.viewDashboard,
     },
 ];
