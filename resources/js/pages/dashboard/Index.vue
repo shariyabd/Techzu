@@ -37,6 +37,7 @@ defineOptions({
 
 const props = defineProps<{
     stats: DashboardStats;
+    resolvedWindowDays: number;
     myTickets: TicketListItem[];
 }>();
 
@@ -82,7 +83,7 @@ const cards = computed(() => [
         tone: 'warning' as const,
     },
     {
-        label: 'Resolved (30 days)',
+        label: `Resolved (${props.resolvedWindowDays} days)`,
         value: props.stats.totals.resolved,
         href: ticketsIndex({ query: { scope: 'resolved' } }),
         icon: CheckCircle2,

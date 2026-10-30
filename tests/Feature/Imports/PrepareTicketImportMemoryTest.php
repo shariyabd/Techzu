@@ -48,6 +48,8 @@ it('prepares a 10,000-row file in constant memory and batches it by record range
             && $batch->queue() === 'imports'
             && $batch->allowsFailures()
             && [$first->startLine, $first->endLine] === [1, 500]
-            && [$last->startLine, $last->endLine] === [9501, 10000];
+            && [$last->startLine, $last->endLine] === [9501, 10000]
+            && $first->startOffset > 0
+            && $last->startOffset > $first->startOffset;
     });
 });

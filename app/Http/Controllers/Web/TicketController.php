@@ -73,12 +73,20 @@ final class TicketController extends Controller
         $user = $this->user($request);
         $this->pages->loadForShow($ticket, $user);
         $can = TicketResource::abilities($user, $ticket);
+        $repliesPages = $this->pages->clampPages($request->integer('replies_pages', 1));
+        $activitiesPages = $this->pages->clampPages($request->integer('activities_pages', 1));
+        $replies = $this->pages->replies($ticket, $user, $repliesPages);
+        $activities = $this->pages->activities($ticket, $user, $activitiesPages);
 
         return Inertia::render('tickets/Show', [
             'ticket' => TicketResource::make($ticket)->resolve($request),
-            'replies' => TicketReplyResource::collection($ticket->replies)->resolve($request),
+            'replies' => TicketReplyResource::collection($replies['items'])->resolve($request),
+            'repliesHasMore' => $replies['has_more'],
+            'repliesPages' => $repliesPages,
+            'activitiesPages' => $activitiesPages,
             'attachments' => AttachmentResource::collection($ticket->attachments)->resolve($request),
-            'activities' => ActivityResource::collection($this->pages->activities($ticket, $user))->resolve($request),
+            'activities' => ActivityResource::collection($activities['items'])->resolve($request),
+            'activitiesHasMore' => $activities['has_more'],
             'agents' => $can['assign'] ? $this->pages->agentOptions() : [],
             'can' => $can,
             'options' => $this->pages->formOptions(),

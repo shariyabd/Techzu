@@ -51,7 +51,7 @@ final class TicketController extends Controller
     {
         Gate::authorize('view', $ticket);
 
-        return TicketResource::make($this->pages->loadSummary($ticket));
+        return TicketResource::make($this->pages->loadForShow($ticket, $this->user($request)))->withAttachments();
     }
 
     public function update(UpdateTicketRequest $request, Ticket $ticket, UpdateTicket $updateTicket): TicketResource

@@ -311,16 +311,18 @@ Each index exists to serve a named query:
 | `tickets(external_reference)` unique | CSV de-duplication |
 | `ticket_replies(ticket_id, is_internal, created_at)` | conversation timeline with internal notes filtered out |
 | `activity_log(subject_type, subject_id, created_at)` | ticket activity timeline (added on top of the package's defaults) |
+| `activity_log(created_at)` | chunked retention prune (`activity:prune`) |
 | `attachments(ticket_id, is_internal)` | attachment list with visibility |
 | `users(is_available)` + package's `model_has_roles(role_id, model_id, model_type)` | finding eligible agents |
 | `agent_category(category_id, user_id)` | agents per category |
-| `notifications(notifiable_type, notifiable_id, read_at)` | unread count (framework default plus `read_at`) |
+| `notifications(notifiable_type, notifiable_id, created_at)` | inbox page (newest first, no filesort) and unread count and filter |
+| `notifications(read_at, created_at)` | chunked prune of old read notifications (`notifications:prune`) |
 
 **Why.** Indexes cost write throughput and storage, so each one must be justified by a query that the plan's tests or the dashboard exercises. Composite indexes put the equality column (`status`) first and the range column (time) second.
 
 **Alternatives rejected.** *Indexing every foreign key and filter column individually.* MySQL would often pick one single-column index and then filter the rest, which is worse for the combined `status + time` predicates our hot queries use.
 
-**Trade-offs.** Nine secondary indexes on `tickets` slow inserts a little; that's negligible compared with the read volume of a help desk. An `EXPLAIN` audit test runs the real endpoints and the escalation scan and confirms each query uses its index.
+**Trade-offs.** Nine secondary indexes on `tickets` slow inserts a little; that's negligible compared with the read volume of a help desk. An `EXPLAIN` audit test (`tests/Feature/Performance/IndexUsageTest.php`) runs the real endpoints and the escalation scan and confirms each query uses its index. The inbox and unread count are served by the `(notifiable_type, notifiable_id, created_at)` index; the separate `(read_at, created_at)` index exists only for the prune command.
 
 ---
 
@@ -442,7 +444,7 @@ Each index exists to serve a named query:
 - Migration adds an index `activity_log(subject_type, subject_id, created_at)` for the timeline query.
 
 **Why.**
-- A standard, well-known package for storage, the causer/subject relations, and retention (`activitylog:clean`). We don't maintain our own table, model or cleanup command.
+- A standard, well-known package for storage and the causer/subject relations. We don't maintain our own table or model; retention is our chunked `activity:prune` command.
 - Explicit logging from listeners keeps the business-level timeline the PRD asks for. Every Action produces history automatically through its events.
 - The same log can be reused for non-ticket auditing (user role changes, category edits) at no extra cost.
 
@@ -453,7 +455,7 @@ Each index exists to serve a named query:
 - *Event sourcing.* Far beyond what's required.
 
 **Trade-offs.**
-- `activity_log` is polymorphic, so there's no foreign key to `tickets` and no cascading delete. Tickets aren't deleted in normal operation (TD-025), so this is acceptable. The retention policy is `activitylog:clean` (configurable days, off by default).
+- `activity_log` is polymorphic, so there's no foreign key to `tickets` and no cascading delete. Tickets aren't deleted in normal operation (TD-025), so this is acceptable. The retention policy is the chunked `activity:prune` command (days from `activitylog.delete_records_older_than_days`).
 - The listener runs **synchronously** after commit, so the history is present as soon as the request returns. If the activity insert fails after the main transaction has committed, the action has succeeded but its history entry is missing. We accept this rare inconsistency instead of coupling the audit write into every transaction. Errors are logged loudly.
 
 ---

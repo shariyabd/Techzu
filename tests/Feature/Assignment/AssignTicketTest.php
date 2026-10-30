@@ -7,6 +7,7 @@ use App\Enums\AssignmentMethod;
 use App\Enums\TicketStatus;
 use App\Events\TicketAssigned;
 use App\Exceptions\Domain\AgentNotEligible;
+use App\Exceptions\Domain\TicketClosed;
 use App\Models\Ticket;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -77,3 +78,12 @@ it('is a no-op when the agent already owns the ticket', function (): void {
 
     Event::assertNotDispatched(TicketAssigned::class);
 });
+
+it('refuses to assign a finished ticket', function (TicketStatus $finished): void {
+    $ticket = Ticket::factory()->status($finished)->create(['assigned_agent_id' => null]);
+
+    expect(fn () => app(AssignTicket::class)->handle($this->admin, $ticket, $this->agent))
+        ->toThrow(TicketClosed::class);
+    expect($ticket->fresh()?->assigned_agent_id)->toBeNull();
+    Event::assertNotDispatched(TicketAssigned::class);
+})->with([TicketStatus::Resolved, TicketStatus::Closed]);

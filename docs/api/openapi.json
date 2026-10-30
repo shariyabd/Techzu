@@ -3689,6 +3689,10 @@
                         "type": "array",
                         "items": {}
                     },
+                    "created_by": {
+                        "type": "array",
+                        "items": {}
+                    },
                     "assigned_agent": {
                         "type": "array",
                         "items": {}
@@ -3770,6 +3774,10 @@
                             "string",
                             "null"
                         ]
+                    },
+                    "attachments": {
+                        "type": "array",
+                        "items": {}
                     },
                     "can": {
                         "type": "object",

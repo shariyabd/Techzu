@@ -71,10 +71,12 @@ dataset('required indexes', [
     'attachments(ticket_id, is_internal)' => ['attachments', ['ticket_id', 'is_internal'], false, 'BTREE'],
     'attachments(reply_id)' => ['attachments', ['reply_id'], false, 'BTREE'],
     'activity_log(subject_type, subject_id, created_at)' => ['activity_log', ['subject_type', 'subject_id', 'created_at'], false, 'BTREE'],
+    'activity_log(created_at)' => ['activity_log', ['created_at'], false, 'BTREE'],
     'holidays(date) unique' => ['holidays', ['date'], true, 'BTREE'],
     'ticket_imports(user_id, created_at)' => ['ticket_imports', ['user_id', 'created_at'], false, 'BTREE'],
     'ticket_import_errors(ticket_import_id, row_number)' => ['ticket_import_errors', ['ticket_import_id', 'row_number'], false, 'BTREE'],
-    'notifications(notifiable_type, notifiable_id, read_at)' => ['notifications', ['notifiable_type', 'notifiable_id', 'read_at'], false, 'BTREE'],
+    'notifications(notifiable_type, notifiable_id, created_at)' => ['notifications', ['notifiable_type', 'notifiable_id', 'created_at'], false, 'BTREE'],
+    'notifications(read_at, created_at)' => ['notifications', ['read_at', 'created_at'], false, 'BTREE'],
 ]);
 
 it('has the TD-021 index', function (string $table, array $columns, bool $unique, string $type): void {

@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { Head, setLayoutProps } from '@inertiajs/vue3';
-import { watchEffect } from 'vue';
+import { Head } from '@inertiajs/vue3';
 import HolidayForm from '@/components/admin/HolidayForm.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import { Card, CardContent } from '@/components/ui/card';
@@ -8,14 +7,15 @@ import { edit, index } from '@/routes/admin/holidays';
 import type { BreadcrumbItem } from '@/types';
 import type { HolidayItem } from '@/types/admin';
 
-const props = defineProps<{ holiday: HolidayItem }>();
+defineProps<{ holiday: HolidayItem }>();
 
-watchEffect(() => {
-    const breadcrumbs: BreadcrumbItem[] = [
-        { title: 'Holidays', href: index() },
-        { title: props.holiday.name, href: edit(props.holiday.id) },
-    ];
-    setLayoutProps({ breadcrumbs });
+defineOptions({
+    layout: (pageProps: { holiday: { id: number; name: string } }) => ({
+        breadcrumbs: [
+            { title: 'Holidays', href: index() },
+            { title: pageProps.holiday.name, href: edit(pageProps.holiday.id) },
+        ] satisfies BreadcrumbItem[],
+    }),
 });
 </script>
 

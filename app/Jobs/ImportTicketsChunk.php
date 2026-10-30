@@ -8,6 +8,7 @@ use App\Actions\Imports\ImportTicketRow;
 use App\Models\Category;
 use App\Models\TicketImport;
 use App\Models\TicketImportError;
+use App\Services\Imports\ImportDuplicateTracker;
 use App\Services\Imports\ImportTicketRowRules;
 use App\Services\Imports\TicketCsvReader;
 use Carbon\CarbonImmutable;
@@ -33,6 +34,7 @@ final class ImportTicketsChunk implements ShouldQueue
         public int $importId,
         public int $startLine,
         public int $endLine,
+        public int $startOffset,
     ) {
         $this->onQueue('imports');
     }
@@ -57,8 +59,10 @@ final class ImportTicketsChunk implements ShouldQueue
             Category::query()->active()->pluck('slug')->all(),
         );
 
-        foreach ($reader->records($path, $this->startLine, $this->endLine) as $line => $values) {
-            $this->importRecord($import, $importRow, $rules, $header, $values, $line + 1);
+        $duplicates = new ImportDuplicateTracker;
+
+        foreach ($reader->records($path, $this->startLine, $this->endLine, $this->startOffset) as $line => $values) {
+            $this->importRecord($import, $importRow, $rules, $duplicates, $header, $values, $line + 1);
         }
     }
 
@@ -84,7 +88,7 @@ final class ImportTicketsChunk implements ShouldQueue
      * @param  list<string>  $header
      * @param  list<string|null>  $values
      */
-    private function importRecord(TicketImport $import, ImportTicketRow $importRow, ImportTicketRowRules $rules, array $header, array $values, int $rowNumber): void
+    private function importRecord(TicketImport $import, ImportTicketRow $importRow, ImportTicketRowRules $rules, ImportDuplicateTracker $duplicates, array $header, array $values, int $rowNumber): void
     {
         if (count($values) !== count($header)) {
             $keyed = [];
@@ -107,15 +111,27 @@ final class ImportTicketsChunk implements ShouldQueue
             return;
         }
 
+        /** @var array<string, string|null> $validated */
+        $validated = $validator->validated();
+        $duplicate = $duplicates->check($validated, $rowNumber, $rules->timezone());
+
+        if ($duplicate !== null) {
+            $this->recordFailure($import, $rowNumber, ['row' => [$duplicate]], $row);
+
+            return;
+        }
+
         try {
-            /** @var array<string, string|null> $validated */
-            $validated = $validator->validated();
             $ticket = $importRow->handle($import, $validated, $rowNumber);
         } catch (Throwable $exception) {
             report($exception);
             $this->recordFailure($import, $rowNumber, ['row' => ['The row could not be imported because of an unexpected error.']], $row);
 
             return;
+        }
+
+        if ($ticket !== null) {
+            $duplicates->record($validated, $rowNumber, $rules->timezone());
         }
 
         $this->increment($import, $ticket === null ? 'failed_rows' : 'succeeded_rows');

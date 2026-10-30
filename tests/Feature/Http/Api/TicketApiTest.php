@@ -6,6 +6,7 @@ use App\Enums\ActivityType;
 use App\Enums\TicketPriority;
 use App\Enums\TicketStatus;
 use App\Events\TicketReplied;
+use App\Models\Attachment;
 use App\Models\Category;
 use App\Models\Ticket;
 use App\Models\TicketReply;
@@ -84,6 +85,26 @@ it('shows a ticket', function (): void {
         ->assertOk()
         ->assertJsonStructure(['data' => TICKET_JSON])
         ->assertJsonPath('data.number', $ticket->number);
+});
+
+it('lists ticket attachments and who created the ticket, hiding internal files from the customer', function (): void {
+    $agent = User::factory()->agent()->create();
+    $ticket = Ticket::factory()->create(['customer_id' => $this->customer->id, 'created_by_id' => $agent->id]);
+    $visible = Attachment::factory()->create(['ticket_id' => $ticket->id, 'reply_id' => null, 'is_internal' => false]);
+    $internal = Attachment::factory()->create(['ticket_id' => $ticket->id, 'reply_id' => null, 'is_internal' => true]);
+    $onReply = Attachment::factory()->create(['ticket_id' => $ticket->id, 'reply_id' => TicketReply::factory()->create(['ticket_id' => $ticket->id, 'author_id' => $agent->id])->id, 'is_internal' => false]);
+
+    Sanctum::actingAs($this->customer);
+    $this->getJson('/api/v1/tickets/'.$ticket->number)
+        ->assertOk()
+        ->assertJsonPath('data.created_by', ['id' => $agent->id, 'name' => $agent->name])
+        ->assertJsonCount(1, 'data.attachments')
+        ->assertJsonPath('data.attachments.0.id', $visible->id)
+        ->assertJsonStructure(['data' => ['attachments' => [['id', 'original_name', 'size_bytes', 'mime_type', 'download_url']]]]);
+
+    Sanctum::actingAs($agent);
+    $ids = collect($this->getJson('/api/v1/tickets/'.$ticket->number)->assertOk()->json('data.attachments'))->pluck('id')->all();
+    expect($ids)->toBe([$visible->id, $internal->id])->not->toContain($onReply->id);
 });
 
 it('updates a ticket', function (): void {

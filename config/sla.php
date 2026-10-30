@@ -12,5 +12,7 @@ return [
         TicketPriority::Critical->value => (int) env('SLA_MINUTES_CRITICAL', 120),
     ],
 
+    'scan_chunk_size' => (int) env('SLA_SCAN_CHUNK_SIZE', 500),
+
     'warning_threshold_percent' => (int) env('SLA_WARNING_THRESHOLD_PERCENT', 75),
 ];

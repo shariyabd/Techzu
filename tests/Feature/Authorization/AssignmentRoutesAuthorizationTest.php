@@ -23,6 +23,7 @@ dataset('assignment route matrix', function (): array {
         ['admin', 'unassigned', 'claim', 302, 200],
         ['admin', 'unassigned', 'assign', 302, 422],
         ['admin', 'colleague', 'assign', 302, 422],
+        ['admin', 'resolved', 'assign', 403, 403],
     ];
     $cases = [];
     foreach ($rows as [$role, $ownership, $action, $web, $api]) {

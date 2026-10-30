@@ -20,12 +20,10 @@ final class DashboardStats
 {
     public const CACHE_KEY = 'dashboard:staff';
 
-    public const CACHE_TTL_SECONDS = 60;
-
     /** @return array{totals: array<string, int>, by_priority: list<array{priority: string, count: int}>, by_agent: list<array{agent_id: int, name: string, active: int, breached: int}>} */
     public function summary(): array
     {
-        return Cache::remember(self::CACHE_KEY, self::CACHE_TTL_SECONDS, function (): array {
+        return Cache::remember(self::CACHE_KEY, (int) config('tickets.dashboard.cache_ttl_seconds'), function (): array {
             $now = CarbonImmutable::now();
 
             return [
@@ -56,7 +54,7 @@ final class DashboardStats
         $finished = self::values(TicketStatus::finished());
         $activeIn = implode(', ', array_fill(0, count($active), '?'));
         $finishedIn = implode(', ', array_fill(0, count($finished), '?'));
-        $resolvedSince = $now->subDays(30);
+        $resolvedSince = $now->subDays((int) config('tickets.dashboard.resolved_window_days'));
 
         $row = (array) Ticket::query()->toBase()
             ->selectRaw(implode(', ', [

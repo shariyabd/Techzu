@@ -52,7 +52,7 @@ final class PrepareTicketImport implements ShouldQueue
             return;
         }
 
-        ['rows' => $rows, 'last_line' => $lastLine] = $reader->scan($path);
+        ['rows' => $rows, 'chunks' => $chunks] = $reader->scan($path, max(1, (int) config('imports.chunk_size')));
         $import->status = ImportStatus::Processing;
         $import->total_rows = $rows;
         $import->started_at = CarbonImmutable::now();
@@ -66,7 +66,7 @@ final class PrepareTicketImport implements ShouldQueue
 
         $importId = $import->id;
         $stampBatch = static fn (Batch $batch): int => TicketImport::query()->whereKey($importId)->whereNull('batch_id')->update(['batch_id' => $batch->id]);
-        $batch = Bus::batch($this->chunks($importId, $lastLine))
+        $batch = Bus::batch($this->chunkJobs($importId, $chunks))
             ->name('ticket-import-'.$importId)
             ->onQueue('imports')
             ->allowFailures()
@@ -88,17 +88,16 @@ final class PrepareTicketImport implements ShouldQueue
         }
     }
 
-    /** @return list<ImportTicketsChunk> */
-    private function chunks(int $importId, int $lastLine): array
+    /**
+     * @param  list<array{start_line: int, end_line: int, offset: int}>  $chunks
+     * @return list<ImportTicketsChunk>
+     */
+    private function chunkJobs(int $importId, array $chunks): array
     {
-        $size = max(1, (int) config('imports.chunk_size'));
-        $jobs = [];
-
-        for ($start = 1; $start <= $lastLine; $start += $size) {
-            $jobs[] = new ImportTicketsChunk($importId, $start, min($start + $size - 1, $lastLine));
-        }
-
-        return $jobs;
+        return array_map(
+            static fn (array $chunk): ImportTicketsChunk => new ImportTicketsChunk($importId, $chunk['start_line'], $chunk['end_line'], $chunk['offset']),
+            $chunks,
+        );
     }
 
     /** @param array<string, list<string>> $errors */

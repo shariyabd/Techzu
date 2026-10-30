@@ -44,6 +44,8 @@ npm run dev
 ```
 Open <http://127.0.0.1:8000> and log in with a demo account.
 
+Escalation only happens when the scheduler runs. To see it, run `php artisan schedule:work` in a third terminal, or run `php artisan sla:scan` by hand.
+
 `.env.example` sets `QUEUE_CONNECTION=sync`, so queued work (auto-assignment, notifications, imports) runs inside the request and no worker is needed.
 
 ### Asynchronous alternative

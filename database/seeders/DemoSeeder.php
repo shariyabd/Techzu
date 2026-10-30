@@ -9,6 +9,7 @@ use App\Enums\TicketStatus;
 use App\Models\Category;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Services\Sla\SlaCalculator;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -111,6 +112,7 @@ final class DemoSeeder extends Seeder
         $prefix = (string) config('tickets.number_prefix', 'TKT');
         $now = CarbonImmutable::now();
         $priorities = TicketPriority::cases();
+        $calculator = app(SlaCalculator::class);
 
         for ($i = 1; $i <= self::TICKETS; $i++) {
             $category = $categories[$i % count($categories)];
@@ -139,7 +141,12 @@ final class DemoSeeder extends Seeder
                 $factory = $factory->approaching();
             }
 
-            $factory->create();
+            $ticket = $factory->create();
+
+            if ($i % 10 !== 3 && $i % 10 !== 7) {
+                $calculator->applyInitial($ticket, $now);
+                $ticket->save();
+            }
         }
 
         DB::table('ticket_sequences')->updateOrInsert(

@@ -14,6 +14,15 @@ use Illuminate\Http\Resources\Json\JsonResource;
 /** @mixin Ticket */
 final class TicketResource extends JsonResource
 {
+    private bool $includeAttachments = false;
+
+    public function withAttachments(): self
+    {
+        $this->includeAttachments = true;
+
+        return $this;
+    }
+
     /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
@@ -28,6 +37,7 @@ final class TicketResource extends JsonResource
             'priority' => ['value' => $this->priority->value, 'label' => $this->priority->label()],
             'category' => $this->whenLoaded('category', fn (Category $category) => CategoryResource::make($category)->resolve($request)),
             'customer' => $this->whenLoaded('customer', fn (User $customer) => UserSummaryResource::make($customer)->resolve($request)),
+            'created_by' => $this->whenLoaded('creator', fn (User $creator) => UserSummaryResource::make($creator)->resolve($request)),
             'assigned_agent' => $this->whenLoaded('assignedAgent', fn (User $agent) => UserSummaryResource::make($agent)->resolve($request)),
             'sla' => [
                 'state' => ['value' => $state->value, 'label' => $state->label()],
@@ -40,6 +50,7 @@ final class TicketResource extends JsonResource
             'updated_at' => $this->updated_at->toIso8601String(),
             'resolved_at' => $this->resolved_at?->toIso8601String(),
             'closed_at' => $this->closed_at?->toIso8601String(),
+            'attachments' => $this->when($this->includeAttachments, fn () => AttachmentResource::collection($this->resource->attachments)->resolve($request)),
             'can' => $this->when($user instanceof User, fn (): array => self::abilities($user, $this->resource)),
         ];
     }

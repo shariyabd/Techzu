@@ -109,6 +109,8 @@ $rows = [
     [$admin, $unassigned, $open, 'update', [], 200],
     [$admin, $unassigned, $open, 'claim', [], 200],
     [$admin, $unassigned, $open, 'assign', [], 200],
+    [$admin, $unassigned, $resolved, 'assign', [], 403],
+    [$admin, $unassigned, $closed, 'assign', [], 403],
     [$admin, $others, $closed, 'view', [], 200],
     [$admin, $others, $closed, 'reply', [], 403],
     [$admin, $others, $closed, 'addInternalNote', [], 403],

@@ -15,6 +15,7 @@ use App\Events\TicketReplied;
 use App\Events\TicketSlaApproaching;
 use App\Events\TicketSlaBreached;
 use App\Events\TicketStatusChanged;
+use App\Events\TicketUnassigned;
 use App\Events\TicketUpdated;
 use App\Models\Category;
 use App\Models\Ticket;
@@ -81,6 +82,13 @@ final class RecordTicketActivity
             'method' => $event->method->value,
             'from' => $event->previousAgent === null ? null : $this->summary($event->previousAgent),
             'to' => $this->summary($event->agent),
+        ]);
+    }
+
+    public function handleTicketUnassigned(TicketUnassigned $event): void
+    {
+        $this->record($event->ticket, $event->actor, ActivityType::Unassigned, [
+            'from' => $this->summary($event->previousAgent),
         ]);
     }
 

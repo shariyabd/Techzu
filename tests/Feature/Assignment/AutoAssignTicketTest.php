@@ -11,9 +11,11 @@ use App\Jobs\AutoAssignTicket;
 use App\Models\Category;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Notifications\TicketNeedsAssignmentNotification;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
 use Spatie\Activitylog\Models\Activity;
 
 beforeEach(function (): void {
@@ -105,3 +107,14 @@ it('exits quietly when the ticket was finished before the assignment ran', funct
         ->and($ticket->fresh()?->status)->toBe($finished);
     Event::assertNotDispatched(TicketAssigned::class);
 })->with([TicketStatus::Resolved, TicketStatus::Closed]);
+
+it('tells the admins once, and never the customer, when no agent can take the ticket', function (): void {
+    Notification::fake();
+    $admins = User::factory()->admin()->count(2)->create();
+    $ticket = Ticket::factory()->status(TicketStatus::Open)->create(['category_id' => $this->category->id, 'assigned_agent_id' => null]);
+
+    runAutoAssign($ticket->id);
+
+    Notification::assertSentTo($admins, TicketNeedsAssignmentNotification::class, 1);
+    Notification::assertNotSentTo($ticket->customer, TicketNeedsAssignmentNotification::class);
+});

@@ -66,8 +66,9 @@ final class TicketPolicy
 
     public function assign(User $user, Ticket $ticket): Response
     {
-        return $this->decide($user, $ticket, fn (): bool => $this->has($user, Permission::TicketsAssignAny)
-            || ($this->has($user, Permission::TicketsHandoffOwn) && $this->isAssigneeOf($user, $ticket)));
+        return $this->decide($user, $ticket, fn (): bool => $ticket->status->isActive()
+            && ($this->has($user, Permission::TicketsAssignAny)
+                || ($this->has($user, Permission::TicketsHandoffOwn) && $this->isAssigneeOf($user, $ticket))));
     }
 
     public function reply(User $user, Ticket $ticket): Response

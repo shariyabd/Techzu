@@ -21,6 +21,7 @@ final class DashboardController extends Controller
 
         return Inertia::render('dashboard/Index', [
             'stats' => fn (): array => $stats->summary(),
+            'resolvedWindowDays' => (int) config('tickets.dashboard.resolved_window_days'),
             'myTickets' => fn (): array => TicketListResource::collection($stats->myTickets($viewer))->resolve($request),
         ]);
     }

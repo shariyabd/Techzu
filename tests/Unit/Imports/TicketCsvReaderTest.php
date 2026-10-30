@@ -42,15 +42,24 @@ it('rejects an invalid header with a precise message', function (string $content
 ]);
 
 it('counts records, skipping blank lines and keeping a quoted multi-line field as one record', function (): void {
-    expect((new TicketCsvReader)->scan(csvFixturePath(multiLineCsv())))->toBe(['rows' => 4, 'last_line' => 5]);
+    expect((new TicketCsvReader)->scan(csvFixturePath(multiLineCsv()), 500))->toMatchArray(['rows' => 4, 'last_line' => 5]);
 });
 
-it('yields only the requested record range, keyed by record index', function (): void {
+it('starts each chunk at its stored byte offset and keeps record indexes, including after a multi-line field', function (): void {
     $path = csvFixturePath(multiLineCsv());
-    $records = (new TicketCsvReader)->records($path, 2, 4)->all();
-    $first = (new TicketCsvReader)->records($path, 1, 1)->all();
+    $reader = new TicketCsvReader;
+    $chunks = $reader->scan($path, 2)['chunks'];
 
-    expect(array_keys($records))->toBe([2, 4])
+    expect(array_column($chunks, 'start_line'))->toBe([1, 3, 5])
+        ->and(array_column($chunks, 'end_line'))->toBe([2, 4, 5]);
+
+    $records = [];
+    foreach ($chunks as $chunk) {
+        $records += $reader->records($path, $chunk['start_line'], $chunk['end_line'], $chunk['offset'])->all();
+    }
+
+    expect(array_keys($records))->toBe([1, 2, 4, 5])
+        ->and($records[1][1])->toBe("line one\nline two")
         ->and($records[4][0])->toBe('C')
-        ->and($first[1][1])->toBe("line one\nline two");
+        ->and($records[5][0])->toBe('D');
 });

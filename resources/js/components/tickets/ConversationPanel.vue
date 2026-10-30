@@ -4,6 +4,7 @@ import { computed } from 'vue';
 import EmptyState from '@/components/EmptyState.vue';
 import AttachmentList from '@/components/tickets/AttachmentList.vue';
 import ReplyComposer from '@/components/tickets/ReplyComposer.vue';
+import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { getInitials } from '@/composables/useInitials';
 import { formatDateTime, formatRelative } from '@/lib/format';
@@ -17,9 +18,13 @@ import type {
 const props = defineProps<{
     ticket: TicketDetail;
     replies: ReplyItem[];
+    hasMore: boolean;
+    loading: boolean;
     can: TicketCan;
     attachmentRules: AttachmentRules;
 }>();
+
+const emit = defineEmits<{ loadMore: [] }>();
 
 const isClosed = computed(() => props.ticket.status.value === 'closed');
 const isCustomer = (reply: ReplyItem): boolean =>
@@ -29,14 +34,28 @@ const isCustomer = (reply: ReplyItem): boolean =>
 <template>
     <div class="flex flex-col gap-4">
         <EmptyState
-            v-if="replies.length === 0"
+            v-if="replies.length === 0 && !hasMore"
             :icon="MessageSquare"
             title="No replies yet"
             :description="
                 can.reply ? 'Start the conversation below.' : undefined
             "
         />
-        <ol v-else class="flex flex-col gap-3" aria-label="Conversation">
+        <Button
+            v-if="hasMore"
+            variant="outline"
+            size="sm"
+            class="self-center"
+            :disabled="loading"
+            @click="emit('loadMore')"
+        >
+            Load older replies
+        </Button>
+        <ol
+            v-if="replies.length > 0"
+            class="flex flex-col gap-3"
+            aria-label="Conversation"
+        >
             <li
                 v-for="reply in replies"
                 :key="reply.id"

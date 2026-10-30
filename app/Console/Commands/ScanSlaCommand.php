@@ -18,8 +18,6 @@ use LogicException;
 
 final class ScanSlaCommand extends Command
 {
-    public const CHUNK_SIZE = 500;
-
     /** @var string */
     protected $signature = 'sla:scan';
 
@@ -49,7 +47,7 @@ final class ScanSlaCommand extends Command
 
         $this->candidates($level, $runAt)
             ->select('id')
-            ->chunkById(self::CHUNK_SIZE, function (Collection $chunk) use ($level, $runAt, &$escalated): void {
+            ->chunkById(max(1, (int) config('sla.scan_chunk_size')), function (Collection $chunk) use ($level, $runAt, &$escalated): void {
                 $ids = $this->claim($level, $runAt, $chunk->modelKeys());
                 $this->dispatchFor($level, $ids);
                 $escalated += count($ids);

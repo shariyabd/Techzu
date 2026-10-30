@@ -22,6 +22,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['subject_type', 'subject_id', 'created_at'], 'activity_log_subject_created_at_index');
+            $table->index('created_at');
         });
     }
 
