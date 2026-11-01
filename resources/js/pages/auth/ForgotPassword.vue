@@ -7,6 +7,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { useClientValidation } from '@/composables/useClientValidation';
+import {
+    email as emailRule,
+    MAX_EMAIL_LENGTH,
+    maxLength,
+    required,
+} from '@/lib/validation';
 import { login } from '@/routes';
 import { email } from '@/routes/password';
 
@@ -19,6 +26,15 @@ defineOptions({
 
 const page = usePage();
 const status = computed(() => page.props.flash.success);
+const linkError = computed(() => page.props.flash.error);
+
+const { onBefore, onInput, onFocusOut } = useClientValidation(() => ({
+    email: [
+        required('Email address'),
+        emailRule(),
+        maxLength('Email address', MAX_EMAIL_LENGTH),
+    ],
+}));
 </script>
 
 <template>
@@ -32,8 +48,24 @@ const status = computed(() => page.props.flash.success);
         {{ status }}
     </div>
 
+    <div
+        v-else-if="linkError"
+        role="alert"
+        class="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-center text-sm font-medium text-destructive"
+    >
+        {{ linkError }}
+    </div>
+
     <div class="space-y-6">
-        <Form v-bind="email.form()" v-slot="{ errors, processing }">
+        <Form
+            v-bind="email.form()"
+            ref="form"
+            novalidate
+            :on-before="onBefore"
+            v-slot="{ errors, processing }"
+            @input="onInput"
+            @focusout="onFocusOut"
+        >
             <div class="grid gap-2">
                 <Label for="email">Email address</Label>
                 <Input

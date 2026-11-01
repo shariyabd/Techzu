@@ -30,6 +30,8 @@ Authentication is plain email-and-password sign-in with a server-side session. T
 **Logging in**
 - A user signs in with an email and a password, and can tick "remember me" to stay signed in beyond the browser session.
 - Wrong credentials give one generic error on the email field. It does not reveal whether the email exists.
+- Passwords longer than 72 characters are refused, because the password hashing only looks at the first 72 bytes and would silently ignore the rest.
+- Simple mistakes (an empty field, an email that is not an email, a password that is too short or too long, two passwords that differ) are caught in the browser and shown under the field before anything is sent. The server still checks everything again; checks that need the server (wrong credentials, an email already taken, a leaked password) are only shown after submitting.
 - Sign-in attempts are limited to 5 per minute from the same address. After that the user must wait before trying again.
 - After a successful sign-in the session is renewed. The user goes back to the page they originally asked for, or to the home page. The home page sends guests to the login page, customers to their ticket list, and staff (agents and admins) to the dashboard.
 
@@ -38,11 +40,12 @@ Authentication is plain email-and-password sign-in with a server-side session. T
 
 **Logging out**
 - Logging out ends the session, renews the form-protection (CSRF) token and returns the user to the login page. Only signed-in users can log out.
+- Page data kept in the browser history is encrypted, and logging out (or signing in or registering) throws the key away. Pressing Back after logging out therefore cannot show the previous user's pages: the browser has to ask the server again, and the server sends a guest to the login page. Encryption needs a secure origin (HTTPS or localhost).
 
 **Customer self-registration**
 - Anyone can register with a name, an email and a password typed twice. The name and email may be up to 255 characters. The email must be entered in lower case: an address with capital letters is rejected, not converted.
 - The email must be unique.
-- The password rule depends on the environment. In production it needs at least 12 characters with upper and lower case letters, numbers and symbols, and it must not appear in known data breaches. Outside production the default minimum of 8 characters applies.
+- The password rule depends on the environment. In production it needs at least 12 characters with upper and lower case letters, numbers and symbols, and it must not appear in known data breaches. Outside production the default minimum of 8 characters applies. In every environment a password may be at most 72 characters.
 - The new account is signed in straight away and sent to the home page.
 - Self-registration gives the new account the customer role.
 - Registration is limited to 5 attempts per minute from the same address.
@@ -194,7 +197,7 @@ Every action is allowed or refused by a rule that combines what the user's role 
 - Anyone who can see a ticket, customers included, but may not perform the action gets "forbidden".
 
 **Acting on a ticket**
-- Editing: staff who manage the ticket can always edit it. A customer can edit their own ticket only while it is Open.
+- Editing: staff who manage the ticket can always edit its subject and category. Only the ticket's own customer can edit the description (their own message), and only while it is Open.
 - Changing status: staff who manage the ticket can change it. A customer can act only on their own Resolved ticket, and only to close it or to reopen it (move it back to In Progress).
 - Changing priority: staff who manage the ticket only. Customers never can.
 - Managing a ticket means being an admin, or being the agent it is currently assigned to.
@@ -232,7 +235,8 @@ Ticket lifecycle covers creating a ticket, editing it, moving it through its sta
 - Once the ticket is saved, a "ticket created" event is announced; the timeline entry is written from that event.
 
 **Editing a ticket**
-- Subject and description can be edited by staff who manage the ticket (an admin, or the agent it is assigned to). A customer can edit their own ticket only while it is Open.
+- The subject can be edited by staff who manage the ticket (an admin, or the agent it is assigned to). A customer can edit the subject and description of their own ticket only while it is Open.
+- The description is the customer's own words, so staff can never rewrite it, just as no one can edit someone else's chat message. Staff who need to clarify a ticket change its subject or category, or add a reply or internal note. A staff attempt to change the description is refused and nothing is saved.
 - The category can be changed only by staff who manage the ticket, and only to an active category. A customer who sends a category is refused.
 - Only fields that really changed are saved. If nothing changed, nothing is saved and nothing is recorded.
 - Status, priority, assignee and SLA fields cannot be changed through editing.
@@ -332,10 +336,13 @@ A ticket carries a conversation of replies. A reply is either public or an inter
 
 **Downloading**
 - Files are downloaded only through a permission-checked route, never by a direct link. The viewer must be allowed to see the ticket, and an internal attachment is only for staff.
+- PNG, JPEG and GIF images also have a permission-checked preview route that shows the image in the page instead of downloading it. The same visibility rules apply. Any other type, including SVG, is never shown inline. The conversation shows image attachments as thumbnails that open a larger preview with a download button; other files stay as download chips.
+- When picking files to attach, chosen images show a small thumbnail, and files with a type that is not allowed, over the size limit or over the file count are refused in the browser with a message before anything is uploaded.
 - A customer who may not see the ticket or the attachment gets "not found", so they cannot tell it exists. The file is sent as a download under its original name with its recorded type, and browsers are told not to guess its content type.
 
 **Reading the conversation**
 - The conversation is listed oldest first in pages (20 by default, up to 100 per page), and customers receive only the public part. The web ticket page also shows the upload limits to the user.
+- The conversation reads like a messaging app. The viewer's side is on the right: for staff, every staff message is on the right and the customer's messages (including the ticket's opening message) are on the left; for the customer it is the other way round. Each message has the author's picture, or a default placeholder when there is none.
 
 ## Search and filtering
 The ticket list can be narrowed and sorted. It always shows only tickets the viewer is allowed to see, so a customer's filters can never reveal anyone else's tickets, and staff filters work inside the same visibility rules.
@@ -501,6 +508,7 @@ Guests who forgot their password can set a new one through a link sent by email.
 
 **Setting the new password**
 - The link opens a page with the email filled in. The user types the new password twice.
+- Before the page opens, the link itself is checked. A link that was already used, has expired, was never issued or does not match the email sends the user back to the request page with the message that the link is invalid, expired or already used, so a used link cannot even show the form again.
 - The password follows the same rule as registration (stricter in production, 8 characters minimum elsewhere).
 - If the link is wrong, expired, already used or does not match the email, the reset fails with one error on the email field. Nothing is changed.
 - On success the password is replaced, the "remember me" login is invalidated, and every API token of that user is revoked, so old devices must sign in again. The user is sent to the login page with the message "Your password has been reset. You can log in now." They are not signed in automatically.

@@ -44,6 +44,10 @@ final class UpdateTicket
                 return $ticket;
             }
 
+            if (array_key_exists('description', $changes)) {
+                Gate::forUser($actor)->authorize('editDescription', $ticket);
+            }
+
             $ticket->fill(array_map(static fn (array $change): mixed => $change['to'], $changes));
             $ticket->save();
 

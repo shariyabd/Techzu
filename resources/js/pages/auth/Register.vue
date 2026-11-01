@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Form, Head } from '@inertiajs/vue3';
+import { Form, Head, usePage } from '@inertiajs/vue3';
 import { store } from '@/actions/App/Http/Controllers/Auth/RegisterController';
 import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
@@ -8,6 +8,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { useClientValidation } from '@/composables/useClientValidation';
+import {
+    email,
+    lowercase,
+    MAX_EMAIL_LENGTH,
+    MAX_NAME_LENGTH,
+    maxLength,
+    minLength,
+    required,
+    sameAs,
+} from '@/lib/validation';
 import { login } from '@/routes';
 
 defineOptions({
@@ -16,6 +27,27 @@ defineOptions({
         description: 'Enter your details below to create your account',
     },
 });
+
+const page = usePage();
+
+const { onBefore, onInput, onFocusOut } = useClientValidation(() => ({
+    name: [required('Name'), maxLength('Name', MAX_NAME_LENGTH)],
+    email: [
+        required('Email address'),
+        email(),
+        lowercase('Email address'),
+        maxLength('Email address', MAX_EMAIL_LENGTH),
+    ],
+    password: [
+        required('Password'),
+        minLength('Password', page.props.passwordRules.min),
+        maxLength('Password', page.props.passwordRules.max),
+    ],
+    password_confirmation: [
+        required('Password confirmation'),
+        sameAs('password', 'The passwords do not match.'),
+    ],
+}));
 </script>
 
 <template>
@@ -23,6 +55,11 @@ defineOptions({
 
     <Form
         v-bind="store.form()"
+        ref="form"
+        novalidate
+        :on-before="onBefore"
+        @input="onInput"
+        @focusout="onFocusOut"
         :reset-on-success="['password', 'password_confirmation']"
         v-slot="{ errors, processing }"
         class="flex flex-col gap-6"

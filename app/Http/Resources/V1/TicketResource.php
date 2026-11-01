@@ -55,7 +55,7 @@ final class TicketResource extends JsonResource
         ];
     }
 
-    /** @return array{update: bool, changeStatus: bool, changePriority: bool, claim: bool, assign: bool, reply: bool, addInternalNote: bool, allowedStatuses: list<string>} */
+    /** @return array{update: bool, editDescription: bool, changeStatus: bool, changePriority: bool, claim: bool, assign: bool, reply: bool, addInternalNote: bool, allowedStatuses: list<string>} */
     public static function abilities(User $user, Ticket $ticket): array
     {
         $allowed = array_values(array_filter(
@@ -65,6 +65,7 @@ final class TicketResource extends JsonResource
 
         return [
             'update' => $user->can('update', $ticket),
+            'editDescription' => $user->can('editDescription', $ticket),
             'changeStatus' => $allowed !== [],
             'changePriority' => $user->can('changePriority', $ticket),
             'claim' => $user->can('claim', $ticket) && $ticket->assigned_agent_id === null,

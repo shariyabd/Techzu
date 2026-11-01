@@ -5,9 +5,8 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import EmptyState from '@/components/EmptyState.vue';
 import AttachmentList from '@/components/tickets/AttachmentList.vue';
 import ReplyComposer from '@/components/tickets/ReplyComposer.vue';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { getInitials } from '@/composables/useInitials';
+import UserAvatar from '@/components/UserAvatar.vue';
 import { formatDateTime, formatRelative } from '@/lib/format';
 import type {
     AttachmentRules,
@@ -32,8 +31,13 @@ const viewerId = computed(() => page.props.auth.user.id);
 const scroller = ref<HTMLElement | null>(null);
 
 const isClosed = computed(() => props.ticket.status.value === 'closed');
+const viewerIsCustomer = computed(
+    () => viewerId.value === props.ticket.customer?.id,
+);
 const isCustomer = (reply: ReplyItem): boolean =>
     reply.author.id === props.ticket.customer?.id;
+const isOnViewerSide = (reply: ReplyItem): boolean =>
+    isCustomer(reply) === viewerIsCustomer.value;
 const isOwn = (reply: ReplyItem): boolean => reply.author.id === viewerId.value;
 
 const lastReplyId = computed(() => props.replies.at(-1)?.id ?? null);
@@ -89,20 +93,23 @@ watch(lastReplyId, scrollToEnd);
                     :data-internal="reply.is_internal ? 'true' : undefined"
                     :class="[
                         'flex items-end gap-2',
-                        isOwn(reply) ? 'flex-row-reverse' : 'flex-row',
+                        isOnViewerSide(reply) ? 'flex-row-reverse' : 'flex-row',
                     ]"
                 >
-                    <Avatar class="size-8 shrink-0">
-                        <AvatarFallback class="text-xs">{{
-                            getInitials(reply.author.name)
-                        }}</AvatarFallback>
-                    </Avatar>
+                    <UserAvatar
+                        :name="reply.author.name"
+                        :fallback-class="
+                            isCustomer(reply)
+                                ? 'bg-muted text-muted-foreground'
+                                : 'bg-primary/15 text-primary'
+                        "
+                    />
                     <div
                         :class="[
                             'max-w-[85%] min-w-0 rounded-2xl border px-4 py-3 shadow-xs sm:max-w-[75%]',
                             reply.is_internal
                                 ? 'border-dashed border-tint-amber-border bg-tint-amber text-tint-amber-foreground'
-                                : isOwn(reply)
+                                : isOnViewerSide(reply)
                                   ? 'border-transparent bg-tint-green text-tint-green-foreground'
                                   : 'bg-card text-card-foreground',
                         ]"
@@ -111,10 +118,10 @@ watch(lastReplyId, scrollToEnd);
                             class="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"
                         >
                             <span class="text-sm font-semibold">{{
-                                reply.author.name
+                                isOwn(reply) ? 'You' : reply.author.name
                             }}</span>
                             <span class="opacity-70">{{
-                                isCustomer(reply) ? 'Customer' : 'Staff'
+                                isCustomer(reply) ? 'Customer' : 'Support'
                             }}</span>
                             <span
                                 v-if="reply.is_internal"

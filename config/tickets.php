@@ -13,6 +13,7 @@ return [
     'dashboard' => [
         'resolved_window_days' => (int) env('DASHBOARD_RESOLVED_WINDOW_DAYS', 30),
         'cache_ttl_seconds' => (int) env('DASHBOARD_CACHE_TTL_SECONDS', 60),
+        'trend_days' => (int) env('DASHBOARD_TREND_DAYS', 14),
     ],
 
     'show' => [

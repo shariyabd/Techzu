@@ -44,6 +44,13 @@ final class TicketPolicy
                 && $ticket->status === TicketStatus::Open));
     }
 
+    public function editDescription(User $user, Ticket $ticket): Response
+    {
+        return $this->decide($user, $ticket, fn (): bool => $this->isCustomerOf($user, $ticket)
+            && $this->has($user, Permission::TicketsUpdateOwn)
+            && $ticket->status === TicketStatus::Open);
+    }
+
     public function changeStatus(User $user, Ticket $ticket, ?TicketStatus $to = null): Response
     {
         return $this->decide($user, $ticket, fn (): bool => $this->manages($user, $ticket)

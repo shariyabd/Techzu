@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Models\User;
+use Inertia\Testing\AssertableInertia;
 
 it('logs a user in with valid credentials and redirects home', function (): void {
     $user = User::factory()->create();
@@ -40,10 +41,13 @@ it('sends a signed-in user who opens the login page to home', function (): void 
         ->assertRedirect(route('home'));
 });
 
-it('logs the user out and redirects to the login page', function (): void {
+it('logs the user out and wipes the browser history so Back cannot replay private pages', function (): void {
     $this->actingAs(User::factory()->create())
         ->post(route('logout'))
         ->assertRedirect(route('login'));
 
     $this->assertGuest();
+
+    $this->get(route('login'))->assertInertia(fn (AssertableInertia $page) => expect($page->toArray())
+        ->toMatchArray(['clearHistory' => true, 'encryptHistory' => true]));
 });

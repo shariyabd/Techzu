@@ -120,6 +120,47 @@ const queueKey = computed(() =>
             </EmptyState>
 
             <template v-else>
+                <div
+                    class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+                >
+                    <p class="text-sm text-muted-foreground">
+                        <span
+                            class="font-semibold text-foreground tabular-nums"
+                            >{{ tickets.meta.total }}</span
+                        >
+                        {{ tickets.meta.total === 1 ? 'ticket' : 'tickets' }}
+                    </p>
+                    <ul
+                        aria-label="Row colours"
+                        class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground"
+                    >
+                        <li class="flex items-center gap-1.5">
+                            <span
+                                class="relative size-3.5 overflow-hidden rounded-sm border border-ticket-awaiting-border bg-ticket-awaiting before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-ticket-awaiting-accent"
+                                aria-hidden="true"
+                            />
+                            Awaiting first agent response
+                        </li>
+                        <li class="flex items-center gap-1.5">
+                            <span
+                                class="size-3.5 rounded-sm border border-ticket-responded-border bg-ticket-responded"
+                                aria-hidden="true"
+                            />
+                            Agent has responded
+                        </li>
+                    </ul>
+                </div>
+                <div
+                    class="hidden gap-x-4 pr-3.5 pl-[17px] text-xs font-medium tracking-wide text-muted-foreground uppercase lg:grid lg:grid-cols-[minmax(0,13rem)_8.5rem_minmax(0,1fr)_minmax(0,13rem)_minmax(0,10rem)_2rem]"
+                    aria-hidden="true"
+                >
+                    <span>Requester</span>
+                    <span>Ticket</span>
+                    <span>Subject</span>
+                    <span>Status &amp; SLA</span>
+                    <span>Assignee</span>
+                    <span />
+                </div>
                 <ul class="flex flex-col gap-2">
                     <li v-for="ticket in tickets.data" :key="ticket.number">
                         <TicketRow

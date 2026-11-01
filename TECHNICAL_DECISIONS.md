@@ -314,9 +314,9 @@ Each index exists to serve a named query:
 | `tickets(assigned_agent_id, status)` | "my tickets", agent workload count for auto-assignment, the by-agent dashboard |
 | `tickets(customer_id, created_at)` | customer's own ticket list (sorted) |
 | `tickets(category_id, status)` | category filter, candidate workload |
-| `tickets(priority, status)` | priority filter, critical count, by-priority dashboard |
-| `tickets(created_at)` | date-range filter, default sort |
-| `tickets(status, resolved_at)` | dashboard "resolved in the last 30 days" count |
+| `tickets(priority, status)` | priority filter, critical count, by-priority and by-status dashboard breakdown |
+| `tickets(created_at)` | date-range filter, default sort, dashboard created-per-day trend |
+| `tickets(status, resolved_at)` | dashboard "resolved in the last 30 days" count, dashboard resolved-per-day trend |
 | `tickets(updated_at)` | ticket list `sort=updated_at` (P3) |
 | `users(name)` | admin user list: sort by name and name prefix search (P2) |
 | `tickets FULLTEXT(subject, description)` | keyword search |

@@ -13,5 +13,9 @@ export type SharedProps = {
     notifications: {
         unread_count: number;
     };
+    passwordRules: {
+        min: number;
+        max: number;
+    };
     [key: string]: unknown;
 };

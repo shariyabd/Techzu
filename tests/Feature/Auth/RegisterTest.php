@@ -20,6 +20,21 @@ it('registers a new user, logs them in and redirects home', function (): void {
     expect(Hash::check('password', $user->password))->toBeTrue();
 });
 
+it('rejects a password longer than 72 characters because bcrypt would silently truncate it', function (): void {
+    $password = str_repeat('a', 73);
+
+    $this->from(route('register'))
+        ->post(route('register'), [
+            'name' => 'Jane Customer',
+            'email' => 'jane@example.com',
+            'password' => $password,
+            'password_confirmation' => $password,
+        ])
+        ->assertSessionHasErrors('password');
+
+    $this->assertGuest();
+});
+
 it('rejects an email that is already taken', function (): void {
     User::factory()->create(['email' => 'jane@example.com']);
 

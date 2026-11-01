@@ -20,13 +20,40 @@ it('renders the forgot and reset password pages for guests', function (): void {
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page->component('auth/ForgotPassword'));
 
-    $this->get(route('password.reset', ['token' => 'abc', 'email' => 'jane@example.com']))
+    $user = User::factory()->create(['email' => 'jane@example.com']);
+    $token = Password::createToken($user);
+
+    $this->get(route('password.reset', ['token' => $token, 'email' => 'jane@example.com']))
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('auth/ResetPassword')
-            ->where('token', 'abc')
+            ->where('token', $token)
             ->where('email', 'jane@example.com'));
 });
+
+it('sends an already used, unknown or forged reset link back to the forgot password page', function (string $case): void {
+    $user = User::factory()->create(['email' => 'jane@example.com']);
+    $token = Password::createToken($user);
+
+    if ($case === 'used') {
+        $this->post(route('password.update'), [
+            'token' => $token,
+            'email' => $user->email,
+            'password' => 'new-password',
+            'password_confirmation' => 'new-password',
+        ])->assertRedirect(route('login'));
+    }
+
+    $link = match ($case) {
+        'used' => route('password.reset', ['token' => $token, 'email' => $user->email]),
+        'forged' => route('password.reset', ['token' => 'forged', 'email' => $user->email]),
+        'unknown email' => route('password.reset', ['token' => $token, 'email' => 'nobody@example.com']),
+    };
+
+    $this->get($link)
+        ->assertRedirect(route('password.request'))
+        ->assertSessionHas('error');
+})->with(['used', 'forged', 'unknown email']);
 
 it('emails a reset link that points at the reset page', function (): void {
     $user = User::factory()->create();

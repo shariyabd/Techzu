@@ -31,6 +31,8 @@ final class RegisterController extends Controller
 
         $request->session()->regenerate();
 
+        Inertia::clearHistory();
+
         return redirect()->route('home');
     }
 }

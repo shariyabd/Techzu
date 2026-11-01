@@ -13,10 +13,9 @@ import TicketDetailsCard from '@/components/tickets/TicketDetailsCard.vue';
 import TicketEditForm from '@/components/tickets/TicketEditForm.vue';
 import TicketStateControls from '@/components/tickets/TicketStateControls.vue';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { getInitials } from '@/composables/useInitials';
+import UserAvatar from '@/components/UserAvatar.vue';
 import { formatDateTime, formatRelative } from '@/lib/format';
 import { index, show } from '@/routes/tickets';
 import type { BreadcrumbItem } from '@/types';
@@ -77,6 +76,7 @@ function loadMore(kind: 'replies' | 'activities'): void {
 }
 
 const editing = ref(false);
+const editingDetails = ref(false);
 const copied = ref(false);
 
 const page = usePage();
@@ -109,6 +109,20 @@ async function copyNumber(): Promise<void> {
                             {{ ticket.number }}
                         </h2>
                         <Button
+                            v-if="
+                                can.update &&
+                                !can.editDescription &&
+                                !editingDetails
+                            "
+                            variant="ghost"
+                            size="sm"
+                            class="ml-auto"
+                            @click="editingDetails = true"
+                        >
+                            <Pencil aria-hidden="true" />
+                            Edit
+                        </Button>
+                        <Button
                             variant="ghost"
                             size="icon"
                             class="size-7"
@@ -119,7 +133,14 @@ async function copyNumber(): Promise<void> {
                             <Copy v-else aria-hidden="true" />
                         </Button>
                     </div>
-                    <p class="text-sm font-medium break-words">
+                    <TicketEditForm
+                        v-if="editingDetails"
+                        :ticket="ticket"
+                        :can="can"
+                        :categories="options.categories"
+                        @done="editingDetails = false"
+                    />
+                    <p v-else class="text-sm font-medium break-words">
                         {{ ticket.subject }}
                     </p>
                     <p
@@ -138,11 +159,7 @@ async function copyNumber(): Promise<void> {
 
             <Card v-if="ticket.customer" class="bg-surface py-4">
                 <CardContent class="flex items-center gap-3">
-                    <Avatar class="size-10">
-                        <AvatarFallback>{{
-                            getInitials(ticket.customer.name)
-                        }}</AvatarFallback>
-                    </Avatar>
+                    <UserAvatar :name="ticket.customer.name" class="size-10" />
                     <div class="min-w-0">
                         <p class="text-xs text-muted-foreground">Requester</p>
                         <p class="truncate text-sm font-semibold">
@@ -222,50 +239,66 @@ async function copyNumber(): Promise<void> {
                 <template #intro>
                     <div
                         :class="[
-                            'flex flex-col gap-2 rounded-2xl border px-4 py-3 shadow-xs sm:max-w-[75%]',
-                            introIsOwn
-                                ? 'self-end border-transparent bg-tint-green text-tint-green-foreground'
-                                : 'self-start bg-card text-card-foreground',
+                            'flex items-end gap-2',
+                            introIsOwn ? 'flex-row-reverse' : 'flex-row',
                         ]"
                     >
+                        <UserAvatar
+                            :name="ticket.customer?.name ?? 'Customer'"
+                        />
                         <div
-                            class="flex items-center justify-between gap-2 text-xs"
+                            :class="[
+                                'flex max-w-[85%] min-w-0 flex-col gap-2 rounded-2xl border px-4 py-3 shadow-xs sm:max-w-[75%]',
+                                introIsOwn
+                                    ? 'border-transparent bg-tint-green text-tint-green-foreground'
+                                    : 'bg-card text-card-foreground',
+                            ]"
                         >
-                            <span class="text-sm font-semibold">{{
-                                ticket.customer?.name ?? 'Customer'
-                            }}</span>
-                            <Button
-                                v-if="can.update && !editing"
-                                variant="ghost"
-                                size="sm"
-                                @click="editing = true"
+                            <div
+                                class="flex items-center justify-between gap-2 text-xs"
                             >
-                                <Pencil aria-hidden="true" />
-                                Edit
-                            </Button>
+                                <span class="flex items-center gap-2">
+                                    <span class="text-sm font-semibold">{{
+                                        introIsOwn
+                                            ? 'You'
+                                            : (ticket.customer?.name ??
+                                              'Customer')
+                                    }}</span>
+                                    <span class="opacity-70">Customer</span>
+                                </span>
+                                <Button
+                                    v-if="can.editDescription && !editing"
+                                    variant="ghost"
+                                    size="sm"
+                                    @click="editing = true"
+                                >
+                                    <Pencil aria-hidden="true" />
+                                    Edit
+                                </Button>
+                            </div>
+                            <TicketEditForm
+                                v-if="editing"
+                                :ticket="ticket"
+                                :can="can"
+                                :categories="options.categories"
+                                @done="editing = false"
+                            />
+                            <p
+                                v-else
+                                class="text-sm break-words whitespace-pre-line"
+                            >
+                                {{ ticket.description }}
+                            </p>
+                            <AttachmentList
+                                v-if="!editing"
+                                :attachments="attachments"
+                            />
+                            <time
+                                :datetime="ticket.created_at ?? undefined"
+                                class="text-xs opacity-70"
+                                >{{ formatRelative(ticket.created_at) }}</time
+                            >
                         </div>
-                        <TicketEditForm
-                            v-if="editing"
-                            :ticket="ticket"
-                            :can="can"
-                            :categories="options.categories"
-                            @done="editing = false"
-                        />
-                        <p
-                            v-else
-                            class="text-sm break-words whitespace-pre-line"
-                        >
-                            {{ ticket.description }}
-                        </p>
-                        <AttachmentList
-                            v-if="!editing"
-                            :attachments="attachments"
-                        />
-                        <time
-                            :datetime="ticket.created_at ?? undefined"
-                            class="text-xs opacity-70"
-                            >{{ formatRelative(ticket.created_at) }}</time
-                        >
                     </div>
                 </template>
             </ConversationPanel>

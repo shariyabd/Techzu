@@ -43,6 +43,10 @@ final class TicketListQuery
             ->withCount(['replies' => static function (Builder $q) use ($viewer): void {
                 /** @var Builder<TicketReply> $q */
                 $q->visibleTo($viewer);
+            }])
+            ->withExists(['replies as has_agent_response' => static function (Builder $q): void {
+                $q->where('ticket_replies.is_internal', false)
+                    ->whereColumn('ticket_replies.author_id', '!=', 'tickets.customer_id');
             }]);
 
         return $this->filter->apply($query, $validated, $viewer, $now)

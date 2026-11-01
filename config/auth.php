@@ -116,4 +116,10 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    'password_length' => [
+        'min' => 8,
+        'production_min' => 12,
+        'max' => 72,
+    ],
+
 ];

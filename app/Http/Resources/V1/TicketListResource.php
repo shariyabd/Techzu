@@ -32,6 +32,7 @@ final class TicketListResource extends JsonResource
             ],
             'escalation_level' => $this->escalation_level->value,
             'replies_count' => $this->whenCounted('replies'),
+            'has_agent_response' => $this->whenHas('has_agent_response', fn (): bool => (bool) $this->resource->getAttribute('has_agent_response')),
             'created_at' => $this->created_at->toIso8601String(),
             'updated_at' => $this->updated_at->toIso8601String(),
         ];

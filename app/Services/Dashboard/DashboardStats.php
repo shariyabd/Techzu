@@ -11,6 +11,7 @@ use App\Models\Ticket;
 use App\Models\User;
 use App\Services\Sla\SlaQuery;
 use Carbon\CarbonImmutable;
+use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -20,16 +21,23 @@ final class DashboardStats
 {
     public const CACHE_KEY = 'dashboard:staff';
 
-    /** @return array{totals: array<string, int>, by_priority: list<array{priority: string, count: int}>, by_agent: list<array{agent_id: int, name: string, active: int, breached: int}>} */
+    private const SLA_HEALTH_KEYS = ['within', 'approaching', 'breached', 'paused'];
+
+    /** @return array{totals: array<string, int>, sla_health: array<string, int>, by_status: list<array{status: string, count: int}>, by_priority: list<array{priority: string, count: int}>, by_agent: list<array{agent_id: int, name: string, active: int, breached: int}>, trend: list<array{date: string, created: int, resolved: int}>} */
     public function summary(): array
     {
         return Cache::remember(self::CACHE_KEY, (int) config('tickets.dashboard.cache_ttl_seconds'), function (): array {
             $now = CarbonImmutable::now();
+            $counts = $this->totals($now);
+            $breakdown = $this->activeBreakdown();
 
             return [
-                'totals' => $this->totals($now),
-                'by_priority' => $this->byPriority(),
+                'totals' => array_diff_key($counts, array_flip(['within', 'paused'])),
+                'sla_health' => array_combine(self::SLA_HEALTH_KEYS, array_map(static fn (string $key): int => $counts[$key], self::SLA_HEALTH_KEYS)),
+                'by_status' => $breakdown['by_status'],
+                'by_priority' => $breakdown['by_priority'],
                 'by_agent' => $this->byAgent($now),
+                'trend' => $this->trend($now),
             ];
         });
     }
@@ -63,6 +71,8 @@ final class DashboardStats
                 "SUM(CASE WHEN status IN ({$activeIn}) AND priority = ? THEN 1 ELSE 0 END) AS critical",
                 "SUM(CASE WHEN status IN ({$activeIn}) AND sla_paused_at IS NULL AND sla_due_at <= ? THEN 1 ELSE 0 END) AS breached",
                 "SUM(CASE WHEN status IN ({$activeIn}) AND sla_paused_at IS NULL AND sla_warning_at <= ? AND sla_due_at > ? THEN 1 ELSE 0 END) AS approaching",
+                "SUM(CASE WHEN status IN ({$activeIn}) AND sla_paused_at IS NULL AND sla_warning_at > ? THEN 1 ELSE 0 END) AS within",
+                "SUM(CASE WHEN status IN ({$activeIn}) AND sla_paused_at IS NOT NULL THEN 1 ELSE 0 END) AS paused",
                 "SUM(CASE WHEN status IN ({$finishedIn}) AND resolved_at >= ? THEN 1 ELSE 0 END) AS resolved",
             ]), [
                 ...$active,
@@ -70,6 +80,8 @@ final class DashboardStats
                 ...$active, TicketPriority::Critical->value,
                 ...$active, $now,
                 ...$active, $now, $now,
+                ...$active, $now,
+                ...$active,
                 ...$finished, $resolvedSince,
             ])
             ->where(static function (QueryBuilder $query) use ($active, $finished, $resolvedSince): void {
@@ -80,28 +92,96 @@ final class DashboardStats
             })
             ->first();
 
-        $keys = ['open', 'unassigned', 'critical', 'breached', 'approaching', 'resolved'];
+        $keys = ['open', 'unassigned', 'critical', 'breached', 'approaching', 'resolved', 'within', 'paused'];
 
         return array_combine($keys, array_map(static fn (string $key): int => (int) ($row[$key] ?? 0), $keys));
     }
 
-    /** @return list<array{priority: string, count: int}> */
-    private function byPriority(): array
+    /** @return array{by_status: list<array{status: string, count: int}>, by_priority: list<array{priority: string, count: int}>} */
+    private function activeBreakdown(): array
     {
-        $counts = Ticket::query()->toBase()
-            ->select('priority')
-            ->selectRaw('COUNT(*) AS priority_count')
+        $rows = Ticket::query()->toBase()
+            ->select(['priority', 'status'])
+            ->selectRaw('COUNT(*) AS ticket_count')
             ->whereIn('status', self::values(TicketStatus::active()))
-            ->groupBy('priority')
-            ->pluck('priority_count', 'priority');
+            ->groupBy('priority', 'status')
+            ->get();
+
+        $byStatus = [];
+        $byPriority = [];
+
+        foreach ($rows as $row) {
+            $count = (int) $row->ticket_count;
+            $byStatus[(string) $row->status] = ($byStatus[(string) $row->status] ?? 0) + $count;
+            $byPriority[(string) $row->priority] = ($byPriority[(string) $row->priority] ?? 0) + $count;
+        }
 
         $priorities = TicketPriority::cases();
         usort($priorities, static fn (TicketPriority $a, TicketPriority $b): int => $b->rank() <=> $a->rank());
 
-        return array_map(
-            static fn (TicketPriority $priority): array => ['priority' => $priority->value, 'count' => (int) ($counts[$priority->value] ?? 0)],
-            $priorities,
+        return [
+            'by_status' => array_map(
+                static fn (TicketStatus $status): array => ['status' => $status->value, 'count' => $byStatus[$status->value] ?? 0],
+                TicketStatus::active(),
+            ),
+            'by_priority' => array_map(
+                static fn (TicketPriority $priority): array => ['priority' => $priority->value, 'count' => $byPriority[$priority->value] ?? 0],
+                $priorities,
+            ),
+        ];
+    }
+
+    /** @return list<array{date: string, created: int, resolved: int}> */
+    private function trend(CarbonImmutable $now): array
+    {
+        $days = max(1, (int) config('tickets.dashboard.trend_days'));
+        $today = $now->setTimezone((string) config('business_hours.timezone'))->startOfDay();
+        $starts = array_map(static fn (int $offset): CarbonImmutable => $today->subDays($offset), range($days - 1, 0));
+        $bounds = array_map(
+            static fn (CarbonImmutable $start): array => [$start->utc(), $start->addDay()->utc()],
+            $starts,
         );
+        $from = $bounds[0][0];
+        $until = $bounds[$days - 1][1];
+
+        $created = $this->dailyCounts('created_at', $bounds, static function (QueryBuilder $query) use ($from, $until): void {
+            $query->where('created_at', '>=', $from)->where('created_at', '<', $until);
+        });
+        $resolved = $this->dailyCounts('resolved_at', $bounds, static function (QueryBuilder $query) use ($from, $until): void {
+            $query->whereIn('status', self::values(TicketStatus::finished()))
+                ->where('resolved_at', '>=', $from)
+                ->where('resolved_at', '<', $until);
+        });
+
+        return array_map(
+            static fn (int $day, CarbonImmutable $start): array => ['date' => $start->toDateString(), 'created' => $created[$day], 'resolved' => $resolved[$day]],
+            array_keys($starts),
+            $starts,
+        );
+    }
+
+    /**
+     * @param  'created_at'|'resolved_at'  $column
+     * @param  list<array{CarbonImmutable, CarbonImmutable}>  $bounds
+     * @param  Closure(QueryBuilder): void  $scope
+     * @return list<int>
+     */
+    private function dailyCounts(string $column, array $bounds, Closure $scope): array
+    {
+        $sums = [];
+        $bindings = [];
+
+        foreach ($bounds as $day => [$start, $end]) {
+            $sums[] = "SUM(CASE WHEN {$column} >= ? AND {$column} < ? THEN 1 ELSE 0 END) AS d{$day}";
+            $bindings[] = $start;
+            $bindings[] = $end;
+        }
+
+        $query = Ticket::query()->toBase()->selectRaw(implode(', ', $sums), $bindings);
+        $scope($query);
+        $row = (array) $query->first();
+
+        return array_map(static fn (int $day): int => (int) ($row["d{$day}"] ?? 0), array_keys($bounds));
     }
 
     /** @return list<array{agent_id: int, name: string, active: int, breached: int}> */

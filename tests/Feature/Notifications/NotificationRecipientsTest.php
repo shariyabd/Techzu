@@ -33,6 +33,7 @@ beforeEach(function (): void {
     config(['tickets.auto_assign' => false]);
     $this->u = [
         'customer' => User::factory()->customer()->create(),
+        'other_customer' => User::factory()->customer()->create(),
         'agent' => User::factory()->agent()->create(),
         'other_agent' => User::factory()->agent()->create(),
         'admin1' => User::factory()->admin()->create(),

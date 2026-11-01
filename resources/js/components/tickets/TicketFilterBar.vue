@@ -1,7 +1,21 @@
 <script setup lang="ts">
 import { router } from '@inertiajs/vue3';
-import { RotateCcw, Search, SlidersHorizontal } from '@lucide/vue';
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
+import {
+    ChevronDown,
+    RotateCcw,
+    Search,
+    SlidersHorizontal,
+    X,
+} from '@lucide/vue';
+import {
+    computed,
+    nextTick,
+    onBeforeUnmount,
+    onMounted,
+    reactive,
+    ref,
+    watch,
+} from 'vue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -10,6 +24,7 @@ import {
     NativeSelect,
     NativeSelectOption,
 } from '@/components/ui/native-select';
+import { formatDate } from '@/lib/format';
 import { index } from '@/routes/tickets';
 import type { TicketFilterOptions, TicketScope } from '@/types/tickets';
 
@@ -21,6 +36,7 @@ const props = defineProps<{
 }>();
 
 const DEFAULT_SORT = '-created_at';
+const PANEL_STORAGE_KEY = 'tickets.filters.advanced-open';
 
 type FilterState = {
     number: string;
@@ -36,6 +52,17 @@ type FilterState = {
     sla_state: string;
     sort: string;
 };
+
+type ActiveChip = { id: string; label: string; remove: () => void };
+type TextKey =
+    | 'number'
+    | 'q'
+    | 'category_id'
+    | 'assigned_agent_id'
+    | 'customer_id'
+    | 'created_from'
+    | 'created_to'
+    | 'sla_state';
 
 const ADVANCED: (keyof FilterState)[] = [
     'status',
@@ -118,7 +145,37 @@ const activeAdvanced = computed(
 const hasFilters = computed(() =>
     Object.keys(toQuery(state)).some((key) => key !== 'scope'),
 );
-const showAdvanced = ref(activeAdvanced.value > 0);
+const showAdvanced = ref(false);
+const animate = ref(false);
+
+function readPanelPreference(): boolean {
+    try {
+        return window.localStorage.getItem(PANEL_STORAGE_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
+
+function togglePanel(): void {
+    animate.value = true;
+    showAdvanced.value = !showAdvanced.value;
+
+    try {
+        window.localStorage.setItem(
+            PANEL_STORAGE_KEY,
+            showAdvanced.value ? '1' : '0',
+        );
+    } catch {
+        return;
+    }
+}
+
+onMounted(() => {
+    showAdvanced.value = readPanelPreference();
+    void nextTick(() => {
+        animate.value = true;
+    });
+});
 
 let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -159,7 +216,109 @@ function reset(): void {
     Object.assign(state, fromFilters({}));
 }
 
-const chipClass = (active: boolean): string =>
+function labelFor(
+    options: { value: string; label: string }[],
+    value: string,
+): string {
+    return options.find((option) => option.value === value)?.label ?? value;
+}
+
+const chips = computed<ActiveChip[]>(() => {
+    const result: ActiveChip[] = [];
+    const clear = (key: TextKey) => () => {
+        state[key] = '';
+    };
+
+    if (state.q.trim() !== '') {
+        result.push({
+            id: 'q',
+            label: `Keyword: “${state.q.trim()}”`,
+            remove: clear('q'),
+        });
+    }
+    if (state.number.trim() !== '') {
+        result.push({
+            id: 'number',
+            label: `ID: ${state.number.trim()}`,
+            remove: clear('number'),
+        });
+    }
+    for (const value of state.status) {
+        result.push({
+            id: `status-${value}`,
+            label: `Status: ${labelFor(props.options.statuses, value)}`,
+            remove: () => toggle(state.status, value),
+        });
+    }
+    for (const value of state.priority) {
+        result.push({
+            id: `priority-${value}`,
+            label: `Priority: ${labelFor(props.options.priorities, value)}`,
+            remove: () => toggle(state.priority, value),
+        });
+    }
+    if (state.category_id !== '') {
+        const category = props.options.categories.find(
+            (candidate) => String(candidate.id) === state.category_id,
+        );
+        result.push({
+            id: 'category_id',
+            label: `Category: ${category?.name ?? `#${state.category_id}`}`,
+            remove: clear('category_id'),
+        });
+    }
+    if (state.sla_state !== '') {
+        result.push({
+            id: 'sla_state',
+            label: `SLA: ${labelFor(props.options.slaStates, state.sla_state)}`,
+            remove: clear('sla_state'),
+        });
+    }
+    if (state.created_from !== '') {
+        result.push({
+            id: 'created_from',
+            label: `From ${formatDate(`${state.created_from}T00:00:00`)}`,
+            remove: clear('created_from'),
+        });
+    }
+    if (state.created_to !== '') {
+        result.push({
+            id: 'created_to',
+            label: `To ${formatDate(`${state.created_to}T00:00:00`)}`,
+            remove: clear('created_to'),
+        });
+    }
+    if (state.assigned_agent_id !== '') {
+        const agent = props.options.agents.find(
+            (candidate) => String(candidate.id) === state.assigned_agent_id,
+        );
+        result.push({
+            id: 'assigned_agent_id',
+            label: `Agent: ${agent?.name ?? `#${state.assigned_agent_id}`}`,
+            remove: clear('assigned_agent_id'),
+        });
+    }
+    if (state.unassigned) {
+        result.push({
+            id: 'unassigned',
+            label: 'Unassigned only',
+            remove: () => {
+                state.unassigned = false;
+            },
+        });
+    }
+    if (state.customer_id.trim() !== '') {
+        result.push({
+            id: 'customer_id',
+            label: `Customer #${state.customer_id.trim()}`,
+            remove: clear('customer_id'),
+        });
+    }
+
+    return result;
+});
+
+const toggleClass = (active: boolean): string =>
     [
         'h-8 rounded-full border px-3 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
         active
@@ -171,42 +330,38 @@ const chipClass = (active: boolean): string =>
 <template>
     <section
         aria-label="Filter tickets"
-        class="flex flex-col gap-3 rounded-xl border bg-card p-3 shadow-xs"
+        class="flex flex-col rounded-xl border bg-card shadow-xs"
     >
         <div
-            class="grid gap-3 md:grid-cols-[minmax(0,1fr)_12rem_12rem_auto] md:items-end"
+            class="grid gap-2 p-3 sm:grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1fr)_11rem_11rem_auto] md:items-center"
         >
-            <div class="grid gap-2">
-                <Label for="filter-q">Keyword</Label>
-                <div class="relative">
-                    <Search
-                        class="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-                        aria-hidden="true"
-                    />
-                    <Input
-                        id="filter-q"
-                        v-model="state.q"
-                        type="search"
-                        placeholder="Subject or description"
-                        class="pl-8"
-                        maxlength="200"
-                    />
-                </div>
-                <p v-if="errors.q" class="text-sm text-destructive">
-                    {{ errors.q }}
-                </p>
+            <div class="relative">
+                <Label for="filter-q" class="sr-only">Keyword</Label>
+                <Search
+                    class="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+                    aria-hidden="true"
+                />
+                <Input
+                    id="filter-q"
+                    v-model="state.q"
+                    type="search"
+                    placeholder="Search subject or description"
+                    class="pl-8"
+                    maxlength="200"
+                    :aria-invalid="errors.q ? true : undefined"
+                />
             </div>
-            <div class="grid gap-2">
-                <Label for="filter-number">Ticket ID</Label>
+            <div class="hidden md:block">
+                <Label for="filter-number" class="sr-only">Ticket ID</Label>
                 <Input
                     id="filter-number"
                     v-model="state.number"
-                    placeholder="TKT-2026-000123"
+                    placeholder="Ticket ID"
                     maxlength="32"
                 />
             </div>
-            <div class="grid gap-2">
-                <Label for="filter-sort">Sort</Label>
+            <div class="hidden md:block">
+                <Label for="filter-sort" class="sr-only">Sort</Label>
                 <NativeSelect id="filter-sort" v-model="state.sort">
                     <NativeSelectOption
                         v-for="option in options.sorts"
@@ -218,155 +373,260 @@ const chipClass = (active: boolean): string =>
             </div>
             <Button
                 type="button"
-                variant="outline"
+                :variant="showAdvanced ? 'secondary' : 'outline'"
                 :aria-expanded="showAdvanced"
                 aria-controls="ticket-filters-advanced"
-                @click="showAdvanced = !showAdvanced"
+                @click="togglePanel"
             >
                 <SlidersHorizontal aria-hidden="true" />
-                Filters<span v-if="activeAdvanced > 0" class="tabular-nums">
-                    ({{ activeAdvanced }})</span
+                Filters
+                <span
+                    v-if="activeAdvanced > 0"
+                    class="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] leading-5 font-semibold text-primary-foreground tabular-nums"
+                    >{{ activeAdvanced
+                    }}<span class="sr-only"> active</span></span
                 >
+                <ChevronDown
+                    class="transition-transform duration-200 motion-reduce:transition-none"
+                    :class="showAdvanced ? 'rotate-180' : ''"
+                    aria-hidden="true"
+                />
             </Button>
+        </div>
+        <p v-if="errors.q" class="-mt-1 px-3 pb-2 text-sm text-destructive">
+            {{ errors.q }}
+        </p>
+
+        <div
+            class="grid"
+            :class="[
+                showAdvanced ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
+                animate
+                    ? 'transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none'
+                    : '',
+            ]"
+        >
+            <div
+                id="ticket-filters-advanced"
+                class="min-h-0 overflow-hidden"
+                :inert="!showAdvanced"
+                :aria-hidden="!showAdvanced"
+            >
+                <div class="flex flex-col gap-4 border-t bg-muted/30 p-3">
+                    <div class="grid gap-3 sm:grid-cols-2 md:hidden">
+                        <div class="grid gap-2">
+                            <Label for="filter-number-sm">Ticket ID</Label>
+                            <Input
+                                id="filter-number-sm"
+                                v-model="state.number"
+                                placeholder="TKT-2026-000123"
+                                maxlength="32"
+                            />
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="filter-sort-sm">Sort</Label>
+                            <NativeSelect
+                                id="filter-sort-sm"
+                                v-model="state.sort"
+                            >
+                                <NativeSelectOption
+                                    v-for="option in options.sorts"
+                                    :key="option.value"
+                                    :value="option.value"
+                                    >{{ option.label }}</NativeSelectOption
+                                >
+                            </NativeSelect>
+                        </div>
+                    </div>
+
+                    <div class="grid gap-4 lg:grid-cols-2">
+                        <fieldset class="flex flex-wrap items-center gap-2">
+                            <legend class="mb-2 text-sm font-medium">
+                                Status
+                            </legend>
+                            <button
+                                v-for="option in options.statuses"
+                                :key="option.value"
+                                type="button"
+                                :class="
+                                    toggleClass(
+                                        state.status.includes(option.value),
+                                    )
+                                "
+                                :aria-pressed="
+                                    state.status.includes(option.value)
+                                "
+                                @click="toggle(state.status, option.value)"
+                            >
+                                {{ option.label }}
+                            </button>
+                        </fieldset>
+
+                        <fieldset class="flex flex-wrap items-center gap-2">
+                            <legend class="mb-2 text-sm font-medium">
+                                Priority
+                            </legend>
+                            <button
+                                v-for="option in options.priorities"
+                                :key="option.value"
+                                type="button"
+                                :class="
+                                    toggleClass(
+                                        state.priority.includes(option.value),
+                                    )
+                                "
+                                :aria-pressed="
+                                    state.priority.includes(option.value)
+                                "
+                                @click="toggle(state.priority, option.value)"
+                            >
+                                {{ option.label }}
+                            </button>
+                        </fieldset>
+                    </div>
+
+                    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        <div
+                            v-if="options.categories.length > 0"
+                            class="grid gap-2"
+                        >
+                            <Label for="filter-category">Category</Label>
+                            <NativeSelect
+                                id="filter-category"
+                                v-model="state.category_id"
+                            >
+                                <NativeSelectOption value=""
+                                    >All categories</NativeSelectOption
+                                >
+                                <NativeSelectOption
+                                    v-for="category in options.categories"
+                                    :key="category.id"
+                                    :value="String(category.id)"
+                                    >{{ category.name }}</NativeSelectOption
+                                >
+                            </NativeSelect>
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="filter-sla">SLA</Label>
+                            <NativeSelect
+                                id="filter-sla"
+                                v-model="state.sla_state"
+                            >
+                                <NativeSelectOption value=""
+                                    >Any SLA state</NativeSelectOption
+                                >
+                                <NativeSelectOption
+                                    v-for="option in options.slaStates"
+                                    :key="option.value"
+                                    :value="option.value"
+                                    >{{ option.label }}</NativeSelectOption
+                                >
+                            </NativeSelect>
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="filter-from">Created from</Label>
+                            <Input
+                                id="filter-from"
+                                v-model="state.created_from"
+                                type="date"
+                            />
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="filter-to">Created to</Label>
+                            <Input
+                                id="filter-to"
+                                v-model="state.created_to"
+                                type="date"
+                                :min="state.created_from || undefined"
+                            />
+                            <p
+                                v-if="errors.created_to"
+                                class="text-sm text-destructive"
+                            >
+                                {{ errors.created_to }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div
+                        v-if="options.showPeopleFilters"
+                        class="grid gap-3 sm:grid-cols-2 sm:items-end lg:grid-cols-4"
+                    >
+                        <div
+                            v-if="options.agents.length > 0"
+                            class="grid gap-2"
+                        >
+                            <Label for="filter-agent">Assigned agent</Label>
+                            <NativeSelect
+                                id="filter-agent"
+                                v-model="state.assigned_agent_id"
+                                :disabled="state.unassigned"
+                            >
+                                <NativeSelectOption value=""
+                                    >Any agent</NativeSelectOption
+                                >
+                                <NativeSelectOption
+                                    v-for="agent in options.agents"
+                                    :key="agent.id"
+                                    :value="String(agent.id)"
+                                    >{{ agent.name }}</NativeSelectOption
+                                >
+                            </NativeSelect>
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="filter-customer">Customer ID</Label>
+                            <Input
+                                id="filter-customer"
+                                v-model="state.customer_id"
+                                type="number"
+                                min="1"
+                                inputmode="numeric"
+                            />
+                        </div>
+                        <div class="flex h-9 items-center gap-2">
+                            <Checkbox
+                                id="filter-unassigned"
+                                :model-value="state.unassigned"
+                                @update:model-value="setUnassigned"
+                            />
+                            <Label for="filter-unassigned"
+                                >Unassigned only</Label
+                            >
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div
-            v-show="showAdvanced"
-            id="ticket-filters-advanced"
-            class="flex flex-col gap-4"
+            v-if="hasFilters"
+            class="flex flex-wrap items-center gap-2 border-t px-3 py-2"
         >
-            <fieldset class="flex flex-wrap items-center gap-2">
-                <legend class="mb-2 text-sm font-medium">Status</legend>
-                <button
-                    v-for="option in options.statuses"
-                    :key="option.value"
-                    type="button"
-                    :class="chipClass(state.status.includes(option.value))"
-                    :aria-pressed="state.status.includes(option.value)"
-                    @click="toggle(state.status, option.value)"
-                >
-                    {{ option.label }}
-                </button>
-            </fieldset>
-
-            <fieldset class="flex flex-wrap items-center gap-2">
-                <legend class="mb-2 text-sm font-medium">Priority</legend>
-                <button
-                    v-for="option in options.priorities"
-                    :key="option.value"
-                    type="button"
-                    :class="chipClass(state.priority.includes(option.value))"
-                    :aria-pressed="state.priority.includes(option.value)"
-                    @click="toggle(state.priority, option.value)"
-                >
-                    {{ option.label }}
-                </button>
-            </fieldset>
-
-            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <div v-if="options.categories.length > 0" class="grid gap-2">
-                    <Label for="filter-category">Category</Label>
-                    <NativeSelect
-                        id="filter-category"
-                        v-model="state.category_id"
-                    >
-                        <NativeSelectOption value=""
-                            >All categories</NativeSelectOption
-                        >
-                        <NativeSelectOption
-                            v-for="category in options.categories"
-                            :key="category.id"
-                            :value="String(category.id)"
-                            >{{ category.name }}</NativeSelectOption
-                        >
-                    </NativeSelect>
-                </div>
-                <div class="grid gap-2">
-                    <Label for="filter-sla">SLA</Label>
-                    <NativeSelect id="filter-sla" v-model="state.sla_state">
-                        <NativeSelectOption value=""
-                            >Any SLA state</NativeSelectOption
-                        >
-                        <NativeSelectOption
-                            v-for="option in options.slaStates"
-                            :key="option.value"
-                            :value="option.value"
-                            >{{ option.label }}</NativeSelectOption
-                        >
-                    </NativeSelect>
-                </div>
-                <div class="grid gap-2">
-                    <Label for="filter-from">Created from</Label>
-                    <Input
-                        id="filter-from"
-                        v-model="state.created_from"
-                        type="date"
-                    />
-                </div>
-                <div class="grid gap-2">
-                    <Label for="filter-to">Created to</Label>
-                    <Input
-                        id="filter-to"
-                        v-model="state.created_to"
-                        type="date"
-                        :min="state.created_from || undefined"
-                    />
-                    <p
-                        v-if="errors.created_to"
-                        class="text-sm text-destructive"
-                    >
-                        {{ errors.created_to }}
-                    </p>
-                </div>
-            </div>
-
-            <div
-                v-if="options.showPeopleFilters"
-                class="grid gap-3 sm:grid-cols-3 sm:items-end"
+            <span class="text-xs font-medium text-muted-foreground"
+                >Active:</span
             >
-                <div v-if="options.agents.length > 0" class="grid gap-2">
-                    <Label for="filter-agent">Assigned agent</Label>
-                    <NativeSelect
-                        id="filter-agent"
-                        v-model="state.assigned_agent_id"
-                        :disabled="state.unassigned"
+            <ul class="contents" aria-label="Active filters">
+                <li v-for="chip in chips" :key="chip.id">
+                    <button
+                        type="button"
+                        class="inline-flex h-7 items-center gap-1 rounded-full border border-primary/30 bg-primary/10 pr-1.5 pl-2.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                        :aria-label="`Remove filter ${chip.label}`"
+                        @click="chip.remove()"
                     >
-                        <NativeSelectOption value=""
-                            >Any agent</NativeSelectOption
-                        >
-                        <NativeSelectOption
-                            v-for="agent in options.agents"
-                            :key="agent.id"
-                            :value="String(agent.id)"
-                            >{{ agent.name }}</NativeSelectOption
-                        >
-                    </NativeSelect>
-                </div>
-                <div class="flex h-9 items-center gap-2">
-                    <Checkbox
-                        id="filter-unassigned"
-                        :model-value="state.unassigned"
-                        @update:model-value="setUnassigned"
-                    />
-                    <Label for="filter-unassigned">Unassigned only</Label>
-                </div>
-                <div class="grid gap-2">
-                    <Label for="filter-customer">Customer ID</Label>
-                    <Input
-                        id="filter-customer"
-                        v-model="state.customer_id"
-                        type="number"
-                        min="1"
-                        inputmode="numeric"
-                    />
-                </div>
-            </div>
-        </div>
-
-        <div v-if="hasFilters" class="flex justify-end">
-            <Button type="button" variant="ghost" size="sm" @click="reset">
+                        {{ chip.label }}
+                        <X class="size-3.5" aria-hidden="true" />
+                    </button>
+                </li>
+            </ul>
+            <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                class="ml-auto"
+                @click="reset"
+            >
                 <RotateCcw aria-hidden="true" />
-                Clear filters
+                Reset
             </Button>
         </div>
     </section>

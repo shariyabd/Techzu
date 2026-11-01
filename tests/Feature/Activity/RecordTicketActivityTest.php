@@ -73,7 +73,7 @@ it('splits a category change from content updates', function (): void {
     $to = Category::factory()->create(['name' => 'Technical']);
     $ticket = Ticket::factory()->create(['category_id' => $from->id, 'subject' => 'Old']);
 
-    app(UpdateTicket::class)->handle($this->admin, $ticket, ['category_id' => $to->id, 'subject' => 'New', 'description' => 'Changed body']);
+    app(UpdateTicket::class)->handle($this->admin, $ticket, ['category_id' => $to->id, 'subject' => 'New']);
 
     $activities = activitiesFor($ticket);
     expect($activities->pluck('event')->all())->toBe([ActivityType::CategoryChanged->value, ActivityType::Updated->value]);
@@ -83,7 +83,7 @@ it('splits a category change from content updates', function (): void {
         ->and($category->properties->get('to'))->toBe(['id' => $to->id, 'name' => 'Technical']);
 
     $updated = $activities->last();
-    expect($updated->properties->get('fields'))->toBe(['subject', 'description'])
+    expect($updated->properties->get('fields'))->toBe(['subject'])
         ->and($updated->properties->get('from'))->toBe(['subject' => 'Old'])
         ->and($updated->properties->get('to'))->toBe(['subject' => 'New']);
 });

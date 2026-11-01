@@ -28,11 +28,11 @@ const form = useForm({
 });
 
 const submit = (): void => {
-    form.transform((data) =>
-        props.can.changePriority
-            ? data
-            : { subject: data.subject, description: data.description },
-    ).patch(update.url(props.ticket.number), {
+    form.transform((data) => ({
+        subject: data.subject,
+        ...(props.can.editDescription ? { description: data.description } : {}),
+        ...(props.can.changePriority ? { category_id: data.category_id } : {}),
+    })).patch(update.url(props.ticket.number), {
         preserveScroll: true,
         onSuccess: () => emit('done'),
     });
@@ -51,7 +51,7 @@ const submit = (): void => {
             />
             <InputError :message="form.errors.subject" />
         </div>
-        <div class="grid gap-2">
+        <div v-if="can.editDescription" class="grid gap-2">
             <Label for="edit-description">Description</Label>
             <Textarea
                 id="edit-description"

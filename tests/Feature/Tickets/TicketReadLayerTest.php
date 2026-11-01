@@ -83,7 +83,7 @@ it('exposes the TicketCan abilities with allowed statuses', function (): void {
     $open = Ticket::factory()->status(TicketStatus::Open)->create();
 
     $customerCan = TicketResource::abilities($this->customer, $resolvedOwn);
-    expect(array_keys($customerCan))->toBe(['update', 'changeStatus', 'changePriority', 'claim', 'assign', 'reply', 'addInternalNote', 'allowedStatuses'])
+    expect(array_keys($customerCan))->toBe(['update', 'editDescription', 'changeStatus', 'changePriority', 'claim', 'assign', 'reply', 'addInternalNote', 'allowedStatuses'])
         ->and($customerCan['allowedStatuses'])->toEqualCanonicalizing(['closed', 'in_progress'])
         ->and($customerCan['assign'])->toBeFalse()
         ->and($customerCan['addInternalNote'])->toBeFalse();

@@ -42,5 +42,5 @@ it('returns the same figures from the API', function (): void {
         ->assertJsonPath('data.by_priority.0', ['priority' => 'critical', 'count' => 1])
         ->assertJsonPath('data.by_agent.0.agent_id', $this->agent->id)
         ->assertJsonPath('data.my_tickets.0.number', $this->breached->number)
-        ->assertJsonStructure(['data' => ['totals', 'by_priority', 'by_agent', 'my_tickets' => [['number', 'subject', 'status', 'priority', 'sla']]]]);
+        ->assertJsonStructure(['data' => ['totals', 'sla_health', 'by_status', 'by_priority', 'by_agent', 'trend' => [['date', 'created', 'resolved']], 'my_tickets' => [['number', 'subject', 'status', 'priority', 'sla']]]]);
 });

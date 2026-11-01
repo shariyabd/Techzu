@@ -10,6 +10,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { useClientValidation } from '@/composables/useClientValidation';
+import { email, MAX_EMAIL_LENGTH, maxLength, required } from '@/lib/validation';
 import { register } from '@/routes';
 import { request } from '@/routes/password';
 
@@ -22,6 +24,18 @@ defineOptions({
 
 const page = usePage();
 const status = computed(() => page.props.flash.success);
+
+const { onBefore, onInput, onFocusOut } = useClientValidation(() => ({
+    email: [
+        required('Email address'),
+        email(),
+        maxLength('Email address', MAX_EMAIL_LENGTH),
+    ],
+    password: [
+        required('Password'),
+        maxLength('Password', page.props.passwordRules.max),
+    ],
+}));
 </script>
 
 <template>
@@ -29,6 +43,11 @@ const status = computed(() => page.props.flash.success);
 
     <Form
         v-bind="store.form()"
+        ref="form"
+        novalidate
+        :on-before="onBefore"
+        @input="onInput"
+        @focusout="onFocusOut"
         :reset-on-success="['password']"
         v-slot="{ errors, processing }"
         class="flex flex-col gap-6"

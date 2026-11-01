@@ -11,5 +11,7 @@ return [
 
     'max_files' => (int) env('ATTACHMENTS_MAX_FILES', 5),
 
+    'preview_mime_types' => ['image/png', 'image/jpeg', 'image/gif'],
+
     'extensions' => ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'txt', 'csv', 'doc', 'docx', 'xls', 'xlsx', 'zip'],
 ];

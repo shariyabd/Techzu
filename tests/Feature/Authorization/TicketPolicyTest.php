@@ -25,6 +25,11 @@ $closed = TicketStatus::Closed;
 $rows = [
     [$customer, $own, $open, 'view', [], 200],
     [$customer, $own, $open, 'update', [], 200],
+    [$customer, $own, $open, 'editDescription', [], 200],
+    [$customer, $own, $inProgress, 'editDescription', [], 403],
+    [$customer, $others, $open, 'editDescription', [], 404],
+    [$agent, $assigned, $open, 'editDescription', [], 403],
+    [$admin, $others, $open, 'editDescription', [], 403],
     [$customer, $own, $open, 'changeStatus', [], 403],
     [$customer, $own, $open, 'changePriority', [], 403],
     [$customer, $own, $open, 'claim', [], 403],

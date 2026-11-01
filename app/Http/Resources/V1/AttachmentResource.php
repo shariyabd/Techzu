@@ -23,6 +23,9 @@ final class AttachmentResource extends JsonResource
             'size_bytes' => (int) $this->size_bytes,
             'is_internal' => (bool) $this->is_internal,
             'download_url' => url($base.$this->id),
+            'preview_url' => ! $request->is('api/*') && $this->resource->isPreviewableAs(config()->array('attachments.preview_mime_types'))
+                ? route('attachments.preview', $this->id)
+                : null,
             'created_at' => $this->created_at->toIso8601String(),
         ];
     }

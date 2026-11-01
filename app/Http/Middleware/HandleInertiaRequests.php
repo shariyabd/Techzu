@@ -9,6 +9,7 @@ use App\Models\Holiday;
 use App\Models\Ticket;
 use App\Models\TicketImport;
 use App\Models\User;
+use App\Services\Auth\PasswordLength;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -47,6 +48,7 @@ class HandleInertiaRequests extends Middleware
             'notifications' => [
                 'unread_count' => fn (): int => $user?->unreadNotifications()->count() ?? 0,
             ],
+            'passwordRules' => fn (): array => app(PasswordLength::class)->toArray(),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }

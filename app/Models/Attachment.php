@@ -46,4 +46,10 @@ class Attachment extends Model
     {
         return $this->belongsTo(User::class, 'uploaded_by');
     }
+
+    /** @param  array<array-key, mixed>  $previewMimeTypes */
+    public function isPreviewableAs(array $previewMimeTypes): bool
+    {
+        return in_array($this->mime_type, $previewMimeTypes, true);
+    }
 }

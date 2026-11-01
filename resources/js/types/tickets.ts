@@ -26,6 +26,7 @@ export type CategorySummary = {
 
 export type TicketCan = {
     update: boolean;
+    editDescription: boolean;
     changeStatus: boolean;
     changePriority: boolean;
     claim: boolean;
@@ -72,6 +73,7 @@ export type TicketListItem = {
     sla: Pick<TicketSla, 'state' | 'due_at'>;
     escalation_level: number;
     replies_count?: number;
+    has_agent_response?: boolean;
     created_at: string | null;
     updated_at: string | null;
 };
@@ -83,6 +85,7 @@ export type AttachmentItem = {
     size_bytes: number;
     is_internal: boolean;
     download_url: string;
+    preview_url?: string | null;
     created_at: string | null;
 };
 

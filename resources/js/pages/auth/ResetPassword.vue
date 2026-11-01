@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { Form, Head } from '@inertiajs/vue3';
+import { Form, Head, usePage } from '@inertiajs/vue3';
 import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { useClientValidation } from '@/composables/useClientValidation';
+import { maxLength, minLength, required, sameAs } from '@/lib/validation';
 import { update } from '@/routes/password';
 
 defineOptions({
@@ -19,6 +21,20 @@ const props = defineProps<{
     token: string;
     email: string;
 }>();
+
+const page = usePage();
+
+const { onBefore, onInput, onFocusOut } = useClientValidation(() => ({
+    password: [
+        required('Password'),
+        minLength('Password', page.props.passwordRules.min),
+        maxLength('Password', page.props.passwordRules.max),
+    ],
+    password_confirmation: [
+        required('Password confirmation'),
+        sameAs('password', 'The passwords do not match.'),
+    ],
+}));
 </script>
 
 <template>
@@ -26,6 +42,11 @@ const props = defineProps<{
 
     <Form
         v-bind="update.form()"
+        ref="form"
+        novalidate
+        :on-before="onBefore"
+        @input="onInput"
+        @focusout="onFocusOut"
         :transform="
             (data) => ({ ...data, token: props.token, email: props.email })
         "

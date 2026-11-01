@@ -9,6 +9,7 @@ use App\Actions\Auth\SendPasswordResetLink;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\ForgotPasswordRequest;
 use App\Http\Requests\Auth\ResetPasswordRequest;
+use App\Services\Auth\PasswordResetLinks;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -28,8 +29,12 @@ final class PasswordResetController extends Controller
         return back()->with('success', 'If an account exists for that email, a password reset link has been sent.');
     }
 
-    public function edit(Request $request, string $token): Response
+    public function edit(Request $request, string $token, PasswordResetLinks $links): Response|RedirectResponse
     {
+        if (! $links->isUsable($request->string('email')->toString(), $token)) {
+            return to_route('password.request')->with('error', 'This password reset link is invalid, expired or already used. Request a new one below.');
+        }
+
         return Inertia::render('auth/ResetPassword', [
             'token' => $token,
             'email' => $request->string('email')->toString(),

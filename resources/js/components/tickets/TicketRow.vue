@@ -23,27 +23,9 @@ const props = defineProps<{
     showCustomer: boolean;
 }>();
 
-const isActive = computed(() =>
-    ['open', 'in_progress', 'waiting_for_customer'].includes(
-        props.ticket.status.value,
-    ),
+const isAwaitingResponse = computed(
+    () => props.ticket.has_agent_response === false,
 );
-const isBreached = computed(() => props.ticket.sla.state.value === 'breached');
-const isUnassigned = computed(
-    () => isActive.value && props.ticket.assigned_agent === null,
-);
-
-const tone = computed(() => {
-    if (isBreached.value) {
-        return 'border-tint-amber-border bg-tint-amber';
-    }
-
-    if (isUnassigned.value && props.showCustomer) {
-        return 'border-transparent bg-tint-green';
-    }
-
-    return 'border-border bg-card';
-});
 
 const clientName = computed(
     () => props.ticket.customer?.name ?? props.ticket.category?.name ?? '—',
@@ -53,10 +35,13 @@ const clientName = computed(
 <template>
     <article
         :class="[
-            'relative grid items-center gap-x-4 gap-y-2 rounded-xl border p-3 shadow-xs transition-shadow focus-within:ring-2 focus-within:ring-ring hover:shadow-sm lg:grid-cols-[minmax(0,13rem)_8.5rem_minmax(0,1fr)_9rem_2rem]',
-            tone,
+            'relative grid items-center gap-x-4 gap-y-3 overflow-hidden rounded-xl border p-3 pl-4 shadow-xs transition-shadow focus-within:ring-2 focus-within:ring-ring hover:shadow-md lg:grid-cols-[minmax(0,13rem)_8.5rem_minmax(0,1fr)_minmax(0,13rem)_minmax(0,10rem)_2rem] lg:py-2.5',
+            isAwaitingResponse
+                ? 'border-ticket-awaiting-border bg-ticket-awaiting before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-ticket-awaiting-accent'
+                : 'border-ticket-responded-border bg-ticket-responded',
         ]"
         :data-ticket="ticket.number"
+        :data-response="isAwaitingResponse ? 'awaiting' : 'responded'"
     >
         <div class="flex min-w-0 items-center gap-3 pr-10 lg:pr-0">
             <Avatar class="size-9 shrink-0">
@@ -64,22 +49,16 @@ const clientName = computed(
             </Avatar>
             <div class="min-w-0">
                 <p class="truncate text-sm font-medium">{{ clientName }}</p>
-                <div class="flex items-center gap-2 text-xs">
-                    <span
-                        v-if="ticket.category && showCustomer"
-                        class="truncate rounded bg-muted px-1.5 py-0.5 text-muted-foreground"
-                        >{{ ticket.category.name }}</span
-                    >
-                    <span
-                        class="shrink-0 text-muted-foreground"
-                        :title="formatDateTime(ticket.created_at)"
-                        >{{ formatRelative(ticket.created_at) }}</span
-                    >
-                </div>
+                <p
+                    class="truncate text-xs text-muted-foreground"
+                    :title="formatDateTime(ticket.created_at)"
+                >
+                    {{ formatRelative(ticket.created_at) }}
+                </p>
             </div>
         </div>
 
-        <p class="font-mono text-sm text-muted-foreground">
+        <p class="font-mono text-xs text-muted-foreground lg:text-sm">
             {{ ticket.number }}
         </p>
 
@@ -87,20 +66,36 @@ const clientName = computed(
             <Link
                 :href="show(ticket.number)"
                 class="block truncate font-semibold outline-none after:absolute after:inset-0 after:rounded-xl hover:underline"
-                >{{ ticket.subject }}</Link
+                >{{ ticket.subject
+                }}<span v-if="isAwaitingResponse" class="sr-only">
+                    (awaiting first agent response)</span
+                ></Link
             >
-            <div class="mt-1 flex flex-wrap items-center gap-1.5">
-                <StatusBadge :status="ticket.status" />
-                <PriorityBadge :priority="ticket.priority" />
-                <SlaBadge :sla="ticket.sla" />
+            <div
+                class="mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground"
+            >
+                <span
+                    v-if="ticket.category && showCustomer"
+                    class="truncate rounded bg-muted px-1.5 py-0.5"
+                    >{{ ticket.category.name }}</span
+                >
                 <span
                     v-if="ticket.replies_count"
-                    class="inline-flex items-center gap-1 text-xs text-muted-foreground"
+                    class="inline-flex shrink-0 items-center gap-1"
+                    :title="`${ticket.replies_count} replies`"
                     ><MessageSquare class="size-3" aria-hidden="true" />{{
                         ticket.replies_count
-                    }}</span
+                    }}<span class="sr-only"> replies</span></span
                 >
             </div>
+        </div>
+
+        <div class="flex min-w-0 flex-col gap-1.5">
+            <div class="flex flex-wrap items-center gap-1.5">
+                <StatusBadge :status="ticket.status" />
+                <PriorityBadge :priority="ticket.priority" />
+            </div>
+            <SlaBadge :sla="ticket.sla" />
         </div>
 
         <div class="flex min-w-0 items-center gap-2">
@@ -114,7 +109,9 @@ const clientName = computed(
                     ticket.assigned_agent.name
                 }}</span>
             </template>
-            <span v-else class="text-sm text-muted-foreground">Unassigned</span>
+            <span v-else class="text-sm text-muted-foreground italic"
+                >Unassigned</span
+            >
         </div>
 
         <div

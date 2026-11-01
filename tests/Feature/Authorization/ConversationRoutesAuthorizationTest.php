@@ -28,10 +28,12 @@ it('enforces the conversation matrix', function (?Role $role, string $relation, 
         'customer_id' => $owner->id,
         'created_by_id' => $owner->id,
     ]);
-    $public = app(AddReply::class)->handle($writer, $ticket, 'Public', false, [UploadedFile::fake()->create('public.pdf', 2, 'application/pdf')]);
-    $internal = app(AddReply::class)->handle($writer, $ticket, 'Internal', true, [UploadedFile::fake()->create('internal.pdf', 2, 'application/pdf')]);
-    $publicFile = Attachment::query()->where('reply_id', $public->id)->sole();
-    $internalFile = Attachment::query()->where('reply_id', $internal->id)->sole();
+    $public = app(AddReply::class)->handle($writer, $ticket, 'Public', false, [UploadedFile::fake()->create('public.pdf', 2, 'application/pdf'), UploadedFile::fake()->image('public.png')]);
+    $internal = app(AddReply::class)->handle($writer, $ticket, 'Internal', true, [UploadedFile::fake()->create('internal.pdf', 2, 'application/pdf'), UploadedFile::fake()->image('internal.png')]);
+    $publicFile = Attachment::query()->where('reply_id', $public->id)->where('mime_type', 'application/pdf')->sole();
+    $internalFile = Attachment::query()->where('reply_id', $internal->id)->where('mime_type', 'application/pdf')->sole();
+    $publicImage = Attachment::query()->where('reply_id', $public->id)->where('mime_type', 'image/png')->sole();
+    $internalImage = Attachment::query()->where('reply_id', $internal->id)->where('mime_type', 'image/png')->sole();
     if ($closed) {
         $ticket->forceFill(['status' => TicketStatus::Closed, 'closed_at' => now()])->save();
     }
@@ -43,6 +45,8 @@ it('enforces the conversation matrix', function (?Role $role, string $relation, 
         'api.public_file' => route('api.v1.attachments.download', $publicFile),
         'web.internal_file' => route('attachments.download', $internalFile),
         'api.internal_file' => route('api.v1.attachments.download', $internalFile),
+        'web.public_preview' => route('attachments.preview', $publicImage),
+        'web.internal_preview' => route('attachments.preview', $internalImage),
     };
     $matrix->expectAccess($method, $uri, $status, $method === 'POST' ? ['body' => 'matrix reply'] : []);
 })->with([
@@ -73,4 +77,9 @@ it('enforces the conversation matrix', function (?Role $role, string $relation, 
     'customer · own · api internal file' => [Role::Customer, 'own', 'GET', 'api.internal_file', false, 404],
     'agent · web internal file' => [Role::Agent, 'other', 'GET', 'web.internal_file', false, 200],
     'admin · api internal file' => [Role::Admin, 'other', 'GET', 'api.internal_file', false, 200],
+    'guest · web public preview' => [null, 'other', 'GET', 'web.public_preview', false, 302],
+    'customer · own · web public preview' => [Role::Customer, 'own', 'GET', 'web.public_preview', false, 200],
+    'customer · other · web public preview' => [Role::Customer, 'other', 'GET', 'web.public_preview', false, 404],
+    'customer · own · web internal preview' => [Role::Customer, 'own', 'GET', 'web.internal_preview', false, 404],
+    'agent · web internal preview' => [Role::Agent, 'other', 'GET', 'web.internal_preview', false, 200],
 ]);

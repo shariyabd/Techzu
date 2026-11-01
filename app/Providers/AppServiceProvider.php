@@ -6,6 +6,7 @@ namespace App\Providers;
 
 use App\Policies\DashboardPolicy;
 use App\Policies\NotificationPolicy;
+use App\Services\Auth\PasswordLength;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
@@ -45,15 +46,14 @@ class AppServiceProvider extends ServiceProvider
             app()->isProduction(),
         );
 
-        Password::defaults(fn (): ?Password => app()->isProduction()
-            ? Password::min(12)
-                ->mixedCase()
-                ->letters()
-                ->numbers()
-                ->symbols()
-                ->uncompromised()
-            : null,
-        );
+        Password::defaults(function (): Password {
+            $length = app(PasswordLength::class);
+            $rule = Password::min($length->min())->max($length->max());
+
+            return app()->isProduction()
+                ? $rule->mixedCase()->letters()->numbers()->symbols()->uncompromised()
+                : $rule;
+        });
     }
 
     private function configureRateLimiting(): void

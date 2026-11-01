@@ -69,12 +69,39 @@ it('lists active and breached tickets per agent, including idle agents', functio
     ]);
 });
 
-it('runs three queries on a cold cache', function (): void {
+it('counts active tickets per status for the status breakdown', function (): void {
+    expect(app(DashboardStats::class)->summary()['by_status'])->toBe([
+        ['status' => 'open', 'count' => 3],
+        ['status' => 'in_progress', 'count' => 1],
+        ['status' => 'waiting_for_customer', 'count' => 1],
+    ]);
+});
+
+it('splits active tickets into within, approaching, breached and paused SLA health', function (): void {
+    expect(app(DashboardStats::class)->summary()['sla_health'])
+        ->toBe(['within' => 2, 'approaching' => 1, 'breached' => 1, 'paused' => 1]);
+});
+
+it('buckets created and resolved tickets by business-timezone day over the trend window', function (): void {
+    config(['tickets.dashboard.trend_days' => 3, 'business_hours.timezone' => 'Asia/Dhaka']);
+    Ticket::query()->update(['created_at' => CarbonImmutable::parse('2026-10-01 00:00:00', 'UTC')]);
+    Ticket::factory()->count(2)->create(['status' => TicketStatus::Open, 'created_at' => CarbonImmutable::parse('2026-10-28 19:00:00', 'UTC')]);
+    Ticket::factory()->create(['status' => TicketStatus::Open, 'created_at' => CarbonImmutable::parse('2026-10-28 17:00:00', 'UTC')]);
+    Ticket::factory()->create(['status' => TicketStatus::Open, 'created_at' => CarbonImmutable::parse('2026-10-26 17:00:00', 'UTC')]);
+
+    expect(app(DashboardStats::class)->summary()['trend'])->toBe([
+        ['date' => '2026-10-27', 'created' => 0, 'resolved' => 1],
+        ['date' => '2026-10-28', 'created' => 1, 'resolved' => 1],
+        ['date' => '2026-10-29', 'created' => 2, 'resolved' => 0],
+    ]);
+});
+
+it('runs five queries on a cold cache', function (): void {
     DB::enableQueryLog();
     app(DashboardStats::class)->summary();
     $cold = count(DB::getQueryLog());
     DB::disableQueryLog();
-    expect($cold)->toBe(3);
+    expect($cold)->toBe(5);
 });
 
 it('serves cached figures for 60 seconds', function (): void {

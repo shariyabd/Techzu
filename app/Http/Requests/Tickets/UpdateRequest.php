@@ -24,11 +24,15 @@ final class UpdateRequest extends FormRequest
     /** @return array<string, mixed> */
     public function rules(): array
     {
-        $canChangeCategory = Gate::forUser($this->user())->allows('changePriority', $this->ticket());
+        $gate = Gate::forUser($this->user());
+        $canChangeCategory = $gate->allows('changePriority', $this->ticket());
+        $canEditDescription = $gate->allows('editDescription', $this->ticket());
 
         return [
             'subject' => ['sometimes', 'required', 'string', 'max:255'],
-            'description' => ['sometimes', 'required', 'string', 'max:20000'],
+            'description' => $canEditDescription
+                ? ['sometimes', 'required', 'string', 'max:20000']
+                : ['prohibited'],
             'category_id' => $canChangeCategory
                 ? ['sometimes', 'required', 'integer', Rule::exists('categories', 'id')->where('is_active', true)]
                 : ['prohibited'],
