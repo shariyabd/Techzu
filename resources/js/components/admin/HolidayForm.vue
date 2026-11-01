@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Link, useForm } from '@inertiajs/vue3';
 import InputError from '@/components/InputError.vue';
+import SlaRecalculateOption from '@/components/admin/SlaRecalculateOption.vue';
 import SubmitButton from '@/components/SubmitButton.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +14,7 @@ const props = defineProps<{ holiday?: HolidayItem }>();
 const form = useForm({
     date: props.holiday?.date ?? '',
     name: props.holiday?.name ?? '',
+    recalculate_active_tickets: false,
 });
 
 function submit(): void {
@@ -40,8 +42,9 @@ function submit(): void {
         </div>
         <p class="text-xs text-muted-foreground">
             New SLA deadlines skip this day. Deadlines already calculated for
-            existing tickets don't change.
+            existing tickets don't change unless you recalculate them.
         </p>
+        <SlaRecalculateOption v-model="form.recalculate_active_tickets" />
         <div class="flex flex-wrap gap-2">
             <SubmitButton :processing="form.processing">{{
                 holiday ? 'Save changes' : 'Add holiday'

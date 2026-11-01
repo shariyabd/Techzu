@@ -8,6 +8,7 @@ use App\Actions\Tickets\CreateTicket;
 use App\Actions\Tickets\UpdateTicket;
 use App\Enums\ActivityType;
 use App\Enums\AssignmentMethod;
+use App\Enums\EscalationLevel;
 use App\Enums\TicketPriority;
 use App\Enums\TicketStatus;
 use App\Events\TicketAssigned;
@@ -98,18 +99,32 @@ it('records sla_paused after a status change to waiting', function (): void {
         ->and($activities->first()->properties->all())->toEqual(['from' => 'in_progress', 'to' => 'waiting_for_customer']);
 });
 
-it('records sla_resumed with the new deadline when leaving waiting', function (): void {
-    $ticket = Ticket::factory()->status(TicketStatus::WaitingForCustomer)->create([
-        'sla_paused_at' => now()->subHour(),
+it('records sla_resumed with the new deadline when the clock restarts', function (TicketStatus $from): void {
+    $ticket = Ticket::factory()->status($from)->create([
         'sla_due_at' => now()->addHours(2),
         'sla_warning_at' => now()->addHour(),
     ]);
 
     app(ChangeTicketStatus::class)->handle(null, $ticket, TicketStatus::InProgress);
 
+    $fresh = $ticket->fresh();
     $activities = activitiesFor($ticket);
     expect($activities->pluck('event')->all())->toBe([ActivityType::StatusChanged->value, ActivityType::SlaResumed->value])
-        ->and($activities->last()->properties->get('due_at'))->toBe($ticket->fresh()?->sla_due_at?->toIso8601String());
+        ->and($activities->last()->properties->all())->toBe([
+            'due_at' => $fresh?->sla_due_at->toIso8601String(),
+            'warning_at' => $fresh?->sla_warning_at->toIso8601String(),
+        ]);
+})->with([
+    'leaving waiting for customer' => [TicketStatus::WaitingForCustomer],
+    'reopening a resolved ticket' => [TicketStatus::Resolved],
+]);
+
+it('does not record sla_resumed when a waiting ticket is resolved', function (): void {
+    $ticket = Ticket::factory()->status(TicketStatus::WaitingForCustomer)->create(['sla_paused_at' => now()->subHour()]);
+
+    app(ChangeTicketStatus::class)->handle($this->admin, $ticket, TicketStatus::Resolved);
+
+    expect(activitiesFor($ticket)->pluck('event')->all())->not->toContain(ActivityType::SlaResumed->value);
 });
 
 it('records a system actor as no causer even while a user is logged in', function (): void {
@@ -170,7 +185,7 @@ it('records public replies and internal notes separately', function (): void {
 });
 
 it('records sla_approaching and escalated as system entries', function (): void {
-    $ticket = Ticket::factory()->create();
+    $ticket = Ticket::factory()->create(['escalation_level' => EscalationLevel::Breached]);
 
     TicketSlaApproaching::dispatch($ticket);
     TicketSlaBreached::dispatch($ticket);

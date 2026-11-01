@@ -12,7 +12,13 @@ use App\Exceptions\Domain\CannotChangeOwnRole;
 use App\Models\Category;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Notifications\InternalNoteAddedNotification;
+use App\Notifications\SlaBreachedNotification;
+use App\Notifications\TicketNeedsAssignmentNotification;
+use App\Notifications\TicketRepliedNotification;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Spatie\Activitylog\Models\Activity;
 
 beforeEach(function (): void {
@@ -48,6 +54,17 @@ it('detaches agent categories when a user stops being an agent', function (): vo
 
     expect($agent->categories()->count())->toBe(0);
 });
+
+it('deletes every notification received as staff when staff are demoted to customer', function (Role $from): void {
+    $user = User::factory()->{strtolower($from->name)}()->create();
+    foreach ([InternalNoteAddedNotification::class, SlaBreachedNotification::class, TicketNeedsAssignmentNotification::class, TicketRepliedNotification::class] as $type) {
+        $user->notifications()->create(['id' => (string) Str::uuid(), 'type' => $type, 'data' => ['title' => 'x', 'body' => 'SECRET-EXCERPT']]);
+    }
+
+    app(ChangeUserRole::class)->handle($this->admin, $user, Role::Customer);
+
+    expect($user->notifications()->count())->toBe(0);
+})->with([Role::Agent, Role::Admin]);
 
 it('refuses to let an admin change their own role', function (Role $role): void {
     expect(fn () => app(ChangeUserRole::class)->handle($this->admin, $this->admin, $role))
@@ -108,6 +125,34 @@ it('revokes api tokens when an admin sets a new password', function (): void {
     expect(Hash::check('brand-new-password', (string) $user->fresh()?->password))->toBeTrue()
         ->and($user->tokens()->count())->toBe(0);
 });
+
+it('ends the web sessions of a user whose password changes, keeping only the editing admin\'s own', function (bool $self, array $expected): void {
+    config()->set('session.driver', 'database');
+    $user = $self ? $this->admin : User::factory()->customer()->create();
+    $user->forceFill(['remember_token' => 'old-remember-token'])->save();
+    $bystander = User::factory()->customer()->create();
+    $current = str_repeat('c', 40);
+    app('session')->driver()->setId($current);
+
+    foreach (['current' => [$current, $user], 'other' => [str_repeat('o', 40), $user], 'bystander' => [str_repeat('b', 40), $bystander]] as [$id, $owner]) {
+        DB::table('sessions')->insert(['id' => $id, 'user_id' => $owner->id, 'payload' => '', 'last_activity' => time()]);
+    }
+
+    app(UpdateUser::class)->handle($this->admin, $user, [
+        'name' => $user->name,
+        'email' => $user->email,
+        'password' => 'brand-new-password',
+        'role' => ($self ? Role::Admin : Role::Customer)->value,
+        'category_ids' => null,
+        'is_available' => null,
+    ]);
+
+    expect(DB::table('sessions')->orderBy('id')->pluck('id')->all())->toBe($expected)
+        ->and($user->fresh()?->getRememberToken())->not->toBe('old-remember-token');
+})->with([
+    'admin changes another user\'s password' => [false, [str_repeat('b', 40)]],
+    'admin changes their own password' => [true, [str_repeat('b', 40), str_repeat('c', 40)]],
+]);
 
 it('leaves every field untouched when the admin tries to demote themselves', function (): void {
     expect(fn () => app(UpdateUser::class)->handle($this->admin, $this->admin, [

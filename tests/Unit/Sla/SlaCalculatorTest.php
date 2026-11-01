@@ -74,6 +74,19 @@ function slaTicket(SlaCalculator $calculator, TicketPriority $priority, string $
     return $ticket;
 }
 
+function slaResolve(Ticket $ticket, string $local): void
+{
+    $ticket->status = TicketStatus::Resolved;
+    $ticket->resolved_at = slaAt($local);
+}
+
+function slaReopen(SlaCalculator $calculator, Ticket $ticket, string $local): void
+{
+    $calculator->reopen($ticket, slaAt($local));
+    $ticket->status = TicketStatus::InProgress;
+    $ticket->resolved_at = null;
+}
+
 describe('construction', function (): void {
     it('rejects incomplete or invalid SLA rules', function (array $minutes, int $percent): void {
         expect(fn () => slaCalculator([], $minutes, $percent))->toThrow(InvalidArgumentException::class);
@@ -145,6 +158,25 @@ describe('pause and resume', function (): void {
         'paused and resumed at the same instant' => ['2026-11-01 10:00:00', '2026-11-01 10:00:00', '2026-11-01 11:00:00', '2026-11-01 10:30:00'],
         'paused between warning and due: warning floored to zero' => ['2026-11-01 10:45:00', '2026-11-02 10:00:00', '2026-11-02 10:15:00', '2026-11-02 10:00:00'],
     ]);
+
+    it('does not drift when short pauses add up, before or after a recalculation', function (): void {
+        $calculator = slaCalculator();
+        $ticket = slaTicket($calculator, TicketPriority::Critical, '2026-11-01 09:00:00');
+
+        foreach (['09:10', '09:20', '09:30'] as $minute) {
+            $calculator->pause($ticket, slaAt("2026-11-01 {$minute}:00"));
+            $calculator->resume($ticket, slaAt("2026-11-01 {$minute}:59"));
+        }
+
+        expect(slaLocal($ticket->sla_due_at))->toBe('2026-11-01 11:02:57')
+            ->and(slaLocal($ticket->sla_warning_at))->toBe('2026-11-01 10:32:57')
+            ->and($ticket->sla_paused_seconds)->toBe(177);
+
+        $calculator->recalculateForPriority($ticket, slaAt('2026-11-01 09:40:00'));
+
+        expect(slaLocal($ticket->sla_due_at))->toBe('2026-11-01 11:02:57')
+            ->and(slaLocal($ticket->sla_warning_at))->toBe('2026-11-01 10:32:57');
+    });
 
     it('keeps the original pause moment when paused twice', function (): void {
         $calculator = slaCalculator();
@@ -243,6 +275,84 @@ describe('recalculateForPriority', function (): void {
         'breached Critical -> High, still breached' => [TicketPriority::Critical, EscalationLevel::Breached, '2026-11-02 10:00:00', TicketPriority::High, EscalationLevel::Breached],
         'within Medium -> High, already past due: not raised (sla:scan escalates)' => [TicketPriority::Medium, EscalationLevel::None, '2026-11-02 10:00:00', TicketPriority::High, EscalationLevel::None],
     ]);
+});
+
+describe('time the clock was stopped', function (): void {
+    it('keeps business time spent paused or resolved when the priority changes, whatever the state', function (Closure $steps): void {
+        $calculator = slaCalculator();
+        $ticket = slaTicket($calculator, TicketPriority::Medium, '2026-11-01 09:00:00');
+
+        $steps($calculator, $ticket);
+
+        expect(slaLocal($ticket->sla_due_at))->toBe('2026-11-02 16:00:00')
+            ->and(slaLocal($ticket->sla_warning_at))->toBe('2026-11-02 14:00:00')
+            ->and($ticket->sla_paused_at)->toBeNull()
+            ->and($ticket->sla_paused_seconds)->toBe(480 * 60)
+            ->and($calculator->levelFor($ticket, slaAt('2026-11-02 12:00:00')))->toBe(EscalationLevel::None);
+    })->with([
+        'paused 8 business hours, resumed, then changed' => [function (SlaCalculator $calculator, Ticket $ticket): void {
+            $calculator->pause($ticket, slaAt('2026-11-01 10:00:00'));
+            $calculator->resume($ticket, slaAt('2026-11-02 09:00:00'));
+            $ticket->priority = TicketPriority::High;
+            $calculator->recalculateForPriority($ticket, slaAt('2026-11-02 12:00:00'));
+        }],
+        'changed while paused, then resumed' => [function (SlaCalculator $calculator, Ticket $ticket): void {
+            $calculator->pause($ticket, slaAt('2026-11-01 10:00:00'));
+            $ticket->priority = TicketPriority::High;
+            $calculator->recalculateForPriority($ticket, slaAt('2026-11-01 15:00:00'));
+            $calculator->resume($ticket, slaAt('2026-11-02 09:00:00'));
+        }],
+        'resolved, reopened, then changed' => [function (SlaCalculator $calculator, Ticket $ticket): void {
+            slaResolve($ticket, '2026-11-01 10:00:00');
+            slaReopen($calculator, $ticket, '2026-11-02 09:00:00');
+            $ticket->priority = TicketPriority::High;
+            $calculator->recalculateForPriority($ticket, slaAt('2026-11-02 12:00:00'));
+        }],
+        'changed while resolved, then reopened' => [function (SlaCalculator $calculator, Ticket $ticket): void {
+            slaResolve($ticket, '2026-11-01 10:00:00');
+            $ticket->priority = TicketPriority::High;
+            $calculator->recalculateForPriority($ticket, slaAt('2026-11-01 15:00:00'));
+            slaReopen($calculator, $ticket, '2026-11-02 09:00:00');
+        }],
+    ]);
+
+    it('resumes the business time left at resolution when a ticket is reopened', function (string $resolvedAt, EscalationLevel $level, string $due, string $warning): void {
+        $calculator = slaCalculator();
+        $ticket = slaTicket($calculator, TicketPriority::High, '2026-11-01 09:00:00', ['escalation_level' => $level]);
+
+        slaResolve($ticket, $resolvedAt);
+        slaReopen($calculator, $ticket, '2026-11-04 10:00:00');
+
+        expect(slaLocal($ticket->sla_due_at))->toBe($due)
+            ->and(slaLocal($ticket->sla_warning_at))->toBe($warning)
+            ->and($ticket->escalation_level)->toBe($level)
+            ->and($calculator->levelFor($ticket, slaAt('2026-11-04 10:00:00')))->toBe($level);
+    })->with([
+        'resolved before the warning' => ['2026-11-01 12:00:00', EscalationLevel::None, '2026-11-04 15:00:00', '2026-11-04 13:00:00'],
+        'resolved with 60 minutes left, past the warning' => ['2026-11-01 16:00:00', EscalationLevel::Approaching, '2026-11-04 11:00:00', '2026-11-04 10:00:00'],
+        'resolved after the breach stays breached' => ['2026-11-01 17:30:00', EscalationLevel::Breached, '2026-11-04 10:00:00', '2026-11-04 10:00:00'],
+    ]);
+
+    it('lowers a stale escalation level on reopen when the deadline moves later', function (): void {
+        $calculator = slaCalculator();
+        $ticket = slaTicket($calculator, TicketPriority::High, '2026-11-01 09:00:00', ['escalation_level' => EscalationLevel::Breached]);
+
+        slaResolve($ticket, '2026-11-01 12:00:00');
+        slaReopen($calculator, $ticket, '2026-11-04 10:00:00');
+
+        expect($ticket->escalation_level)->toBe(EscalationLevel::None);
+    });
+
+    it('judges the level of a resolved ticket at the moment it was resolved', function (): void {
+        $calculator = slaCalculator();
+        $ticket = slaTicket($calculator, TicketPriority::High, '2026-11-01 09:00:00', ['escalation_level' => EscalationLevel::Approaching]);
+        slaResolve($ticket, '2026-11-01 16:00:00');
+
+        $ticket->priority = TicketPriority::Low;
+        $calculator->recalculateForPriority($ticket, slaAt('2026-11-20 10:00:00'));
+
+        expect($ticket->escalation_level)->toBe(EscalationLevel::None);
+    });
 });
 
 describe('levelFor', function (): void {

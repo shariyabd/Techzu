@@ -21,6 +21,7 @@ class StoreRequest extends FormRequest
         return [
             'date' => ['required', 'date_format:Y-m-d', $this->uniqueDate()],
             'name' => ['required', 'string', 'max:100'],
+            'recalculate_active_tickets' => ['sometimes', 'boolean'],
         ];
     }
 

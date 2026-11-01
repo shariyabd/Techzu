@@ -7,6 +7,7 @@ use App\Enums\AssignmentMethod;
 use App\Enums\TicketStatus;
 use App\Events\TicketAssigned;
 use App\Events\TicketStatusChanged;
+use App\Exceptions\Domain\AgentUnavailable;
 use App\Exceptions\Domain\TicketAlreadyClaimed;
 use App\Models\Ticket;
 use App\Models\User;
@@ -76,3 +77,15 @@ it('refuses to claim a ticket finished after authorization', function (TicketSta
         ->and($this->agent->fresh()?->last_assigned_at)->toBeNull();
     Event::assertNotDispatched(TicketAssigned::class);
 })->with([TicketStatus::Resolved, TicketStatus::Closed]);
+
+it('refuses a claim from an agent marked unavailable', function (): void {
+    Event::fake([TicketAssigned::class]);
+    $unavailable = User::factory()->agent()->unavailable()->create();
+    $ticket = Ticket::factory()->status(TicketStatus::Open)->create(['assigned_agent_id' => null]);
+
+    expect(fn () => app(ClaimTicket::class)->handle($unavailable, $ticket))
+        ->toThrow(AgentUnavailable::class);
+
+    expect($ticket->fresh())->assigned_agent_id->toBeNull()->status->toBe(TicketStatus::Open);
+    Event::assertNotDispatched(TicketAssigned::class);
+});

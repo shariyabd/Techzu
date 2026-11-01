@@ -23,6 +23,8 @@ final class TicketListQuery
         'tickets.created_at', 'tickets.updated_at',
     ];
 
+    private const int PREVIEW_LENGTH = 200;
+
     public function __construct(
         private readonly Config $config,
         private readonly TicketFilter $filter,
@@ -32,14 +34,14 @@ final class TicketListQuery
      * @param  array<string, mixed>  $validated
      * @return LengthAwarePaginator<int, Ticket>
      */
-    public function paginate(User $viewer, array $validated, CarbonImmutable $now): LengthAwarePaginator
+    public function paginate(User $viewer, array $validated, CarbonImmutable $now, bool $withLatestMessage = false): LengthAwarePaginator
     {
-        $statuses = ($validated['scope'] ?? 'active') === 'resolved' ? TicketStatus::finished() : TicketStatus::active();
+        $statuses = TicketStatus::forScope((string) ($validated['scope'] ?? 'active'));
 
         $query = Ticket::query()
             ->select(self::LIST_COLUMNS)
             ->whereIn('tickets.status', array_map(static fn (TicketStatus $s): string => $s->value, $statuses))
-            ->with(['category:id,name,slug,is_active', 'customer:id,name', 'assignedAgent:id,name'])
+            ->with(['category:id,name,slug,is_active', 'customer:id,name,avatar_path,last_seen_at', 'assignedAgent:id,name,avatar_path,last_seen_at'])
             ->withCount(['replies' => static function (Builder $q) use ($viewer): void {
                 /** @var Builder<TicketReply> $q */
                 $q->visibleTo($viewer);
@@ -49,8 +51,29 @@ final class TicketListQuery
                     ->whereColumn('ticket_replies.author_id', '!=', 'tickets.customer_id');
             }]);
 
+        if ($withLatestMessage) {
+            $this->selectLatestMessage($query);
+        }
+
         return $this->filter->apply($query, $validated, $viewer, $now)
             ->paginate($this->perPage($validated))->withQueryString();
+    }
+
+    /** @param  Builder<Ticket>  $query */
+    private function selectLatestMessage(Builder $query): void
+    {
+        $length = self::PREVIEW_LENGTH;
+
+        $query->selectSub(
+            TicketReply::query()
+                ->selectRaw("SUBSTRING(ticket_replies.body, 1, {$length})")
+                ->whereColumn('ticket_replies.ticket_id', 'tickets.id')
+                ->where('ticket_replies.is_internal', false)
+                ->orderByDesc('ticket_replies.created_at')
+                ->orderByDesc('ticket_replies.id')
+                ->limit(1),
+            'latest_reply_preview',
+        )->selectRaw("SUBSTRING(tickets.description, 1, {$length}) AS description_preview");
     }
 
     /** @param  array<string, mixed>  $validated */

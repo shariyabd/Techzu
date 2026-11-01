@@ -9,8 +9,8 @@ use App\Enums\TicketPriority;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Services\Sla\SlaQuery;
+use App\Services\Sla\SlaSettingsRepository;
 use Carbon\CarbonImmutable;
-use Illuminate\Contracts\Config\Repository as Config;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
 
@@ -32,7 +32,7 @@ final class TicketFilter
     private const array FULLTEXT_DRIVERS = ['mysql', 'mariadb'];
 
     public function __construct(
-        private readonly Config $config,
+        private readonly SlaSettingsRepository $settings,
     ) {}
 
     /**
@@ -60,6 +60,18 @@ final class TicketFilter
 
         if ($slaState !== null) {
             SlaQuery::whereState($query, $slaState, $now);
+        }
+
+        $resolvedSince = $filters['resolved_since'] ?? null;
+
+        if ($resolvedSince instanceof CarbonImmutable) {
+            $query->where('tickets.resolved_at', '>=', $resolvedSince);
+        }
+
+        $response = $filters['response'] ?? null;
+
+        if (is_string($response)) {
+            ResponseQuery::where($query, $response);
         }
 
         $sort = $filters['sort'] ?? null;
@@ -132,7 +144,7 @@ final class TicketFilter
     /** @param  Builder<Ticket>  $query */
     private function createdBetween(Builder $query, mixed $from, mixed $to): void
     {
-        $timezone = (string) $this->config->get('business_hours.timezone', 'UTC');
+        $timezone = $this->settings->timezone();
 
         if (is_string($from) && $from !== '') {
             $query->where('tickets.created_at', '>=', CarbonImmutable::parse($from, $timezone)->startOfDay()->utc());

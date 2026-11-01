@@ -10,10 +10,15 @@ use App\Events\TicketUnassigned;
 use App\Exceptions\Domain\CannotChangeOwnRole;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Services\Agents\AgentDirectoryVersion;
 use Illuminate\Support\Facades\DB;
 
 final class ChangeUserRole
 {
+    public function __construct(
+        private readonly AgentDirectoryVersion $directoryVersion,
+    ) {}
+
     public function handle(User $admin, User $user, Role $role): User
     {
         if ($user->getRoleNames()->all() === [$role->value]) {
@@ -36,7 +41,13 @@ final class ChangeUserRole
                 $this->releaseActiveTickets($admin, $user);
             }
 
+            if ($role === Role::Customer) {
+                $user->notifications()->delete();
+            }
+
             $user->tokens()->delete();
+
+            $this->directoryVersion->rotateAfterCommit();
 
             return $user;
         });

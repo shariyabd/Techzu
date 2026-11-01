@@ -16,7 +16,14 @@ final class AssignRequest extends FormRequest
 {
     public function authorize(): Response
     {
-        return Gate::forUser($this->user())->inspect('assign', $this->ticket());
+        $gate = Gate::forUser($this->user());
+        $assign = $gate->inspect('assign', $this->ticket());
+
+        if ($assign->denied() || ! $this->outsideCategory()) {
+            return $assign;
+        }
+
+        return $gate->inspect('assignOutsideCategory', $this->ticket());
     }
 
     /** @return array<string, mixed> */
@@ -24,7 +31,13 @@ final class AssignRequest extends FormRequest
     {
         return [
             'agent_id' => ['required', 'integer', Rule::exists('users', 'id')],
+            'outside_category' => ['sometimes', 'boolean'],
         ];
+    }
+
+    public function outsideCategory(): bool
+    {
+        return $this->boolean('outside_category');
     }
 
     public function targetAgent(): User

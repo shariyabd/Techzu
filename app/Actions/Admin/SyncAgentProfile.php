@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace App\Actions\Admin;
 
 use App\Models\User;
+use App\Services\Agents\AgentDirectoryVersion;
 use Illuminate\Support\Facades\DB;
 
 final class SyncAgentProfile
 {
+    public function __construct(private readonly AgentDirectoryVersion $directoryVersion) {}
+
     /** @param list<int> $categoryIds */
     public function handle(User $admin, User $agent, array $categoryIds, bool $isAvailable): User
     {
@@ -16,6 +19,8 @@ final class SyncAgentProfile
             $agent->categories()->sync(array_values(array_unique($categoryIds)));
             $agent->is_available = $isAvailable;
             $agent->save();
+
+            $this->directoryVersion->rotateAfterCommit();
 
             return $agent;
         });

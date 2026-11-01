@@ -7,14 +7,12 @@ namespace App\Actions\Tickets;
 use App\Enums\TicketPriority;
 use App\Enums\TicketStatus;
 use App\Events\TicketCreated;
-use App\Models\Attachment;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Services\Attachments\AttachmentStorer;
 use App\Services\Sla\SlaCalculator;
 use App\Services\Tickets\TicketNumberGenerator;
 use Carbon\CarbonImmutable;
-use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -34,12 +32,10 @@ final class CreateTicket
     public function handle(User $actor, array $data, array $files = []): Ticket
     {
         $now = CarbonImmutable::now();
-
-        /** @var Collection<int, Attachment> $stored */
-        $stored = new Collection;
+        $staged = $this->attachments->stage($files);
 
         try {
-            $ticket = DB::transaction(function () use ($actor, $data, $files, $now, &$stored): Ticket {
+            $ticket = DB::transaction(function () use ($actor, $data, $staged, $now): Ticket {
                 $ticket = new Ticket([
                     'subject' => $data['subject'],
                     'description' => $data['description'],
@@ -54,12 +50,12 @@ final class CreateTicket
                 $ticket->save();
                 $ticket->refresh();
 
-                $stored = $this->attachments->storeMany($ticket, null, $actor, $files, false);
+                $this->attachments->persist($ticket, null, $actor, $staged, false);
 
                 return $ticket;
             });
         } catch (Throwable $e) {
-            $this->attachments->deleteFiles($stored);
+            $this->attachments->discard($staged);
 
             throw $e;
         }

@@ -7,19 +7,20 @@ namespace App\Actions\Conversation;
 use App\Actions\Tickets\ChangeTicketStatus;
 use App\Enums\TicketStatus;
 use App\Events\TicketReplied;
+use App\Exceptions\Domain\InternalNoteForbidden;
 use App\Exceptions\Domain\TicketClosed;
-use App\Models\Attachment;
 use App\Models\Ticket;
 use App\Models\TicketReply;
 use App\Models\User;
 use App\Services\Attachments\AttachmentStorer;
-use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
 final class AddReply
 {
+    private const array STATUSES_RESUMED_BY_CUSTOMER_REPLY = [TicketStatus::WaitingForCustomer, TicketStatus::Resolved];
+
     public function __construct(
         private readonly AttachmentStorer $attachments,
         private readonly ChangeTicketStatus $changeStatus,
@@ -28,16 +29,23 @@ final class AddReply
     /**
      * @param  list<UploadedFile>  $files
      *
-     * @throws TicketClosed
+     * @throws InternalNoteForbidden|TicketClosed
      */
     public function handle(User $author, Ticket $ticket, string $body, bool $isInternal, array $files = []): TicketReply
     {
-        $isInternal = $isInternal && $author->can('addInternalNote', $ticket);
-        /** @var Collection<int, Attachment> $stored */
-        $stored = new Collection;
+        if ($isInternal && $author->cannot('addInternalNote', $ticket)) {
+            throw new InternalNoteForbidden;
+        }
+
+        $staged = $this->attachments->stage($files);
+        $committed = false;
 
         try {
-            return DB::transaction(function () use ($author, $ticket, $body, $isInternal, $files, &$stored): TicketReply {
+            [$current, $reply] = DB::transaction(function () use ($author, $ticket, $body, $isInternal, $staged, &$committed): array {
+                DB::afterCommit(static function () use (&$committed): void {
+                    $committed = true;
+                });
+
                 $current = Ticket::query()->whereKey($ticket->getKey())->lockForUpdate()->firstOrFail();
 
                 if ($current->status === TicketStatus::Closed) {
@@ -49,24 +57,30 @@ final class AddReply
                 $reply->author()->associate($author);
                 $reply->save();
 
-                $stored = $this->attachments->storeMany($current, $reply, $author, $files, $isInternal);
+                $this->attachments->persist($current, $reply, $author, $staged, $isInternal);
 
                 if (! $isInternal
                     && $author->id === $current->customer_id
-                    && $current->status === TicketStatus::WaitingForCustomer) {
-                    $current = $this->changeStatus->handle(null, $current, TicketStatus::InProgress);
+                    && in_array($current->status, self::STATUSES_RESUMED_BY_CUSTOMER_REPLY, true)) {
+                    $current = $this->changeStatus->handleLocked($author, $current, TicketStatus::InProgress);
                 }
 
-                $current->touch();
+                if (! $isInternal) {
+                    $current->touch();
+                }
 
-                TicketReplied::dispatch($current, $reply, $author);
-
-                return $reply;
+                return [$current, $reply];
             });
         } catch (Throwable $exception) {
-            $this->attachments->deleteFiles($stored);
+            if (! $committed) {
+                $this->attachments->discard($staged);
+            }
 
             throw $exception;
         }
+
+        TicketReplied::dispatch($current, $reply, $author);
+
+        return $reply;
     }
 }

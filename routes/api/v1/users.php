@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Api\V1\Admin\RoleController;
 use App\Http\Controllers\Api\V1\Admin\UserController;
+use App\Http\Controllers\Api\V1\CustomerLookupController;
 use App\Models\User;
 use Illuminate\Support\Facades\Route;
 
@@ -14,3 +15,7 @@ Route::middleware('auth:sanctum')->prefix('admin')->name('admin.')->group(functi
     Route::get('roles', RoleController::class)->name('roles.index')->can('viewAny', User::class);
     Route::patch('roles/{role}', [RoleController::class, 'update'])->name('roles.update')->can('managePermissions', User::class);
 });
+
+Route::middleware(['auth:sanctum', 'throttle:60,1'])->get('customers/lookup', CustomerLookupController::class)
+    ->name('customers.lookup')
+    ->can('lookupCustomers', User::class);

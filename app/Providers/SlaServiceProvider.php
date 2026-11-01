@@ -7,7 +7,8 @@ namespace App\Providers;
 use App\Services\Sla\BusinessCalendar;
 use App\Services\Sla\HolidayRepository;
 use App\Services\Sla\SlaCalculator;
-use Illuminate\Contracts\Config\Repository as Config;
+use App\Services\Sla\SlaClock;
+use App\Services\Sla\SlaSettingsRepository;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
 
@@ -16,29 +17,25 @@ final class SlaServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->scoped(BusinessCalendar::class, static function (Application $app): BusinessCalendar {
-            $config = $app->make(Config::class);
-
-            /** @var array<string, list<array{0: string, 1: string}>> $week */
-            $week = $config->get('business_hours.week', []);
+            $settings = $app->make(SlaSettingsRepository::class)->current();
 
             return new BusinessCalendar(
-                $week,
-                (string) $config->get('business_hours.timezone'),
+                $settings->week,
+                $settings->timezone,
                 $app->make(HolidayRepository::class)->dates(),
             );
         });
 
         $this->app->scoped(SlaCalculator::class, static function (Application $app): SlaCalculator {
-            $config = $app->make(Config::class);
-
-            /** @var array<string, int> $minutes */
-            $minutes = $config->get('sla.resolution_minutes', []);
+            $settings = $app->make(SlaSettingsRepository::class)->current();
 
             return new SlaCalculator(
                 $app->make(BusinessCalendar::class),
-                $minutes,
-                (int) $config->get('sla.warning_threshold_percent'),
+                $settings->resolutionMinutes,
+                $settings->warningThresholdPercent,
             );
         });
+
+        $this->app->scoped(SlaClock::class, static fn (Application $app): SlaClock => new SlaClock($app->make(BusinessCalendar::class)));
     }
 }

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Services\Sla\SlaSettingsRepository;
 use App\Services\Tickets\TicketNumberGenerator;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
@@ -41,7 +42,7 @@ function tncGeneratorOnSecondConnection(): TicketNumberGenerator
     $connection = concurrentConnection();
     $connection->statement('SET SESSION innodb_lock_wait_timeout = 1');
 
-    return new TicketNumberGenerator($connection, app('config'));
+    return new TicketNumberGenerator($connection, app('config'), app(SlaSettingsRepository::class));
 }
 
 function tncAttemptAllocation(TicketNumberGenerator $generator, CarbonImmutable $at): ?QueryException

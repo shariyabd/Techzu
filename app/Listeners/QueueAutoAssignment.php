@@ -16,11 +16,11 @@ final class QueueAutoAssignment
 
     public function handle(TicketCreated $event): void
     {
-        if ($event->imported || ! (bool) $this->config->get('tickets.auto_assign', false)) {
+        if (! (bool) $this->config->get('tickets.auto_assign', false)) {
             return;
         }
 
-        if ($event->ticket->assigned_agent_id !== null) {
+        if ($event->imported || $event->ticket->assigned_agent_id !== null || ! $event->ticket->isActive()) {
             return;
         }
 

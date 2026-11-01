@@ -8,6 +8,7 @@ use App\Actions\Admin\CreateHoliday;
 use App\Actions\Admin\DeleteHoliday;
 use App\Actions\Admin\UpdateHoliday;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Holidays\DestroyRequest;
 use App\Http\Requests\Holidays\ListRequest;
 use App\Http\Requests\Holidays\StoreRequest;
 use App\Http\Requests\Holidays\UpdateRequest;
@@ -59,9 +60,9 @@ final class HolidayController extends Controller
         return $this->backToYear($update->handle($holiday, $data), 'Holiday updated.');
     }
 
-    public function destroy(Holiday $holiday, DeleteHoliday $delete): RedirectResponse
+    public function destroy(DestroyRequest $request, Holiday $holiday, DeleteHoliday $delete): RedirectResponse
     {
-        $delete->handle($holiday);
+        $delete->handle($holiday, $request->recalculateActiveTickets());
 
         return $this->backToYear($holiday, 'Holiday deleted.');
     }

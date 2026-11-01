@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Listeners;
 
+use App\Actions\Sla\DeliverEscalation;
+use App\Enums\EscalationLevel;
 use App\Events\TicketSlaApproaching;
 use App\Events\TicketSlaBreached;
 use App\Notifications\SlaApproachingNotification;
@@ -13,22 +15,41 @@ use Illuminate\Support\Facades\Notification;
 
 final class SendSlaNotifications
 {
-    public function __construct(private readonly Recipients $recipients) {}
+    public function __construct(
+        private readonly Recipients $recipients,
+        private readonly RecordTicketActivity $activity,
+        private readonly DeliverEscalation $deliverEscalation,
+    ) {}
 
     public function handleApproaching(TicketSlaApproaching $event): void
     {
-        $agent = $this->recipients->find($event->ticket->assigned_agent_id);
+        $ticket = $event->ticket;
 
-        Notification::send(
-            $this->recipients->excluding($agent !== null ? [$agent] : $this->recipients->admins(), null),
-            new SlaApproachingNotification($event->ticket),
-        );
+        $this->deliverEscalation->handle($ticket, EscalationLevel::Approaching, function () use ($ticket): void {
+            $this->activity->recordSlaApproaching($ticket);
+
+            $agent = $this->recipients->find($ticket->assigned_agent_id);
+
+            Notification::send(
+                $this->recipients->excluding($agent !== null ? [$agent] : $this->recipients->admins(), null),
+                (new SlaApproachingNotification($ticket))->beforeCommit(),
+            );
+        });
     }
 
     public function handleBreached(TicketSlaBreached $event): void
     {
-        $targets = [$this->recipients->find($event->ticket->assigned_agent_id), ...$this->recipients->admins()->all()];
+        $ticket = $event->ticket;
 
-        Notification::send($this->recipients->excluding($targets, null), new SlaBreachedNotification($event->ticket));
+        $this->deliverEscalation->handle($ticket, EscalationLevel::Breached, function () use ($ticket): void {
+            $this->activity->recordSlaBreached($ticket);
+
+            $targets = [$this->recipients->find($ticket->assigned_agent_id), ...$this->recipients->admins()->all()];
+
+            Notification::send(
+                $this->recipients->excluding($targets, null),
+                (new SlaBreachedNotification($ticket))->beforeCommit(),
+            );
+        });
     }
 }

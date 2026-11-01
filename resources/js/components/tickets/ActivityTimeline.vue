@@ -2,6 +2,7 @@
 import {
     AlarmClock,
     ArrowRightLeft,
+    CalendarClock,
     CirclePlus,
     FileUp,
     Flag,
@@ -20,6 +21,7 @@ import {
 import type { Component } from 'vue';
 import EmptyState from '@/components/EmptyState.vue';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { formatDateTime, formatRelative } from '@/lib/format';
 import type { ActivityItem } from '@/types/tickets';
 
@@ -44,6 +46,7 @@ const icons: Record<string, Component> = {
     internal_note: Lock,
     sla_paused: Pause,
     sla_resumed: Play,
+    sla_recalculated: CalendarClock,
     sla_approaching: AlarmClock,
     escalated: ShieldAlert,
     imported: FileUp,
@@ -88,8 +91,19 @@ const icons: Record<string, Component> = {
                 </p>
             </li>
         </ol>
+        <ol
+            v-if="loading"
+            class="flex flex-col gap-4 border-l pl-6"
+            aria-label="Loading older activity"
+            aria-busy="true"
+        >
+            <li v-for="row in 3" :key="row" class="flex flex-col gap-1.5">
+                <Skeleton class="h-4 w-4/5" />
+                <Skeleton class="h-3 w-1/3" />
+            </li>
+        </ol>
         <Button
-            v-if="hasMore"
+            v-else-if="hasMore"
             variant="outline"
             size="sm"
             class="self-center"

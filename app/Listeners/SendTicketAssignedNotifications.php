@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Listeners;
 
+use App\Enums\AssignmentMethod;
 use App\Events\TicketAssigned;
 use App\Notifications\TicketAssignedNotification;
 use App\Services\Notifications\Recipients;
@@ -15,6 +16,10 @@ final class SendTicketAssignedNotifications
 
     public function handle(TicketAssigned $event): void
     {
+        if ($event->method === AssignmentMethod::Automatic && $event->ticket->isImported()) {
+            return;
+        }
+
         $recipients = $this->recipients->excluding([
             $this->recipients->find($event->agent->id),
             $this->recipients->find($event->ticket->customer_id),

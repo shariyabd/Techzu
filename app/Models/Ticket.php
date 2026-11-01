@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use App\Enums\ActivityType;
 use App\Enums\EscalationLevel;
 use App\Enums\SlaState;
 use App\Enums\TicketPriority;
 use App\Enums\TicketStatus;
+use App\Services\Tickets\TicketVisibility;
 use Carbon\CarbonImmutable;
 use Database\Factories\TicketFactory;
 use Illuminate\Database\Eloquent\Builder;
@@ -38,6 +38,8 @@ class Ticket extends Model
     /** @var array<string, mixed> */
     protected $attributes = [
         'escalation_level' => 0,
+        'escalation_notified_level' => 0,
+        'sla_paused_seconds' => 0,
     ];
 
     /** @return array<string, string> */
@@ -47,11 +49,14 @@ class Ticket extends Model
             'status' => TicketStatus::class,
             'priority' => TicketPriority::class,
             'escalation_level' => EscalationLevel::class,
+            'escalation_notified_level' => EscalationLevel::class,
+            'ticket_import_id' => 'integer',
             'assigned_at' => 'immutable_datetime',
             'sla_started_at' => 'immutable_datetime',
             'sla_due_at' => 'immutable_datetime',
             'sla_warning_at' => 'immutable_datetime',
             'sla_paused_at' => 'immutable_datetime',
+            'sla_paused_seconds' => 'integer',
             'escalated_at' => 'immutable_datetime',
             'resolved_at' => 'immutable_datetime',
             'closed_at' => 'immutable_datetime',
@@ -111,12 +116,10 @@ class Ticket extends Model
     public function activitiesVisibleTo(User $user): MorphMany
     {
         $activities = $this->activities()->where('log_name', 'ticket');
+        $hidden = TicketVisibility::of($user)->hiddenActivityEvents();
 
-        if (! $user->isStaff()) {
-            $activities->whereNotIn('event', array_map(
-                static fn (ActivityType $type): string => $type->value,
-                array_values(array_filter(ActivityType::cases(), static fn (ActivityType $type): bool => $type->isStaffOnly())),
-            ));
+        if ($hidden !== []) {
+            $activities->whereNotIn('event', $hidden);
         }
 
         return $activities;
@@ -125,14 +128,17 @@ class Ticket extends Model
     /** @param Builder<Ticket> $query */
     public function scopeVisibleTo(Builder $query, User $user): void
     {
-        if (! $user->isStaff()) {
-            $query->where($query->qualifyColumn('customer_id'), $user->id);
-        }
+        TicketVisibility::of($user)->restrictTickets($query);
     }
 
     public function isActive(): bool
     {
         return $this->status->isActive();
+    }
+
+    public function isImported(): bool
+    {
+        return $this->getAttribute('ticket_import_id') !== null;
     }
 
     public function isPaused(): bool

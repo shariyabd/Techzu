@@ -20,6 +20,8 @@ final class BusinessCalendar
 
     private const SECONDS_PER_DAY = 86400;
 
+    private const END_OF_DAY = '24:00';
+
     private const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
     /** @var array<string, list<array{0: int, 1: int}>> */
@@ -53,16 +55,25 @@ final class BusinessCalendar
             throw new InvalidArgumentException('Business minutes must not be negative.');
         }
 
+        return $this->addBusinessSeconds($from, $minutes * self::SECONDS_PER_MINUTE);
+    }
+
+    public function addBusinessSeconds(CarbonImmutable $from, int $seconds): CarbonImmutable
+    {
+        if ($seconds < 0) {
+            throw new InvalidArgumentException('Business seconds must not be negative.');
+        }
+
         $from = $from->startOfSecond();
 
-        if ($minutes === 0) {
+        if ($seconds === 0) {
             return $from->utc();
         }
 
         $local = $from->setTimezone($this->timezone);
         $day = self::anchor($local);
         $cursor = self::secondOfDay($local);
-        $remaining = $minutes * self::SECONDS_PER_MINUTE;
+        $remaining = $seconds;
         $idleDays = 0;
 
         while (true) {
@@ -102,6 +113,11 @@ final class BusinessCalendar
 
     public function businessMinutesBetween(CarbonImmutable $from, CarbonImmutable $to): int
     {
+        return intdiv($this->businessSecondsBetween($from, $to), self::SECONDS_PER_MINUTE);
+    }
+
+    public function businessSecondsBetween(CarbonImmutable $from, CarbonImmutable $to): int
+    {
         $from = $from->startOfSecond();
         $to = $to->startOfSecond();
 
@@ -134,7 +150,7 @@ final class BusinessCalendar
             $day = $day->addDay();
         }
 
-        return intdiv($seconds, self::SECONDS_PER_MINUTE);
+        return $seconds;
     }
 
     public function isBusinessTime(CarbonImmutable $at): bool
@@ -149,6 +165,59 @@ final class BusinessCalendar
         }
 
         return false;
+    }
+
+    public function nextTransition(CarbonImmutable $at): ?CarbonImmutable
+    {
+        $local = $at->startOfSecond()->setTimezone($this->timezone);
+        $day = self::anchor($local);
+        $cursor = self::secondOfDay($local);
+
+        foreach ($this->windowsOn($day) as [$start, $end]) {
+            if ($cursor >= $start && $cursor < $end) {
+                return $this->windowEnd($day, $end);
+            }
+        }
+
+        return $this->nextWindowStart($day, $cursor);
+    }
+
+    private function windowEnd(CarbonImmutable $day, int $end): ?CarbonImmutable
+    {
+        $carriedDays = 0;
+
+        while ($end === self::SECONDS_PER_DAY) {
+            $following = $this->windowsOn($day->addDay())[0] ?? null;
+
+            if ($following === null || $following[0] !== 0) {
+                break;
+            }
+
+            if (++$carriedDays >= self::MAX_LOOKAHEAD_DAYS) {
+                return null;
+            }
+
+            $day = $day->addDay();
+            $end = $following[1];
+        }
+
+        return self::toUtc($day, $end);
+    }
+
+    private function nextWindowStart(CarbonImmutable $day, int $cursor): ?CarbonImmutable
+    {
+        for ($offset = 0; $offset < self::MAX_LOOKAHEAD_DAYS; $offset++) {
+            foreach ($this->windowsOn($day) as [$start]) {
+                if ($start >= $cursor) {
+                    return self::toUtc($day, $start);
+                }
+            }
+
+            $day = $day->addDay();
+            $cursor = 0;
+        }
+
+        return null;
     }
 
     /** @return list<array{0: int, 1: int}> */
@@ -173,6 +242,10 @@ final class BusinessCalendar
 
     private static function toUtc(CarbonImmutable $day, int $secondOfDay): CarbonImmutable
     {
+        if ($secondOfDay >= self::SECONDS_PER_DAY) {
+            return $day->addDay()->setTime(0, 0, 0)->utc();
+        }
+
         return $day
             ->setTime(intdiv($secondOfDay, self::SECONDS_PER_HOUR), intdiv($secondOfDay % self::SECONDS_PER_HOUR, self::SECONDS_PER_MINUTE), $secondOfDay % self::SECONDS_PER_MINUTE)
             ->utc();
@@ -220,8 +293,12 @@ final class BusinessCalendar
 
     private static function parseTime(string $time): int
     {
+        if ($time === self::END_OF_DAY) {
+            return self::SECONDS_PER_DAY;
+        }
+
         if (preg_match('/^([01]\d|2[0-3]):([0-5]\d)$/', $time, $matches) !== 1) {
-            throw new InvalidArgumentException("Invalid business time [{$time}]; expected HH:MM between 00:00 and 23:59.");
+            throw new InvalidArgumentException("Invalid business time [{$time}]; expected HH:MM between 00:00 and 23:59, or 24:00 as an end time.");
         }
 
         return ((int) $matches[1] * self::SECONDS_PER_HOUR) + ((int) $matches[2] * self::SECONDS_PER_MINUTE);

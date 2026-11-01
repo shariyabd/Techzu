@@ -29,7 +29,7 @@ final class AssignmentController extends Controller
     {
         $agent = $request->targetAgent();
 
-        $assignTicket->handle($this->user($request), $ticket, $agent);
+        $assignTicket->handle($this->user($request), $ticket, $agent, $request->outsideCategory());
 
         return back()->with('success', "{$ticket->number} assigned to {$agent->name}.");
     }

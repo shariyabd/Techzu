@@ -1,7 +1,8 @@
-import { CalendarDays, ShieldCheck, Tags, Users } from '@lucide/vue';
+import { CalendarDays, ShieldCheck, Tags, Timer, Users } from '@lucide/vue';
 import type { NavItem } from '@/config/navigation';
 import { index as categoriesIndex } from '@/routes/admin/categories';
 import { index as holidaysIndex } from '@/routes/admin/holidays';
+import { edit as slaEdit } from '@/routes/admin/sla';
 
 const items: NavItem[] = [
     {
@@ -23,10 +24,19 @@ const items: NavItem[] = [
         visible: (page) => page.auth.can.manageHolidays,
     },
     {
+        title: 'SLA & business hours',
+        href: slaEdit.url(),
+        icon: Timer,
+        order: 72,
+        group: 'admin',
+        railKey: 'admin',
+        visible: (page) => page.auth.can.manageSla,
+    },
+    {
         title: 'Users',
         href: '/admin/users',
         icon: Users,
-        order: 72,
+        order: 73,
         group: 'admin',
         railKey: 'admin',
         visible: (page) => page.auth.can.manageUsers,
@@ -35,7 +45,7 @@ const items: NavItem[] = [
         title: 'Roles & permissions',
         href: '/admin/roles',
         icon: ShieldCheck,
-        order: 73,
+        order: 74,
         group: 'admin',
         railKey: 'admin',
         visible: (page) => page.auth.can.manageUsers,

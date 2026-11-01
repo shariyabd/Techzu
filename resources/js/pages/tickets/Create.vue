@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import InputError from '@/components/InputError.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import SubmitButton from '@/components/SubmitButton.vue';
 import AttachmentPicker from '@/components/tickets/AttachmentPicker.vue';
+import CustomerPicker from '@/components/tickets/CustomerPicker.vue';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -16,7 +17,11 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { errorsFor } from '@/lib/forms';
 import { create, index, store } from '@/routes/tickets';
-import type { AttachmentRules, TicketFormOptions } from '@/types/tickets';
+import type {
+    AttachmentRules,
+    CustomerOption,
+    TicketFormOptions,
+} from '@/types/tickets';
 
 defineOptions({
     layout: {
@@ -49,6 +54,13 @@ const form = useForm<{
     attachments: [],
 });
 
+const customer = ref<CustomerOption | null>(null);
+
+function setCustomer(value: CustomerOption | null): void {
+    customer.value = value;
+    form.customer_email = value?.email ?? '';
+}
+
 const attachmentErrors = computed(() => errorsFor(form.errors, 'attachments'));
 
 const submit = (): void => {
@@ -80,13 +92,12 @@ const submit = (): void => {
             <CardContent>
                 <form class="flex flex-col gap-5" @submit.prevent="submit">
                     <div v-if="canCreateOnBehalf" class="grid gap-2">
-                        <Label for="customer_email">Customer email</Label>
-                        <Input
+                        <Label for="customer_email">Customer</Label>
+                        <CustomerPicker
                             id="customer_email"
-                            v-model="form.customer_email"
-                            type="email"
-                            autocomplete="off"
-                            required
+                            :model-value="customer"
+                            :invalid="Boolean(form.errors.customer_email)"
+                            @update:model-value="setCustomer"
                         />
                         <InputError :message="form.errors.customer_email" />
                     </div>

@@ -17,10 +17,12 @@ use Spatie\Permission\Models\Role as RoleModel;
 final class UserDirectory
 {
     private const LIST_COLUMNS = [
-        'users.id', 'users.name', 'users.email', 'users.is_available', 'users.last_assigned_at', 'users.created_at',
+        'users.id', 'users.name', 'users.email', 'users.avatar_path', 'users.is_available', 'users.last_assigned_at', 'users.created_at',
     ];
 
     private const RELATIONS = ['roles:id,name', 'categories:id,name'];
+
+    private const LOOKUP_LIMIT = 10;
 
     /**
      * @param  array{q: string|null, role: string|null, per_page: int}  $filters
@@ -46,6 +48,32 @@ final class UserDirectory
             ->orderBy('users.id')
             ->paginate($filters['per_page'])
             ->withQueryString();
+    }
+
+    /** @return Collection<int, User> */
+    public function lookupCustomers(?string $term, ?int $id): Collection
+    {
+        if ($term === null && $id === null) {
+            return new Collection;
+        }
+
+        $prefix = $term === null ? null : addcslashes($term, '%_\\').'%';
+
+        return User::query()
+            ->select(['users.id', 'users.name', 'users.email'])
+            ->role(Role::Customer->value)
+            ->when($id !== null, static function (Builder $query) use ($id): void {
+                $query->whereKey($id);
+            })
+            ->when($prefix !== null, static function (Builder $query) use ($prefix): void {
+                $query->where(static function (Builder $match) use ($prefix): void {
+                    $match->where('users.name', 'like', $prefix)->orWhere('users.email', 'like', $prefix);
+                });
+            })
+            ->orderBy('users.name')
+            ->orderBy('users.id')
+            ->limit(self::LOOKUP_LIMIT)
+            ->get();
     }
 
     public function load(User $user): User

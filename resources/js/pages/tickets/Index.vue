@@ -9,6 +9,7 @@ import TicketFilterBar from '@/components/tickets/TicketFilterBar.vue';
 import TicketQueuePanel from '@/components/tickets/TicketQueuePanel.vue';
 import TicketRow from '@/components/tickets/TicketRow.vue';
 import { Button } from '@/components/ui/button';
+import { realtimeChannels, useRealtimeReload } from '@/composables/useRealtime';
 import { create, index } from '@/routes/tickets';
 import type {
     Paginated,
@@ -49,6 +50,18 @@ const isFiltered = computed(() =>
     ),
 );
 const showCustomer = computed(() => props.filterOptions.showPeopleFilters);
+useRealtimeReload(
+    () =>
+        props.filterOptions.showPeopleFilters
+            ? [realtimeChannels.queue()]
+            : page.props.auth.user
+              ? [realtimeChannels.user(page.props.auth.user.id)]
+              : [],
+    ['ticket.changed', 'queue.changed'],
+    () => ({ only: ['tickets', 'queues'] }),
+    1500,
+);
+
 const queueKey = computed(() =>
     JSON.stringify([
         props.scope,
@@ -110,7 +123,9 @@ const queueKey = computed(() =>
                 :title="
                     scope === 'active'
                         ? 'No active tickets'
-                        : 'No resolved tickets yet'
+                        : scope === 'all'
+                          ? 'No tickets yet'
+                          : 'No resolved tickets yet'
                 "
                 description="New tickets appear here as soon as they are created."
             >
@@ -143,7 +158,7 @@ const queueKey = computed(() =>
                         </li>
                         <li class="flex items-center gap-1.5">
                             <span
-                                class="size-3.5 rounded-sm border border-ticket-responded-border bg-ticket-responded"
+                                class="size-3.5 rounded-sm border border-border bg-card"
                                 aria-hidden="true"
                             />
                             Agent has responded

@@ -8,6 +8,7 @@ use App\Enums\Permission;
 use App\Enums\TicketStatus;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Services\Tickets\TicketVisibility;
 use Closure;
 use Illuminate\Auth\Access\Response;
 
@@ -17,8 +18,7 @@ final class TicketPolicy
 
     public function viewAny(User $user): bool
     {
-        return $this->has($user, Permission::TicketsViewAny)
-            || $this->has($user, Permission::TicketsViewOwn);
+        return TicketVisibility::of($user)->seesAnyTicket();
     }
 
     public function view(User $user, Ticket $ticket): Response
@@ -38,10 +38,11 @@ final class TicketPolicy
 
     public function update(User $user, Ticket $ticket): Response
     {
-        return $this->decide($user, $ticket, fn (): bool => $this->manages($user, $ticket)
-            || ($this->isCustomerOf($user, $ticket)
-                && $this->has($user, Permission::TicketsUpdateOwn)
-                && $ticket->status === TicketStatus::Open));
+        return $this->decide($user, $ticket, fn (): bool => $ticket->status !== TicketStatus::Closed
+            && ($this->manages($user, $ticket)
+                || ($this->isCustomerOf($user, $ticket)
+                    && $this->has($user, Permission::TicketsUpdateOwn)
+                    && $ticket->status === TicketStatus::Open)));
     }
 
     public function editDescription(User $user, Ticket $ticket): Response
@@ -53,16 +54,18 @@ final class TicketPolicy
 
     public function changeStatus(User $user, Ticket $ticket, ?TicketStatus $to = null): Response
     {
-        return $this->decide($user, $ticket, fn (): bool => $this->manages($user, $ticket)
-            || ($this->isCustomerOf($user, $ticket)
-                && $this->has($user, Permission::TicketsUpdateOwn)
-                && $ticket->status === TicketStatus::Resolved
-                && ($to === null || in_array($to, self::CUSTOMER_TARGETS_FROM_RESOLVED, true))));
+        return $this->decide($user, $ticket, fn (): bool => $ticket->status !== TicketStatus::Closed
+            && ($this->manages($user, $ticket)
+                || ($this->isCustomerOf($user, $ticket)
+                    && $this->has($user, Permission::TicketsUpdateOwn)
+                    && $ticket->status === TicketStatus::Resolved
+                    && ($to === null || in_array($to, self::CUSTOMER_TARGETS_FROM_RESOLVED, true)))));
     }
 
     public function changePriority(User $user, Ticket $ticket): Response
     {
-        return $this->decide($user, $ticket, fn (): bool => $this->manages($user, $ticket));
+        return $this->decide($user, $ticket, fn (): bool => $ticket->status->isActive()
+            && $this->manages($user, $ticket));
     }
 
     public function claim(User $user, Ticket $ticket): Response
@@ -76,6 +79,12 @@ final class TicketPolicy
         return $this->decide($user, $ticket, fn (): bool => $ticket->status->isActive()
             && ($this->has($user, Permission::TicketsAssignAny)
                 || ($this->has($user, Permission::TicketsHandoffOwn) && $this->isAssigneeOf($user, $ticket))));
+    }
+
+    public function assignOutsideCategory(User $user, Ticket $ticket): Response
+    {
+        return $this->decide($user, $ticket, fn (): bool => $ticket->status->isActive()
+            && $this->has($user, Permission::TicketsAssignAny));
     }
 
     public function reply(User $user, Ticket $ticket): Response
@@ -92,7 +101,7 @@ final class TicketPolicy
 
     public function viewInternal(User $user, Ticket $ticket): Response
     {
-        return $this->decide($user, $ticket, fn (): bool => $this->has($user, Permission::TicketsNotesInternal));
+        return $this->decide($user, $ticket, static fn (): bool => TicketVisibility::of($user)->seesInternal);
     }
 
     /** @param Closure(): bool $rule */
@@ -107,8 +116,7 @@ final class TicketPolicy
 
     private function canSee(User $user, Ticket $ticket): bool
     {
-        return $this->has($user, Permission::TicketsViewAny)
-            || ($this->has($user, Permission::TicketsViewOwn) && $this->isCustomerOf($user, $ticket));
+        return TicketVisibility::of($user)->canSee($ticket);
     }
 
     private function manages(User $user, Ticket $ticket): bool

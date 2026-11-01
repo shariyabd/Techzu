@@ -48,7 +48,7 @@ it('escalates at the SLA thresholds', function (int $warningOffset, int $dueOffs
     expect($fresh->escalation_level)->toBe($expected);
     Event::assertDispatchedTimes(TicketSlaApproaching::class, $approaching);
     Event::assertDispatchedTimes(TicketSlaBreached::class, $breached);
-    expect($fresh->escalated_at?->equalTo(scanNow()) ?? false)->toBe($breached === 1);
+    expect($fresh->escalated_at?->equalTo(scanNow()) ?? false)->toBe($approaching + $breached === 1);
 })->with([
     'warning reached exactly' => [0, 1800, EscalationLevel::None, EscalationLevel::Approaching, 1, 0],
     'inside the warning window' => [-600, 1200, EscalationLevel::None, EscalationLevel::Approaching, 1, 0],
@@ -109,7 +109,7 @@ it('re-checks under the row lock, so a ticket paused mid-scan is not escalated',
     $ticket = scanTicket(['sla_warning_at' => scanNow()->subHours(2), 'sla_due_at' => scanNow()->subHour()]);
     $chunkQueries = 0;
     DB::listen(function (QueryExecuted $query) use ($ticket, &$chunkQueries): void {
-        if (! str_contains($query->sql, 'limit '.(int) config('sla.scan_chunk_size'))) {
+        if (! str_contains($query->sql, 'limit '.(int) config('sla.scan_chunk_size')) || str_contains($query->sql, 'escalation_notified_level')) {
             return;
         }
         if (++$chunkQueries === 2) {
@@ -144,3 +144,29 @@ it('escalates every ticket when there is more than one chunk', function (): void
     expect(Ticket::query()->where('escalation_level', EscalationLevel::Breached->value)->count())->toBe($count);
     Event::assertDispatchedTimes(TicketSlaBreached::class, $count);
 });
+
+it('loses neither the escalation nor its event when the scan crashes mid-escalation, and escalates once on the next scan', function (string $crashingStatement): void {
+    $ticket = scanTicket(['sla_warning_at' => scanNow()->subHours(2), 'sla_due_at' => scanNow()->subHour()]);
+    $crash = true;
+    DB::listen(function (QueryExecuted $query) use (&$crash, $crashingStatement): void {
+        if ($crash && str_starts_with($query->sql, $crashingStatement)) {
+            throw new RuntimeException('Simulated crash during the escalation.');
+        }
+    });
+
+    expect(fn () => $this->artisan('sla:scan')->run())->toThrow(RuntimeException::class);
+    $crash = false;
+
+    expect($ticket->fresh()->escalation_level)->toBe(EscalationLevel::None);
+    Event::assertNothingDispatched();
+
+    $this->artisan('sla:scan')->assertSuccessful();
+    $this->artisan('sla:scan')->assertSuccessful();
+
+    expect($ticket->fresh()->escalation_level)->toBe(EscalationLevel::Breached);
+    Event::assertDispatchedTimes(TicketSlaBreached::class, 1);
+    Event::assertNotDispatched(TicketSlaApproaching::class);
+})->with([
+    'right after the level bump' => ['update `tickets` set `escalation_level`'],
+    'while loading the tickets to notify' => ['select * from `tickets`'],
+]);

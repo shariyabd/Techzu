@@ -12,8 +12,7 @@ use App\Events\TicketAssigned;
 use App\Events\TicketCreated;
 use App\Events\TicketPriorityChanged;
 use App\Events\TicketReplied;
-use App\Events\TicketSlaApproaching;
-use App\Events\TicketSlaBreached;
+use App\Events\TicketSlaRecalculated;
 use App\Events\TicketStatusChanged;
 use App\Events\TicketUnassigned;
 use App\Events\TicketUpdated;
@@ -107,7 +106,7 @@ final class RecordTicketActivity
             ]);
         }
 
-        if ($event->from === TicketStatus::WaitingForCustomer) {
+        if ($this->restartsSlaClock($event->from, $event->to)) {
             $this->record($ticket, $event->actor, ActivityType::SlaResumed, [
                 'due_at' => $ticket->sla_due_at->toIso8601String(),
                 'warning_at' => $ticket->sla_warning_at->toIso8601String(),
@@ -130,40 +129,60 @@ final class RecordTicketActivity
 
         $this->record($event->ticket, $event->author, $type, [
             'reply_id' => $event->reply->id,
-            'author_is_staff' => $event->author->isStaff(),
+            'author_is_staff' => $event->author->id !== $event->ticket->customer_id,
         ]);
     }
 
-    public function handleTicketSlaApproaching(TicketSlaApproaching $event): void
+    public function handleTicketSlaRecalculated(TicketSlaRecalculated $event): void
     {
-        $this->record($event->ticket, null, ActivityType::SlaApproaching, [
-            'due_at' => $event->ticket->sla_due_at->toIso8601String(),
+        $this->record($event->ticket, null, ActivityType::SlaRecalculated, [
+            'previous_due_at' => $event->previousDueAt?->toIso8601String(),
+            'due_at' => ($event->dueAt ?? $event->ticket->sla_due_at)->toIso8601String(),
         ]);
     }
 
-    public function handleTicketSlaBreached(TicketSlaBreached $event): void
+    public function recordSlaApproaching(Ticket $ticket): void
     {
-        $this->record($event->ticket, null, ActivityType::Escalated, [
+        $this->write($ticket, null, ActivityType::SlaApproaching, [
+            'due_at' => $ticket->sla_due_at->toIso8601String(),
+        ]);
+    }
+
+    public function recordSlaBreached(Ticket $ticket): void
+    {
+        $this->write($ticket, null, ActivityType::Escalated, [
             'level' => EscalationLevel::Breached->value,
-            'due_at' => $event->ticket->sla_due_at->toIso8601String(),
+            'due_at' => $ticket->sla_due_at->toIso8601String(),
         ]);
+    }
+
+    private function restartsSlaClock(TicketStatus $from, TicketStatus $to): bool
+    {
+        return ($from === TicketStatus::WaitingForCustomer && $to->isActive())
+            || ($from === TicketStatus::Resolved && $to === TicketStatus::InProgress);
     }
 
     /** @param  array<string, mixed>  $properties */
     private function record(Ticket $ticket, ?User $actor, ActivityType $type, array $properties): void
     {
         try {
-            $logger = activity('ticket')
-                ->performedOn($ticket)
-                ->event($type->value)
-                ->withProperties($properties);
-
-            $actor === null ? $logger->causedByAnonymous() : $logger->causedBy($actor);
-
-            $logger->log($type->describe($properties));
+            $this->write($ticket, $actor, $type, $properties);
         } catch (Throwable $e) {
             report($e);
         }
+    }
+
+    /** @param  array<string, mixed>  $properties */
+    private function write(Ticket $ticket, ?User $actor, ActivityType $type, array $properties): void
+    {
+        $logger = activity('ticket')
+            ->performedOn($ticket)
+            ->event($type->value)
+            ->withProperties($properties);
+
+        $actor === null ? $logger->causedByAnonymous() : $logger->causedBy($actor);
+
+        $logger->log($type->describe($properties));
     }
 
     /** @return array{id: int, name: string} */

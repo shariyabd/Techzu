@@ -13,7 +13,10 @@ use App\Models\Ticket;
 use App\Models\User;
 use App\Services\Sla\SlaCalculator;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Http\Testing\File;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
 
@@ -141,4 +144,41 @@ it('keeps the committed ticket, its attachments and files when a TicketCreated l
     expect(Ticket::query()->count())->toBe(1)
         ->and(Attachment::query()->count())->toBe(1);
     Storage::disk('local')->assertExists($attachment->path);
+});
+
+it('writes the attachment files before taking the ticket number lock', function (): void {
+    $customer = User::factory()->customer()->create();
+    $filesWhenNumbered = null;
+    DB::listen(function (QueryExecuted $query) use (&$filesWhenNumbered): void {
+        if ($filesWhenNumbered === null && str_contains($query->sql, 'ticket_sequences')) {
+            $filesWhenNumbered = count(Storage::disk('local')->allFiles());
+        }
+    });
+
+    app(CreateTicket::class)->handle($customer, ticketData($this->category), [
+        UploadedFile::fake()->create('a.pdf', 1, 'application/pdf'),
+        UploadedFile::fake()->create('b.pdf', 1, 'application/pdf'),
+    ]);
+
+    expect($filesWhenNumbered)->toBe(2);
+});
+
+it('deletes the files already written and takes no number when staging a file fails', function (): void {
+    $customer = User::factory()->customer()->create();
+    $broken = new class('broken.pdf', tmpfile()) extends File
+    {
+        public function storeAs($path, $name = null, $options = []): false
+        {
+            return false;
+        }
+    };
+
+    expect(fn () => app(CreateTicket::class)->handle($customer, ticketData($this->category), [
+        UploadedFile::fake()->create('a.pdf', 1, 'application/pdf'),
+        $broken,
+    ]))->toThrow(RuntimeException::class);
+
+    expect(Storage::disk('local')->allFiles())->toBe([])
+        ->and(Ticket::query()->count())->toBe(0)
+        ->and(DB::table('ticket_sequences')->count())->toBe(0);
 });

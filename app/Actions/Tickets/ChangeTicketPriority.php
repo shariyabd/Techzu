@@ -6,6 +6,7 @@ namespace App\Actions\Tickets;
 
 use App\Enums\TicketPriority;
 use App\Events\TicketPriorityChanged;
+use App\Exceptions\Domain\TicketClosed;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Services\Sla\SlaCalculator;
@@ -25,6 +26,10 @@ final class ChangeTicketPriority
         return DB::transaction(function () use ($actor, $ticket, $to, $now): Ticket {
             $locked = Ticket::query()->whereKey($ticket->getKey())->lockForUpdate()->firstOrFail();
             $ticket->setRawAttributes($locked->getAttributes(), true);
+
+            if (! $ticket->status->isActive()) {
+                throw new TicketClosed('Only active tickets can change priority.');
+            }
 
             $from = $ticket->priority;
 

@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Actions\Assignment;
 
+use App\Actions\Tickets\ChangeTicketStatus;
 use App\Enums\AssignmentMethod;
 use App\Enums\TicketStatus;
 use App\Events\TicketAssigned;
 use App\Events\TicketAutoAssignmentFailed;
-use App\Events\TicketStatusChanged;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Services\Assignment\AgentSelector;
@@ -22,14 +22,14 @@ final class AssignTicketAutomatically
     public function __construct(
         private readonly AgentSelector $selector,
         private readonly UnassignedTicketAssigner $assigner,
+        private readonly ChangeTicketStatus $changeStatus,
     ) {}
 
     public function handle(Ticket $ticket): ?User
     {
         $now = CarbonImmutable::now();
-        $before = $ticket->status;
 
-        return DB::transaction(function () use ($ticket, $now, $before): ?User {
+        return DB::transaction(function () use ($ticket, $now): ?User {
             $lockable = Ticket::query()
                 ->whereKey($ticket->getKey())
                 ->whereNull('assigned_agent_id')
@@ -62,8 +62,8 @@ final class AssignTicketAutomatically
 
             TicketAssigned::dispatch($ticket, null, $agent, null, AssignmentMethod::Automatic);
 
-            if ($before === TicketStatus::Open && $ticket->status === TicketStatus::InProgress) {
-                TicketStatusChanged::dispatch($ticket, null, TicketStatus::Open, TicketStatus::InProgress);
+            if ($ticket->status === TicketStatus::Open) {
+                $this->changeStatus->handleLocked(null, $ticket, TicketStatus::InProgress);
             }
 
             return $agent;

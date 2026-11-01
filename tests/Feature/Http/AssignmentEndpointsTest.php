@@ -52,13 +52,13 @@ it('returns 409 ticket_already_claimed when the API claim loses', function (): v
         ->assertJsonPath('code', 'ticket_already_claimed');
 });
 
-it('lets an admin assign through the API without changing the status', function (): void {
+it('lets an admin assign through the API and moves the open ticket to in progress', function (): void {
     Sanctum::actingAs($this->admin);
 
     $this->postJson('/api/v1'.$this->show.'/assign', ['agent_id' => $this->agent->id])
         ->assertOk()
         ->assertJsonPath('data.assigned_agent.id', $this->agent->id)
-        ->assertJsonPath('data.status.value', 'open');
+        ->assertJsonPath('data.status.value', 'in_progress');
 });
 
 it('returns 422 agent_not_eligible for a customer target', function (): void {
@@ -67,4 +67,14 @@ it('returns 422 agent_not_eligible for a customer target', function (): void {
     $this->postJson('/api/v1'.$this->show.'/assign', ['agent_id' => $this->customer->id])
         ->assertUnprocessable()
         ->assertJsonPath('code', 'agent_not_eligible');
+});
+
+it('refuses the category override to an agent handing off their own ticket', function (): void {
+    $this->ticket->forceFill(['assigned_agent_id' => $this->agent->id])->save();
+    Sanctum::actingAs($this->agent);
+
+    $this->postJson('/api/v1'.$this->show.'/assign', ['agent_id' => $this->colleague->id, 'outside_category' => true])
+        ->assertForbidden();
+
+    expect($this->ticket->fresh()?->assigned_agent_id)->toBe($this->agent->id);
 });

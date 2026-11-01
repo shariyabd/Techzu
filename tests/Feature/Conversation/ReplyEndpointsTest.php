@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Actions\Conversation\AddReply;
+use App\Enums\Permission;
+use App\Enums\Role;
 use App\Enums\TicketStatus;
 use App\Models\Ticket;
 use App\Models\TicketReply;
@@ -11,6 +13,8 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
+use Spatie\Permission\Models\Role as RoleModel;
+use Spatie\Permission\PermissionRegistrar;
 
 beforeEach(function (): void {
     Storage::fake(config('attachments.disk'));
@@ -45,6 +49,22 @@ it('stores an API reply and returns 201 with the reply resource', function (): v
         ->assertJsonPath('data.author.id', $this->agent->id)
         ->assertJsonPath('data.attachments.0.original_name', 'trace.txt');
 });
+
+it('answers 403 when a user without the internal-note permission asks for an internal note', function (string $who): void {
+    if ($who === 'agent') {
+        RoleModel::findByName(Role::Agent->value)->revokePermissionTo(Permission::TicketsNotesInternal->value);
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+    }
+    Sanctum::actingAs($this->{$who}->fresh(), ['*']);
+
+    $this->postJson(route('api.v1.tickets.replies.store', $this->ticket), ['body' => 'Meant to be internal.', 'is_internal' => true])
+        ->assertForbidden();
+
+    expect(TicketReply::query()->exists())->toBeFalse();
+})->with([
+    'agent whose role lost internal notes' => ['agent'],
+    'customer' => ['customer'],
+]);
 
 it('returns 422 ticket_closed when the ticket closes between authorization and the write', function (): void {
     app()->resolving(AddReply::class, function (): void {

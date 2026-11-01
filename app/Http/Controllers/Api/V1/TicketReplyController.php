@@ -28,7 +28,7 @@ final class TicketReplyController extends Controller
         $reply = $addReply->handle($request->actor(), $ticket, $request->replyBody(), $request->wantsInternal(), $request->attachmentFiles());
 
         $reply->load([
-            'author:id,name',
+            'author:id,name,avatar_path,last_seen_at',
             'attachments:id,ticket_id,reply_id,original_name,mime_type,size_bytes,is_internal,created_at',
         ]);
 

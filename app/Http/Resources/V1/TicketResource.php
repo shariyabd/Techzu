@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace App\Http\Resources\V1;
 
+use App\Enums\Permission;
 use App\Enums\TicketStatus;
 use App\Models\Category;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Services\Sla\SlaClock;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -26,7 +29,8 @@ final class TicketResource extends JsonResource
     /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
-        $state = $this->resource->slaState();
+        $now = CarbonImmutable::now();
+        $state = $this->resource->slaState($now);
         $user = $request->user();
 
         return [
@@ -44,8 +48,9 @@ final class TicketResource extends JsonResource
                 'due_at' => $this->sla_due_at->toIso8601String(),
                 'warning_at' => $this->sla_warning_at->toIso8601String(),
                 'paused_at' => $this->sla_paused_at?->toIso8601String(),
+                'clock' => app(SlaClock::class)->for($this->resource, $now),
             ],
-            'escalation_level' => $this->escalation_level->value,
+            'escalation_level' => $this->when(self::seesEscalation($request), fn (): int => $this->escalation_level->value),
             'created_at' => $this->created_at->toIso8601String(),
             'updated_at' => $this->updated_at->toIso8601String(),
             'resolved_at' => $this->resolved_at?->toIso8601String(),
@@ -55,7 +60,7 @@ final class TicketResource extends JsonResource
         ];
     }
 
-    /** @return array{update: bool, editDescription: bool, changeStatus: bool, changePriority: bool, claim: bool, assign: bool, reply: bool, addInternalNote: bool, allowedStatuses: list<string>} */
+    /** @return array{update: bool, editDescription: bool, changeStatus: bool, changePriority: bool, claim: bool, assign: bool, assignOutsideCategory: bool, reply: bool, addInternalNote: bool, allowedStatuses: list<string>} */
     public static function abilities(User $user, Ticket $ticket): array
     {
         $allowed = array_values(array_filter(
@@ -70,9 +75,17 @@ final class TicketResource extends JsonResource
             'changePriority' => $user->can('changePriority', $ticket),
             'claim' => $user->can('claim', $ticket) && $ticket->assigned_agent_id === null,
             'assign' => $user->can('assign', $ticket),
+            'assignOutsideCategory' => $user->can('assignOutsideCategory', $ticket),
             'reply' => $user->can('reply', $ticket),
             'addInternalNote' => $user->can('addInternalNote', $ticket),
             'allowedStatuses' => array_map(static fn (TicketStatus $s): string => $s->value, $allowed),
         ];
+    }
+
+    public static function seesEscalation(Request $request): bool
+    {
+        $viewer = $request->user();
+
+        return $viewer instanceof User && $viewer->can(Permission::TicketsViewAny->value);
     }
 }

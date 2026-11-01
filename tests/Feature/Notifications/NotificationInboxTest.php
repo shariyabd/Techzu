@@ -2,12 +2,19 @@
 
 declare(strict_types=1);
 
+use App\Enums\Permission;
+use App\Enums\Role;
+use App\Http\Resources\V1\NotificationResource;
 use App\Models\User;
+use App\Notifications\InternalNoteAddedNotification;
 use App\Notifications\TicketAssignedNotification;
+use Illuminate\Http\Request;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Sanctum\Sanctum;
+use Spatie\Permission\Models\Role as RoleModel;
+use Spatie\Permission\PermissionRegistrar;
 
 beforeEach(function (): void {
     $this->withoutVite();
@@ -89,4 +96,29 @@ it('marks all of my notifications as read and leaves others alone', function ():
         ->assertSessionHas('success');
     expect($this->me->unreadNotifications()->count())->toBe(0)
         ->and($theirs->fresh()->read_at)->toBeNull();
+});
+
+it('hides internal-note notifications from a viewer whose role lost internal notes', function (): void {
+    ($this->store)($this->me, title: 'assigned');
+    $note = $this->me->notifications()->create([
+        'id' => (string) Str::uuid(),
+        'type' => InternalNoteAddedNotification::class,
+        'data' => ['ticket_number' => 'TKT-2026-000001', 'title' => 'Internal note', 'body' => 'SECRET-EXCERPT', 'url' => url('/tickets/TKT-2026-000001')],
+    ]);
+    RoleModel::findByName(Role::Agent->value)->revokePermissionTo(Permission::TicketsNotesInternal->value);
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+    $viewer = $this->me->fresh();
+
+    Sanctum::actingAs($viewer, ['*']);
+    $this->getJson(route('api.v1.notifications.index'))
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.title', 'assigned')
+        ->assertDontSee('SECRET-EXCERPT');
+    $this->actingAs($viewer)->get(route('notifications.index'))
+        ->assertInertia(fn (Assert $page) => $page->has('items.data', 1)->where('notifications.unread_count', 1));
+
+    $request = Request::create('/');
+    $request->setUserResolver(fn (): User => $viewer);
+    expect(NotificationResource::make($note)->toArray($request))->body->toBe('')->title->toBe('');
 });

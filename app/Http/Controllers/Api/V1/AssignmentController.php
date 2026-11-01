@@ -30,7 +30,7 @@ final class AssignmentController extends Controller
 
     public function assign(AssignRequest $request, Ticket $ticket, AssignTicket $assignTicket): TicketResource
     {
-        $ticket = $assignTicket->handle($this->user($request), $ticket, $request->targetAgent());
+        $ticket = $assignTicket->handle($this->user($request), $ticket, $request->targetAgent(), $request->outsideCategory());
 
         return TicketResource::make($this->pages->loadSummary($ticket));
     }

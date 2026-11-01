@@ -2,11 +2,18 @@
 
 declare(strict_types=1);
 
+use App\Enums\AssignmentMethod;
 use App\Enums\TicketStatus;
+use App\Events\TicketAssigned;
+use App\Events\TicketCreated;
+use App\Events\TicketStatusChanged;
+use App\Events\TicketUnassigned;
+use App\Events\TicketUpdated;
 use App\Models\Category;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Services\Tickets\TicketQueueCounts;
+use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function (): void {
@@ -64,4 +71,50 @@ it('exposes the queue counts on the web index only', function (): void {
     $this->actingAs($this->customer, 'sanctum')
         ->getJson(route('api.v1.tickets.index'))
         ->assertJsonMissingPath('queues');
+});
+
+it('serves repeated counts from the cache without querying the tickets table', function (): void {
+    $counts = app(TicketQueueCounts::class);
+    $first = $counts->for($this->agent);
+
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    $second = $counts->for($this->agent);
+    $queries = collect(DB::getQueryLog())->pluck('query')->filter(fn (string $sql): bool => str_contains($sql, 'tickets'));
+    DB::disableQueryLog();
+
+    expect($second)->toBe($first)
+        ->and($queries)->toBeEmpty();
+});
+
+it('recounts after a ticket domain event', function (Closure $announce): void {
+    $counts = app(TicketQueueCounts::class);
+    $counts->for($this->agent);
+    $ticket = Ticket::factory()->status(TicketStatus::Open)->create(['category_id' => $this->tech->id]);
+
+    expect($counts->for($this->agent)['active']['total'])->toBe(6);
+
+    $announce($ticket, $this->agent);
+
+    expect($counts->for($this->agent)['active']['total'])->toBe(7);
+})->with([
+    'created' => [fn (Ticket $t, User $actor) => TicketCreated::dispatch($t, $actor)],
+    'status changed' => [fn (Ticket $t, User $actor) => TicketStatusChanged::dispatch($t, $actor, TicketStatus::Open, TicketStatus::InProgress)],
+    'assigned' => [fn (Ticket $t, User $actor) => TicketAssigned::dispatch($t, $actor, $actor, null, AssignmentMethod::Manual)],
+    'unassigned' => [fn (Ticket $t, User $actor) => TicketUnassigned::dispatch($t, $actor, $actor)],
+    'category changed' => [fn (Ticket $t, User $actor) => TicketUpdated::dispatch($t, $actor, ['category_id' => ['from' => 1, 'to' => 2]])],
+]);
+
+it('keeps cached counts scoped to each viewer', function (): void {
+    $counts = app(TicketQueueCounts::class);
+    $otherCustomer = User::factory()->customer()->create();
+    Ticket::factory()->status(TicketStatus::Open)->create(['category_id' => $this->tech->id, 'customer_id' => $otherCustomer->id]);
+
+    $counts->for($this->agent);
+    $counts->for($this->customer);
+
+    expect($counts->for($this->otherAgent)['assigned_to_me'])->toBe(['open' => 0, 'total' => 2])
+        ->and($counts->for($this->agent)['assigned_to_me'])->toBe(['open' => 1, 'total' => 2])
+        ->and($counts->for($this->customer)['active'])->toBe(['open' => 1, 'total' => 2])
+        ->and($counts->for($otherCustomer)['active'])->toBe(['open' => 1, 'total' => 1]);
 });

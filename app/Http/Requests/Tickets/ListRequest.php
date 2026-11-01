@@ -8,6 +8,7 @@ use App\Enums\SlaState;
 use App\Enums\TicketPriority;
 use App\Enums\TicketStatus;
 use App\Models\Ticket;
+use App\Services\Tickets\ResponseQuery;
 use App\Services\Tickets\TicketFilter;
 use Illuminate\Auth\Access\Response;
 use Illuminate\Foundation\Http\FormRequest;
@@ -25,7 +26,7 @@ final class ListRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'scope' => ['sometimes', 'string', Rule::in(['active', 'resolved'])],
+            'scope' => ['sometimes', 'string', Rule::in(['active', 'resolved', 'all'])],
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:'.(int) config('tickets.per_page.max', 100)],
             'number' => ['sometimes', 'nullable', 'string', 'max:32'],
@@ -43,12 +44,15 @@ final class ListRequest extends FormRequest
                 ? ['sometimes', 'nullable', 'date_format:Y-m-d', 'after_or_equal:created_from']
                 : ['sometimes', 'nullable', 'date_format:Y-m-d'],
             'sla_state' => ['sometimes', 'nullable', Rule::enum(SlaState::class)],
+            'response' => ['sometimes', 'nullable', 'string', Rule::in(array_keys(ResponseQuery::FILTERS))],
             'sort' => ['sometimes', Rule::in(array_keys(TicketFilter::SORTS))],
         ];
     }
 
     public function scope(): string
     {
-        return $this->validated('scope') === 'resolved' ? 'resolved' : 'active';
+        $scope = $this->validated('scope');
+
+        return in_array($scope, ['resolved', 'all'], true) ? $scope : 'active';
     }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Enums\EscalationLevel;
+use App\Enums\TicketStatus;
 use App\Events\TicketSlaApproaching;
 use App\Events\TicketSlaBreached;
 use App\Models\Ticket;
@@ -28,17 +29,39 @@ final class ScanSlaCommand extends Command
     {
         $runAt = CarbonImmutable::now()->utc()->startOfSecond();
 
+        $redelivered = $this->redeliver($runAt);
         $approaching = $this->escalate(EscalationLevel::Approaching, $runAt);
         $breached = $this->escalate(EscalationLevel::Breached, $runAt);
 
         $this->components->info(sprintf(
-            'SLA scan at %s: %d approaching, %d breached.',
+            'SLA scan at %s: %d approaching, %d breached, %d redelivered.',
             $runAt->toIso8601String(),
             $approaching,
             $breached,
+            $redelivered,
         ));
 
         return self::SUCCESS;
+    }
+
+    private function redeliver(CarbonImmutable $runAt): int
+    {
+        $redelivered = 0;
+        $cutoff = $runAt->subSeconds(max(0, (int) config('sla.redelivery_grace_seconds', 120)));
+
+        Ticket::query()
+            ->whereIn('status', array_map(static fn (TicketStatus $status): string => $status->value, TicketStatus::active()))
+            ->whereNotNull('escalated_at')
+            ->where('escalated_at', '<=', $cutoff)
+            ->whereColumn('escalation_notified_level', '<', 'escalation_level')
+            ->chunkById(max(1, (int) config('sla.scan_chunk_size')), static function (Collection $tickets) use (&$redelivered): void {
+                foreach ($tickets as $ticket) {
+                    self::announce($ticket, $ticket->escalation_level);
+                    $redelivered++;
+                }
+            });
+
+        return $redelivered;
     }
 
     private function escalate(EscalationLevel $level, CarbonImmutable $runAt): int
@@ -48,9 +71,7 @@ final class ScanSlaCommand extends Command
         $this->candidates($level, $runAt)
             ->select('id')
             ->chunkById(max(1, (int) config('sla.scan_chunk_size')), function (Collection $chunk) use ($level, $runAt, &$escalated): void {
-                $ids = $this->claim($level, $runAt, $chunk->modelKeys());
-                $this->dispatchFor($level, $ids);
-                $escalated += count($ids);
+                $escalated += $this->escalateChunk($level, $runAt, $chunk->modelKeys());
             });
 
         return $escalated;
@@ -68,57 +89,53 @@ final class ScanSlaCommand extends Command
         };
     }
 
-    /**
-     * @param  array<int, mixed>  $candidateIds
-     * @return list<int>
-     */
-    private function claim(EscalationLevel $level, CarbonImmutable $runAt, array $candidateIds): array
+    /** @param array<int, mixed> $candidateIds */
+    private function escalateChunk(EscalationLevel $level, CarbonImmutable $runAt, array $candidateIds): int
     {
-        return DB::transaction(function () use ($level, $runAt, $candidateIds): array {
-            /** @var list<int> $ids */
-            $ids = $this->candidates($level, $runAt)
+        return DB::transaction(function () use ($level, $runAt, $candidateIds): int {
+            $tickets = $this->candidates($level, $runAt)
                 ->whereKey($candidateIds)
                 ->orderBy('id')
                 ->lockForUpdate()
-                ->pluck('id')
-                ->map(static fn (mixed $id): int => (int) $id)
-                ->values()
-                ->all();
+                ->get();
 
-            if ($ids === []) {
-                return [];
+            if ($tickets->isEmpty()) {
+                return 0;
             }
 
-            $values = ['escalation_level' => $level->value];
-            if ($level === EscalationLevel::Breached) {
-                $values['escalated_at'] = $runAt;
-            }
+            $notifiedCeiling = $level->value - 1;
 
             Ticket::query()
-                ->whereKey($ids)
+                ->whereKey($tickets->modelKeys())
                 ->where('escalation_level', '<', $level->value)
                 ->toBase()
-                ->update($values);
+                ->update([
+                    'escalation_level' => $level->value,
+                    'escalated_at' => $runAt,
+                    'escalation_notified_level' => DB::raw('LEAST(escalation_notified_level, '.$notifiedCeiling.')'),
+                ]);
 
-            return $ids;
+            $tickets->each(static function (Ticket $ticket) use ($level, $runAt, $notifiedCeiling): void {
+                $notified = min($ticket->escalation_notified_level->value, $notifiedCeiling);
+                $ticket->forceFill([
+                    'escalation_level' => $level,
+                    'escalated_at' => $runAt,
+                    'escalation_notified_level' => EscalationLevel::from($notified),
+                ])->syncOriginal();
+
+                self::announce($ticket, $level);
+            });
+
+            return $tickets->count();
         }, 3);
     }
 
-    /** @param list<int> $ids */
-    private function dispatchFor(EscalationLevel $level, array $ids): void
+    private static function announce(Ticket $ticket, EscalationLevel $level): void
     {
-        if ($ids === []) {
-            return;
-        }
-
-        Ticket::query()
-            ->whereKey($ids)
-            ->orderBy('id')
-            ->get()
-            ->each(static function (Ticket $ticket) use ($level): void {
-                $level === EscalationLevel::Breached
-                    ? TicketSlaBreached::dispatch($ticket)
-                    : TicketSlaApproaching::dispatch($ticket);
-            });
+        match ($level) {
+            EscalationLevel::Breached => TicketSlaBreached::dispatch($ticket),
+            EscalationLevel::Approaching => TicketSlaApproaching::dispatch($ticket),
+            EscalationLevel::None => null,
+        };
     }
 }

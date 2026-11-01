@@ -74,3 +74,22 @@ it('gives customers no agent list and no people filters', function (): void {
             ->where('filterOptions.agents', [])
             ->where('filterOptions.showPeopleFilters', false));
 });
+
+it('opens an agent on their own active queue when no filter is chosen', function (): void {
+    $agent = User::factory()->agent()->create();
+
+    $this->actingAs($agent)
+        ->get(route('tickets.index'))
+        ->assertRedirect(route('tickets.index', ['scope' => 'active', 'assigned_agent_id' => $agent->id]));
+});
+
+it('keeps an explicit queue choice and the default for other roles', function (Closure $actor, array $query): void {
+    $this->actingAs($actor())
+        ->get(route('tickets.index', $query))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->component('tickets/Index'));
+})->with([
+    'agent choosing all active' => [fn () => User::factory()->agent()->create(), ['scope' => 'active']],
+    'admin with no filter' => [fn () => User::factory()->admin()->create(), []],
+    'customer with no filter' => [fn () => User::factory()->customer()->create(), []],
+]);

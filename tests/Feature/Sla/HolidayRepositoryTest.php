@@ -5,7 +5,6 @@ declare(strict_types=1);
 use App\Models\Holiday;
 use App\Services\Sla\HolidayRepository;
 use Illuminate\Database\Events\QueryExecuted;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 
 it('returns holiday dates as sorted Y-m-d strings', function (): void {
@@ -15,7 +14,7 @@ it('returns holiday dates as sorted Y-m-d strings', function (): void {
     expect(app(HolidayRepository::class)->dates())->toBe(['2026-11-01', '2026-12-16']);
 });
 
-it('caches the dates forever under sla.holidays until flushed', function (): void {
+it('caches the dates until flushed', function (): void {
     $repository = app(HolidayRepository::class);
     Holiday::factory()->create(['date' => '2026-11-01', 'name' => 'Office closure']);
     $holidayQueries = 0;
@@ -27,8 +26,7 @@ it('caches the dates forever under sla.holidays until flushed', function (): voi
 
     expect($repository->dates())->toBe(['2026-11-01'])
         ->and($repository->dates())->toBe(['2026-11-01'])
-        ->and($holidayQueries)->toBe(1)
-        ->and(Cache::has('sla.holidays'))->toBeTrue();
+        ->and($holidayQueries)->toBe(1);
 
     Holiday::factory()->create(['date' => '2026-11-05', 'name' => 'Added later']);
 
@@ -36,6 +34,5 @@ it('caches the dates forever under sla.holidays until flushed', function (): voi
 
     $repository->flush();
 
-    expect(Cache::has('sla.holidays'))->toBeFalse()
-        ->and($repository->dates())->toBe(['2026-11-01', '2026-11-05']);
+    expect($repository->dates())->toBe(['2026-11-01', '2026-11-05']);
 });

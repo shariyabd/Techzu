@@ -6,8 +6,11 @@ use App\Enums\TicketPriority;
 use App\Enums\TicketStatus;
 use App\Models\Category;
 use App\Models\Ticket;
+use App\Models\TicketReply;
 use App\Models\User;
+use App\Services\Agents\AgentDirectory;
 use App\Services\Tickets\TicketFilter;
+use App\Services\Tickets\TicketListQuery;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -99,4 +102,50 @@ it('applies visibility before every other filter', function (): void {
 
     expect(($this->run)(['customer_id' => (string) $this->people['c2']->id], $customer)->count())->toBe(0)
         ->and(($this->run)([], $customer)->pluck('number')->sort()->values()->all())->toBe(($this->numbers)(['t1', 't2']));
+});
+
+function seedResponseHistory(array $tickets, array $people): void
+{
+    $reply = static fn (string $ticket, ?User $author, string $at, bool $internal = false): TicketReply => TicketReply::factory()->create([
+        'ticket_id' => $tickets[$ticket]->id,
+        'author_id' => $author?->id ?? $tickets[$ticket]->customer_id,
+        'is_internal' => $internal,
+        'created_at' => CarbonImmutable::parse($at, 'UTC'),
+    ]);
+
+    $reply('t1', null, '2026-10-28 07:00:00');
+    $reply('t1', $people['a1'], '2026-10-28 08:00:00', true);
+    $reply('t2', $people['a1'], '2026-10-28 07:00:00', true);
+    $reply('t3', null, '2026-10-28 07:00:00');
+    $reply('t3', $people['a2'], '2026-10-28 08:00:00');
+    $reply('t4', $people['a1'], '2026-10-28 07:00:00');
+    $reply('t4', null, '2026-10-28 08:00:00');
+}
+
+it('filters by response state, ignoring internal notes and the customer\'s own replies', function (string $response, array $expected): void {
+    seedResponseHistory($this->tickets, $this->people);
+
+    expect(($this->run)(['response' => $response])->pluck('number')->sort()->values()->all())->toBe(($this->numbers)($expected));
+})->with([
+    'unresponded' => ['unresponded', ['t1', 't2']],
+    'awaiting reply' => ['awaiting', ['t1', 't4']],
+]);
+
+it('opens exactly the tickets each agent directory response stat counts', function (): void {
+    seedResponseHistory($this->tickets, $this->people);
+    $now = CarbonImmutable::now();
+
+    foreach (['a1', 'a2'] as $agent) {
+        $profile = app(AgentDirectory::class)->profile($this->people[$agent], $now);
+
+        foreach (['unresponded' => 'unresponded_count', 'awaiting' => 'awaiting_reply_count'] as $response => $stat) {
+            $listed = app(TicketListQuery::class)->paginate($this->admin, [
+                'scope' => 'active',
+                'assigned_agent_id' => $this->people[$agent]->id,
+                'response' => $response,
+            ], $now)->total();
+
+            expect($listed)->toBe((int) $profile->getAttribute($stat));
+        }
+    }
 });

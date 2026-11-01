@@ -25,6 +25,7 @@ use App\Services\Tickets\TicketListQuery;
 use App\Services\Tickets\TicketPageData;
 use App\Services\Tickets\TicketQueueCounts;
 use Carbon\CarbonImmutable;
+use Closure;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -37,16 +38,24 @@ final class TicketController extends Controller
         private readonly TicketPageData $pages,
     ) {}
 
-    public function index(ListRequest $request, TicketListQuery $tickets, TicketQueueCounts $queues): InertiaResponse
+    public function index(ListRequest $request, TicketListQuery $tickets, TicketQueueCounts $queues): InertiaResponse|RedirectResponse
     {
+        $user = $this->user($request);
+        $default = $request->query->count() === 0 ? $this->pages->defaultListQuery($user) : null;
+
+        if ($default !== null) {
+            return to_route('tickets.index', $default);
+        }
+
         $validated = $request->validated();
+        $scope = $request->scope();
 
         return Inertia::render('tickets/Index', [
-            'tickets' => TicketListResource::collection($tickets->paginate($this->user($request), $validated, CarbonImmutable::now())),
-            'scope' => $request->scope(),
+            'tickets' => fn () => TicketListResource::collection($tickets->paginate($user, $validated, CarbonImmutable::now())),
+            'scope' => $scope,
             'filters' => (object) $validated,
-            'filterOptions' => $this->pages->filterOptions($this->user($request), $request->scope()),
-            'queues' => $queues->for($this->user($request)),
+            'filterOptions' => fn (): array => $this->pages->filterOptions($user, $scope),
+            'queues' => fn (): array => $queues->for($user),
         ]);
     }
 
@@ -73,26 +82,27 @@ final class TicketController extends Controller
         Gate::authorize('view', $ticket);
 
         $user = $this->user($request);
-        $this->pages->loadForShow($ticket, $user);
-        $can = TicketResource::abilities($user, $ticket);
         $repliesPages = $this->pages->clampPages($request->integer('replies_pages', 1));
         $activitiesPages = $this->pages->clampPages($request->integer('activities_pages', 1));
-        $replies = $this->pages->replies($ticket, $user, $repliesPages);
-        $activities = $this->pages->activities($ticket, $user, $activitiesPages);
+        $loaded = $this->memo(fn (): Ticket => $this->pages->loadForShow($ticket, $user));
+        $ticketData = $this->memo(fn (): array => TicketResource::make($loaded())->resolve($request));
+        $can = fn (): array => (array) ($ticketData()['can'] ?? []);
+        $replies = $this->memo(fn (): array => $this->pages->replies($ticket, $user, $repliesPages));
+        $activities = $this->memo(fn (): array => $this->pages->activities($ticket, $user, $activitiesPages));
 
         return Inertia::render('tickets/Show', [
-            'ticket' => TicketResource::make($ticket)->resolve($request),
-            'replies' => TicketReplyResource::collection($replies['items'])->resolve($request),
-            'repliesHasMore' => $replies['has_more'],
+            'ticket' => $ticketData,
+            'replies' => fn (): array => TicketReplyResource::collection($replies()['items'])->resolve($request),
+            'repliesHasMore' => fn (): bool => $replies()['has_more'],
             'repliesPages' => $repliesPages,
             'activitiesPages' => $activitiesPages,
-            'attachments' => AttachmentResource::collection($ticket->attachments)->resolve($request),
-            'activities' => ActivityResource::collection($activities['items'])->resolve($request),
-            'activitiesHasMore' => $activities['has_more'],
-            'agents' => $can['assign'] ? $this->pages->agentOptions() : [],
+            'attachments' => fn (): array => AttachmentResource::collection($loaded()->attachments)->resolve($request),
+            'activities' => fn (): array => ActivityResource::collection($activities()['items'])->resolve($request),
+            'activitiesHasMore' => fn (): bool => $activities()['has_more'],
+            'agents' => fn (): array => ($can()['assign'] ?? false) === true ? $this->pages->agentOptions() : [],
             'can' => $can,
-            'options' => $this->pages->formOptions(),
-            'attachmentRules' => $this->pages->attachmentRules(),
+            'options' => fn (): array => $this->pages->formOptions(),
+            'attachmentRules' => fn (): array => $this->pages->attachmentRules(),
         ]);
     }
 
@@ -115,6 +125,27 @@ final class TicketController extends Controller
         $ticket = $changePriority->handle($this->user($request), $ticket, $request->targetPriority());
 
         return back()->with('success', "Priority changed to {$ticket->priority->label()}.");
+    }
+
+    /**
+     * @template TValue
+     *
+     * @param  Closure(): TValue  $resolve
+     * @return Closure(): TValue
+     */
+    private function memo(Closure $resolve): Closure
+    {
+        $resolved = false;
+        $value = null;
+
+        return static function () use ($resolve, &$resolved, &$value): mixed {
+            if (! $resolved) {
+                $value = $resolve();
+                $resolved = true;
+            }
+
+            return $value;
+        };
     }
 
     private function user(Request $request): User

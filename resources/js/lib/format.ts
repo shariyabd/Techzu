@@ -24,6 +24,44 @@ export function formatDate(iso: string | null | undefined): string {
     return iso ? dateFormat.format(new Date(iso)) : '—';
 }
 
+const businessFormats = new Map<string, Intl.DateTimeFormat>();
+
+function businessFormat(
+    timeZone: string,
+    locale: string | undefined,
+): Intl.DateTimeFormat {
+    const key = `${locale ?? ''}|${timeZone}`;
+    let format = businessFormats.get(key);
+
+    if (!format) {
+        const options: Intl.DateTimeFormatOptions = {
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            timeZoneName: 'short',
+        };
+
+        try {
+            format = new Intl.DateTimeFormat(locale, { ...options, timeZone });
+        } catch {
+            format = new Intl.DateTimeFormat(locale, options);
+        }
+
+        businessFormats.set(key, format);
+    }
+
+    return format;
+}
+
+export function formatBusinessDateTime(
+    iso: string | null | undefined,
+    timeZone: string,
+    locale?: string,
+): string {
+    return iso ? businessFormat(timeZone, locale).format(new Date(iso)) : '—';
+}
+
 export function formatRelative(
     iso: string | null | undefined,
     now: number = Date.now(),
@@ -53,4 +91,46 @@ export function formatBytes(bytes: number): string {
     }
 
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const pad = (value: number): string => String(value).padStart(2, '0');
+
+export function formatBusinessDuration(
+    seconds: number,
+    withSeconds = false,
+): string {
+    const total = Math.abs(Math.trunc(seconds));
+    const days = Math.floor(total / 86_400);
+    const hours = Math.floor((total % 86_400) / 3_600);
+    const minutes = Math.floor((total % 3_600) / 60);
+    const rest = total % 60;
+
+    if (days > 0) {
+        return `${days}d ${hours}h`;
+    }
+
+    if (hours > 0) {
+        return withSeconds
+            ? `${hours}h ${pad(minutes)}m ${pad(rest)}s`
+            : `${hours}h ${pad(minutes)}m`;
+    }
+
+    if (withSeconds) {
+        return minutes > 0 ? `${minutes}m ${pad(rest)}s` : `${rest}s`;
+    }
+
+    if (minutes === 0 && rest > 0) {
+        return '<1m';
+    }
+
+    return `${minutes}m`;
+}
+
+export function formatSlaRemaining(
+    seconds: number,
+    withSeconds = false,
+): string {
+    const duration = formatBusinessDuration(seconds, withSeconds);
+
+    return seconds < 0 ? `Overdue by ${duration}` : `${duration} left`;
 }

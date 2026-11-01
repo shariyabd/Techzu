@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Services\Tickets\TicketVisibility;
 use Database\Factories\TicketReplyFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -58,8 +59,6 @@ class TicketReply extends Model
     /** @param Builder<TicketReply> $query */
     public function scopeVisibleTo(Builder $query, User $user): void
     {
-        if (! $user->isStaff()) {
-            $query->where($query->qualifyColumn('is_internal'), false);
-        }
+        TicketVisibility::of($user)->restrictInternal($query);
     }
 }

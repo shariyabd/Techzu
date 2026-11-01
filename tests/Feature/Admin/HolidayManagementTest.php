@@ -12,7 +12,6 @@ use App\Services\Sla\BusinessCalendar;
 use App\Services\Sla\HolidayRepository;
 use App\Services\Sla\SlaCalculator;
 use Carbon\CarbonImmutable;
-use Illuminate\Support\Facades\Cache;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Sanctum\Sanctum;
 
@@ -22,15 +21,15 @@ beforeEach(function (): void {
     $this->admin = User::factory()->admin()->create();
 });
 
-it('flushes the cached holiday list after every change', function (Closure $change): void {
+it('serves the changed holiday list right after every change', function (Closure $change, array $expected): void {
     $holiday = Holiday::factory()->create(['date' => '2026-12-16', 'name' => 'Victory Day']);
     app(HolidayRepository::class)->dates();
     $change($holiday);
-    expect(Cache::has('sla.holidays'))->toBeFalse();
+    expect(app(HolidayRepository::class)->dates())->toBe($expected);
 })->with([
-    'create' => [fn (Holiday $h) => app(CreateHoliday::class)->handle(['date' => '2026-02-21', 'name' => 'Language Day'])],
-    'update' => [fn (Holiday $h) => app(UpdateHoliday::class)->handle($h, ['date' => '2026-12-17', 'name' => 'Victory Day'])],
-    'delete' => [fn (Holiday $h) => app(DeleteHoliday::class)->handle($h)],
+    'create' => [fn (Holiday $h) => app(CreateHoliday::class)->handle(['date' => '2026-02-21', 'name' => 'Language Day']), ['2026-02-21', '2026-12-16']],
+    'update' => [fn (Holiday $h) => app(UpdateHoliday::class)->handle($h, ['date' => '2026-12-17', 'name' => 'Victory Day']), ['2026-12-17']],
+    'delete' => [fn (Holiday $h) => app(DeleteHoliday::class)->handle($h), []],
 ]);
 
 it('makes new SLA deadlines skip a holiday added through the admin screen', function (): void {

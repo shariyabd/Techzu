@@ -34,6 +34,6 @@ it('degrades gracefully when properties are missing or unknown', function (): vo
         ->and(ActivityType::PriorityChanged->describe([]))->toBe('Priority changed from unknown to unknown');
 });
 
-it('marks only internal notes as staff-only', function (ActivityType $type): void {
-    expect($type->isStaffOnly())->toBe($type === ActivityType::InternalNote);
+it('hides internal notes and SLA escalation entries from customers', function (ActivityType $type): void {
+    expect($type->isStaffOnly())->toBe(in_array($type, [ActivityType::InternalNote, ActivityType::SlaApproaching, ActivityType::Escalated], true));
 })->with(ActivityType::cases());

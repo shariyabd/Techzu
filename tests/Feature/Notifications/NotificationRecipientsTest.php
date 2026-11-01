@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\AssignmentMethod;
+use App\Enums\EscalationLevel;
 use App\Enums\ImportStatus;
 use App\Enums\TicketStatus;
 use App\Events\TicketAssigned;
@@ -39,10 +40,11 @@ beforeEach(function (): void {
         'admin1' => User::factory()->admin()->create(),
         'admin2' => User::factory()->admin()->create(),
     ];
-    $this->ticket = fn (?string $assignee = 'agent'): Ticket => Ticket::factory()->status(TicketStatus::InProgress)->create([
+    $this->ticket = fn (?string $assignee = 'agent', EscalationLevel $level = EscalationLevel::None): Ticket => Ticket::factory()->status(TicketStatus::InProgress)->create([
         'customer_id' => $this->u['customer']->id,
         'created_by_id' => $this->u['customer']->id,
         'assigned_agent_id' => $assignee === null ? null : $this->u[$assignee]->id,
+        'escalation_level' => $level,
     ]);
     $this->reply = fn (Ticket $ticket, string $author, bool $internal): TicketReply => TicketReply::factory()
         ->for($ticket)
@@ -114,7 +116,7 @@ it('notifies on TicketResolved', function (?string $actor, array $expected): voi
 ]);
 
 it('notifies on SLA events', function (string $event, ?string $assignee, string $notification, array $expected): void {
-    event(new $event(($this->ticket)($assignee)));
+    event(new $event(($this->ticket)($assignee, $event === TicketSlaBreached::class ? EscalationLevel::Breached : EscalationLevel::Approaching)));
     ($this->expectRecipients)($notification, $expected);
 })->with([
     'approaching, assigned, to agent' => [TicketSlaApproaching::class, 'agent', SlaApproachingNotification::class, ['agent']],

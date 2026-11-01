@@ -18,7 +18,14 @@ final class StoreRequest extends FormRequest
 {
     public function authorize(): Response
     {
-        return Gate::forUser($this->actor())->inspect('reply', $this->ticket());
+        $gate = Gate::forUser($this->actor());
+        $reply = $gate->inspect('reply', $this->ticket());
+
+        if ($reply->denied() || ! $this->wantsInternal()) {
+            return $reply;
+        }
+
+        return $gate->inspect('addInternalNote', $this->ticket());
     }
 
     /** @return array<string, mixed> */

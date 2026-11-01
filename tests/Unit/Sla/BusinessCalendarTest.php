@@ -239,6 +239,47 @@ describe('isBusinessTime', function (): void {
     ]);
 });
 
+describe('nextTransition', function (): void {
+    it('returns the end of the current window, or the start of the next one', function (string $at, array $week, array $holidays, ?string $expected): void {
+        $result = bcCalendar($holidays, $week)->nextTransition(bcAt($at));
+
+        expect($result === null ? null : bcLocal($result))->toBe($expected)
+            ->and($result?->tzName ?? 'UTC')->toBe('UTC');
+    })->with([
+        'inside a window' => ['2026-10-29 10:00:00', bcStandardWeek(), [], '2026-10-29 18:00:00'],
+        'at opening' => ['2026-10-29 09:00:00', bcStandardWeek(), [], '2026-10-29 18:00:00'],
+        'before opening' => ['2026-10-29 07:30:00', bcStandardWeek(), [], '2026-10-29 09:00:00'],
+        'after closing' => ['2026-10-28 19:00:00', bcStandardWeek(), [], '2026-10-29 09:00:00'],
+        'at closing (end is exclusive)' => ['2026-10-29 18:00:00', bcStandardWeek(), [], '2026-11-01 09:00:00'],
+        'over the weekend' => ['2026-10-30 12:00:00', bcStandardWeek(), [], '2026-11-01 09:00:00'],
+        'holiday on the next working day' => ['2026-10-29 19:00:00', bcStandardWeek(), ['2026-11-01'], '2026-11-02 09:00:00'],
+        'during a holiday' => ['2026-11-01 10:00:00', bcStandardWeek(), ['2026-11-01'], '2026-11-02 09:00:00'],
+        'morning window before lunch' => ['2026-11-01 10:00:00', bcLunchWeek(), [], '2026-11-01 13:00:00'],
+        'during the lunch break' => ['2026-11-01 13:30:00', bcLunchWeek(), [], '2026-11-01 14:00:00'],
+        'afternoon window after lunch' => ['2026-11-01 15:00:00', bcLunchWeek(), [], '2026-11-01 18:00:00'],
+        '24:00 end with a closed next day' => ['2026-10-29 20:00:00', ['thursday' => [['18:00', '24:00']]], [], '2026-10-30 00:00:00'],
+        '24:00 end carries into a window opening at midnight' => ['2026-10-29 23:00:00', ['thursday' => [['22:00', '24:00']], 'friday' => [['00:00', '02:00']]], [], '2026-10-30 02:00:00'],
+        'round-the-clock weekdays run until the first closed day' => ['2026-11-02 10:00:00', array_fill_keys(['sunday', 'monday', 'tuesday', 'wednesday', 'thursday'], [['00:00', '24:00']]), [], '2026-11-06 00:00:00'],
+        'a schedule that never closes' => ['2026-11-02 10:00:00', array_fill_keys(['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'], [['00:00', '24:00']]), [], null],
+        'a schedule that never opens' => ['2026-11-02 10:00:00', [], [], null],
+    ]);
+});
+
+describe('round-the-clock windows', function (): void {
+    it('counts every minute of a 00:00 to 24:00 day, across midnight', function (string $start, int $minutes, string $expected): void {
+        $day = [['00:00', '24:00']];
+        $calendar = bcCalendar([], array_fill_keys(['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'], $day));
+        $due = $calendar->addBusinessMinutes(bcAt($start), $minutes);
+
+        expect(bcLocal($due))->toBe($expected)
+            ->and($calendar->businessMinutesBetween(bcAt($start), $due))->toBe($minutes);
+    })->with([
+        'ends exactly at midnight' => ['2026-11-01 23:00:00', 60, '2026-11-02 00:00:00'],
+        'crosses midnight' => ['2026-11-01 23:30:00', 60, '2026-11-02 00:30:00'],
+        'a full week' => ['2026-11-01 10:00:00', 10080, '2026-11-08 10:00:00'],
+    ]);
+});
+
 describe('constructor validation', function (): void {
     it('rejects an invalid configuration', function (array $week, string $timezone, array $holidays): void {
         expect(fn () => new BusinessCalendar($week, $timezone, $holidays))->toThrow(InvalidArgumentException::class);

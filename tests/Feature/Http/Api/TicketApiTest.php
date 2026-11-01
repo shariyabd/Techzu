@@ -19,8 +19,8 @@ const TICKET_JSON = [
     'status' => ['value', 'label'],
     'priority' => ['value', 'label'],
     'category', 'customer', 'assigned_agent',
-    'sla' => ['state' => ['value', 'label'], 'due_at', 'warning_at', 'paused_at'],
-    'escalation_level', 'created_at', 'updated_at', 'resolved_at', 'closed_at',
+    'sla' => ['state' => ['value', 'label'], 'due_at', 'warning_at', 'paused_at', 'clock'],
+    'created_at', 'updated_at', 'resolved_at', 'closed_at',
     'can' => ['update', 'changeStatus', 'changePriority', 'claim', 'assign', 'reply', 'addInternalNote', 'allowedStatuses'],
 ];
 
@@ -43,7 +43,7 @@ it('lists visible tickets with pagination meta', function (): void {
         ->assertJsonPath('meta.total', 2)
         ->assertJsonPath('meta.per_page', 1)
         ->assertJsonStructure([
-            'data' => [['number', 'subject', 'status' => ['value', 'label'], 'priority' => ['value', 'label'], 'category', 'customer', 'assigned_agent', 'sla' => ['state', 'due_at'], 'escalation_level', 'replies_count', 'created_at', 'updated_at']],
+            'data' => [['number', 'subject', 'status' => ['value', 'label'], 'priority' => ['value', 'label'], 'category', 'customer', 'assigned_agent', 'sla' => ['state', 'due_at', 'clock' => ['remaining_seconds', 'running', 'changes_at', 'resumes_at']], 'replies_count', 'created_at', 'updated_at']],
             'links' => ['first', 'last', 'prev', 'next'],
             'meta' => ['current_page', 'last_page', 'per_page', 'total'],
         ]);
@@ -97,7 +97,8 @@ it('lists ticket attachments and who created the ticket, hiding internal files f
     Sanctum::actingAs($this->customer);
     $this->getJson('/api/v1/tickets/'.$ticket->number)
         ->assertOk()
-        ->assertJsonPath('data.created_by', ['id' => $agent->id, 'name' => $agent->name])
+        ->assertJsonPath('data.created_by.id', $agent->id)
+        ->assertJsonPath('data.created_by.name', $agent->name)
         ->assertJsonCount(1, 'data.attachments')
         ->assertJsonPath('data.attachments.0.id', $visible->id)
         ->assertJsonStructure(['data' => ['attachments' => [['id', 'original_name', 'size_bytes', 'mime_type', 'download_url']]]]);

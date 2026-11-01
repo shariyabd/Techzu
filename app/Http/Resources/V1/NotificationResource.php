@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Resources\V1;
 
+use App\Models\User;
+use App\Services\Notifications\StaffOnlyNotifications;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Notifications\DatabaseNotification;
@@ -16,6 +18,11 @@ final class NotificationResource extends JsonResource
     {
         /** @var array<string, mixed> $data */
         $data = $this->data;
+        $viewer = $request->user();
+
+        if ($viewer instanceof User && StaffOnlyNotifications::isHiddenFrom($viewer, $this->type)) {
+            $data = ['ticket_number' => $data['ticket_number'] ?? null, 'url' => $data['url'] ?? null];
+        }
 
         return [
             'id' => $this->id,

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Holidays;
 
+use App\Services\Sla\SlaSettingsRepository;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -26,6 +27,6 @@ final class ListRequest extends FormRequest
     {
         return $this->filled('year')
             ? $this->integer('year')
-            : CarbonImmutable::now((string) config('business_hours.timezone'))->year;
+            : CarbonImmutable::now(app(SlaSettingsRepository::class)->timezone())->year;
     }
 }

@@ -26,7 +26,7 @@ it('grants each role exactly its TD-011 baseline', function (Role $role, array $
         Permission::TicketsReply,
         Permission::TicketsUpdateOwn,
     ]],
-    'agent: whole queue, internal notes, claim, assigned-only changes, hand-off, dashboard' => [Role::Agent, [
+    'agent: whole queue, internal notes, claim, assigned-only changes, hand-off, dashboard, own saved replies' => [Role::Agent, [
         Permission::TicketsCreate,
         Permission::TicketsCreateOnBehalf,
         Permission::TicketsViewAny,
@@ -36,6 +36,7 @@ it('grants each role exactly its TD-011 baseline', function (Role $role, array $
         Permission::TicketsUpdateAssigned,
         Permission::TicketsHandoffOwn,
         Permission::DashboardView,
+        Permission::SavedRepliesUse,
     ]],
     'admin: every unscoped capability plus all admin areas' => [Role::Admin, [
         Permission::TicketsCreate,
@@ -51,6 +52,9 @@ it('grants each role exactly its TD-011 baseline', function (Role $role, array $
         Permission::UsersManage,
         Permission::CategoriesManage,
         Permission::HolidaysManage,
+        Permission::SlaManage,
+        Permission::SavedRepliesUse,
+        Permission::SavedRepliesManageShared,
     ]],
 ]);
 

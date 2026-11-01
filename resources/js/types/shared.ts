@@ -17,5 +17,6 @@ export type SharedProps = {
         min: number;
         max: number;
     };
+    businessTimezone: string;
     [key: string]: unknown;
 };

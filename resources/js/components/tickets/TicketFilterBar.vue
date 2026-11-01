@@ -16,6 +16,7 @@ import {
     ref,
     watch,
 } from 'vue';
+import CustomerPicker from '@/components/tickets/CustomerPicker.vue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -26,7 +27,11 @@ import {
 } from '@/components/ui/native-select';
 import { formatDate } from '@/lib/format';
 import { index } from '@/routes/tickets';
-import type { TicketFilterOptions, TicketScope } from '@/types/tickets';
+import type {
+    CustomerOption,
+    TicketFilterOptions,
+    TicketScope,
+} from '@/types/tickets';
 
 const props = defineProps<{
     scope: TicketScope;
@@ -50,6 +55,7 @@ type FilterState = {
     created_from: string;
     created_to: string;
     sla_state: string;
+    response: string;
     sort: string;
 };
 
@@ -62,7 +68,8 @@ type TextKey =
     | 'customer_id'
     | 'created_from'
     | 'created_to'
-    | 'sla_state';
+    | 'sla_state'
+    | 'response';
 
 const ADVANCED: (keyof FilterState)[] = [
     'status',
@@ -74,6 +81,7 @@ const ADVANCED: (keyof FilterState)[] = [
     'created_from',
     'created_to',
     'sla_state',
+    'response',
 ];
 const SCALARS: (keyof FilterState)[] = [
     'number',
@@ -84,6 +92,7 @@ const SCALARS: (keyof FilterState)[] = [
     'created_from',
     'created_to',
     'sla_state',
+    'response',
 ];
 
 const text = (value: unknown): string =>
@@ -108,11 +117,27 @@ function fromFilters(filters: Record<string, unknown>): FilterState {
         created_from: text(filters.created_from),
         created_to: text(filters.created_to),
         sla_state: text(filters.sla_state),
+        response: text(filters.response),
         sort: text(filters.sort) || DEFAULT_SORT,
     };
 }
 
 const state = reactive<FilterState>(fromFilters(props.filters));
+const customer = ref<CustomerOption | null>(null);
+
+function setCustomer(value: CustomerOption | null): void {
+    customer.value = value;
+    state.customer_id = value === null ? '' : String(value.id);
+}
+
+watch(
+    () => state.customer_id,
+    (value) => {
+        if (value === '') {
+            customer.value = null;
+        }
+    },
+);
 
 function toQuery(s: FilterState): Record<string, string | string[]> {
     const query: Record<string, string | string[]> = { scope: props.scope };
@@ -147,6 +172,9 @@ const hasFilters = computed(() =>
 );
 const showAdvanced = ref(false);
 const animate = ref(false);
+const panelSettled = ref(false);
+const PANEL_TRANSITION_MS = 320;
+let settleTimer: ReturnType<typeof setTimeout> | undefined;
 
 function readPanelPreference(): boolean {
     try {
@@ -159,6 +187,11 @@ function readPanelPreference(): boolean {
 function togglePanel(): void {
     animate.value = true;
     showAdvanced.value = !showAdvanced.value;
+    panelSettled.value = false;
+    clearTimeout(settleTimer);
+    settleTimer = setTimeout(() => {
+        panelSettled.value = showAdvanced.value;
+    }, PANEL_TRANSITION_MS);
 
     try {
         window.localStorage.setItem(
@@ -172,6 +205,7 @@ function togglePanel(): void {
 
 onMounted(() => {
     showAdvanced.value = readPanelPreference();
+    panelSettled.value = showAdvanced.value;
     void nextTick(() => {
         animate.value = true;
     });
@@ -194,7 +228,10 @@ watch(
     { deep: true },
 );
 
-onBeforeUnmount(() => clearTimeout(timer));
+onBeforeUnmount(() => {
+    clearTimeout(timer);
+    clearTimeout(settleTimer);
+});
 
 function toggle(values: string[], value: string): void {
     const position = values.indexOf(value);
@@ -274,6 +311,13 @@ const chips = computed<ActiveChip[]>(() => {
             remove: clear('sla_state'),
         });
     }
+    if (state.response !== '') {
+        result.push({
+            id: 'response',
+            label: `Response: ${labelFor(props.options.responses, state.response)}`,
+            remove: clear('response'),
+        });
+    }
     if (state.created_from !== '') {
         result.push({
             id: 'created_from',
@@ -308,9 +352,14 @@ const chips = computed<ActiveChip[]>(() => {
         });
     }
     if (state.customer_id.trim() !== '') {
+        const selected =
+            customer.value !== null &&
+            String(customer.value.id) === state.customer_id.trim()
+                ? customer.value.name
+                : `#${state.customer_id.trim()}`;
         result.push({
             id: 'customer_id',
-            label: `Customer #${state.customer_id.trim()}`,
+            label: `Customer: ${selected}`,
             remove: clear('customer_id'),
         });
     }
@@ -408,7 +457,12 @@ const toggleClass = (active: boolean): string =>
         >
             <div
                 id="ticket-filters-advanced"
-                class="min-h-0 overflow-hidden"
+                class="min-h-0"
+                :class="
+                    showAdvanced && panelSettled
+                        ? 'overflow-visible'
+                        : 'overflow-hidden'
+                "
                 :inert="!showAdvanced"
                 :aria-hidden="!showAdvanced"
             >
@@ -573,15 +627,38 @@ const toggleClass = (active: boolean): string =>
                                 >
                             </NativeSelect>
                         </div>
-                        <div class="grid gap-2">
-                            <Label for="filter-customer">Customer ID</Label>
-                            <Input
+                        <div class="grid min-w-0 gap-2">
+                            <Label for="filter-customer">Customer</Label>
+                            <CustomerPicker
                                 id="filter-customer"
-                                v-model="state.customer_id"
-                                type="number"
-                                min="1"
-                                inputmode="numeric"
+                                :model-value="customer"
+                                :resolve-id="state.customer_id"
+                                :invalid="Boolean(errors.customer_id)"
+                                @update:model-value="setCustomer"
                             />
+                            <p
+                                v-if="errors.customer_id"
+                                class="text-sm text-destructive"
+                            >
+                                {{ errors.customer_id }}
+                            </p>
+                        </div>
+                        <div class="grid gap-2">
+                            <Label for="filter-response">Response</Label>
+                            <NativeSelect
+                                id="filter-response"
+                                v-model="state.response"
+                            >
+                                <NativeSelectOption value=""
+                                    >Any</NativeSelectOption
+                                >
+                                <NativeSelectOption
+                                    v-for="option in options.responses"
+                                    :key="option.value"
+                                    :value="option.value"
+                                    >{{ option.label }}</NativeSelectOption
+                                >
+                            </NativeSelect>
                         </div>
                         <div class="flex h-9 items-center gap-2">
                             <Checkbox

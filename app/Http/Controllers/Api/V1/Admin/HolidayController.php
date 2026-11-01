@@ -8,6 +8,7 @@ use App\Actions\Admin\CreateHoliday;
 use App\Actions\Admin\DeleteHoliday;
 use App\Actions\Admin\UpdateHoliday;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Holidays\DestroyRequest;
 use App\Http\Requests\Holidays\ListRequest;
 use App\Http\Requests\Holidays\StoreRequest;
 use App\Http\Requests\Holidays\UpdateRequest;
@@ -41,9 +42,9 @@ final class HolidayController extends Controller
         return HolidayResource::make($update->handle($holiday, $data));
     }
 
-    public function destroy(Holiday $holiday, DeleteHoliday $delete): Response
+    public function destroy(DestroyRequest $request, Holiday $holiday, DeleteHoliday $delete): Response
     {
-        $delete->handle($holiday);
+        $delete->handle($holiday, $request->recalculateActiveTickets());
 
         return response()->noContent();
     }

@@ -6,6 +6,7 @@ namespace App\Notifications;
 
 use App\Models\Ticket;
 use App\Models\User;
+use App\Services\Sla\SlaSettingsRepository;
 
 abstract class TicketNotification extends BaseNotification
 {
@@ -32,7 +33,7 @@ abstract class TicketNotification extends BaseNotification
     protected function dueAt(): string
     {
         return $this->ticket->sla_due_at
-            ->setTimezone((string) config('business_hours.timezone'))
+            ->setTimezone(app(SlaSettingsRepository::class)->timezone())
             ->format('D j M Y H:i T');
     }
 }

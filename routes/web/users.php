@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Web\Admin\RoleController;
 use App\Http\Controllers\Web\Admin\UserController;
+use App\Http\Controllers\Web\CustomerLookupController;
 use App\Models\User;
 use Illuminate\Support\Facades\Route;
 
@@ -16,3 +17,7 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function (): v
     Route::get('roles', RoleController::class)->name('roles.index')->can('viewAny', User::class);
     Route::patch('roles/{role}', [RoleController::class, 'update'])->name('roles.update')->can('managePermissions', User::class);
 });
+
+Route::middleware(['auth', 'throttle:60,1'])->get('customers/lookup', CustomerLookupController::class)
+    ->name('customers.lookup')
+    ->can('lookupCustomers', User::class);

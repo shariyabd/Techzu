@@ -21,6 +21,7 @@ enum ActivityType: string
     case SlaApproaching = 'sla_approaching';
     case Escalated = 'escalated';
     case Imported = 'imported';
+    case SlaRecalculated = 'sla_recalculated';
 
     /** @param  array<string, mixed>  $properties */
     public function describe(array $properties): string
@@ -48,12 +49,13 @@ enum ActivityType: string
             self::Imported => is_int($properties['row'] ?? null)
                 ? sprintf('Ticket imported from CSV (row %d)', $properties['row'])
                 : 'Ticket imported from CSV',
+            self::SlaRecalculated => 'Deadline updated',
         };
     }
 
     public function isStaffOnly(): bool
     {
-        return $this === self::InternalNote;
+        return in_array($this, [self::InternalNote, self::SlaApproaching, self::Escalated], true);
     }
 
     private static function describeUpdate(mixed $fields): string

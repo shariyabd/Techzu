@@ -6,6 +6,7 @@ namespace App\Services\Admin;
 
 use App\Models\Category;
 use App\Models\Holiday;
+use DateTimeZone;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 
@@ -31,5 +32,11 @@ final class AdminCatalog
             ->orderBy('date')
             ->paginate($perPage)
             ->withQueryString();
+    }
+
+    /** @return list<string> */
+    public function timezones(): array
+    {
+        return DateTimeZone::listIdentifiers();
     }
 }

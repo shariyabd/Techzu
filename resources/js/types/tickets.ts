@@ -16,7 +16,12 @@ export type SlaStateValue =
 
 export type EnumValue<T extends string = string> = { value: T; label: string };
 export type Option = { value: string; label: string };
-export type UserSummary = { id: number; name: string };
+export type UserSummary = {
+    id: number;
+    name: string;
+    avatar_url: string | null;
+    last_seen_at: string | null;
+};
 export type CategorySummary = {
     id: number;
     name: string;
@@ -31,9 +36,17 @@ export type TicketCan = {
     changePriority: boolean;
     claim: boolean;
     assign: boolean;
+    assignOutsideCategory: boolean;
     reply: boolean;
     addInternalNote: boolean;
     allowedStatuses: string[];
+};
+
+export type SlaClock = {
+    remaining_seconds: number;
+    running: boolean;
+    changes_at: string | null;
+    resumes_at: string | null;
 };
 
 export type TicketSla = {
@@ -41,6 +54,7 @@ export type TicketSla = {
     due_at: string | null;
     warning_at: string | null;
     paused_at: string | null;
+    clock: SlaClock | null;
 };
 
 export type TicketDetail = {
@@ -54,7 +68,7 @@ export type TicketDetail = {
     created_by: UserSummary | null;
     assigned_agent: UserSummary | null;
     sla: TicketSla;
-    escalation_level: number;
+    escalation_level?: number;
     created_at: string | null;
     updated_at: string | null;
     resolved_at: string | null;
@@ -70,10 +84,11 @@ export type TicketListItem = {
     category: CategorySummary | null;
     customer: UserSummary | null;
     assigned_agent: UserSummary | null;
-    sla: Pick<TicketSla, 'state' | 'due_at'>;
-    escalation_level: number;
+    sla: Pick<TicketSla, 'state' | 'due_at' | 'clock'>;
+    escalation_level?: number;
     replies_count?: number;
     has_agent_response?: boolean;
+    latest_message?: string | null;
     created_at: string | null;
     updated_at: string | null;
 };
@@ -107,7 +122,14 @@ export type ActivityItem = {
     created_at: string | null;
 };
 
-export type AgentOption = { id: number; name: string };
+export type AgentOption = {
+    id: number;
+    name: string;
+    avatar_url: string | null;
+    category_ids?: number[];
+};
+
+export type CustomerOption = { id: number; name: string; email: string };
 
 export type TicketFormOptions = {
     statuses: Option[];
@@ -115,13 +137,16 @@ export type TicketFormOptions = {
     categories: Pick<CategorySummary, 'id' | 'name'>[];
 };
 
-export type TicketScope = 'active' | 'resolved';
+export type TicketScope = 'active' | 'resolved' | 'all';
+
+export type TicketResponseFilter = 'unresponded' | 'awaiting';
 
 export type TicketFilterOptions = {
     statuses: Option[];
     priorities: Option[];
     slaStates: Option[];
     sorts: Option[];
+    responses: EnumValue<TicketResponseFilter>[];
     categories: Pick<CategorySummary, 'id' | 'name'>[];
     agents: AgentOption[];
     showPeopleFilters: boolean;

@@ -16,6 +16,14 @@ return [
         'trend_days' => (int) env('DASHBOARD_TREND_DAYS', 14),
     ],
 
+    'queue_counts' => [
+        'cache_ttl_seconds' => (int) env('TICKETS_QUEUE_COUNTS_CACHE_TTL_SECONDS', 60),
+    ],
+
+    'agent_directory' => [
+        'cache_ttl_seconds' => (int) env('AGENT_DIRECTORY_CACHE_TTL_SECONDS', 60),
+    ],
+
     'show' => [
         'max_pages' => (int) env('TICKETS_SHOW_MAX_PAGES', 50),
     ],

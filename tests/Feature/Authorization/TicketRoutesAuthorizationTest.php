@@ -61,7 +61,7 @@ it('enforces the ticket matrix', function (string $role, string $ownership, stri
 })->with('ticket route matrix');
 
 dataset('collection routes', [
-    'web index' => ['GET', '/tickets', 200],
+    'web index' => ['GET', '/tickets?scope=active', 200],
     'web create' => ['GET', '/tickets/create', 200],
     'web store' => ['POST', '/tickets', 302],
     'api index' => ['GET', '/api/v1/tickets', 200],

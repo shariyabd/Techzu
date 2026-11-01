@@ -6,10 +6,12 @@ use App\Models\Attachment;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Services\Attachments\AttachmentStorer;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
 beforeEach(function (): void {
+    $this->travelTo(CarbonImmutable::parse('2026-11-15 10:00:00', 'UTC'));
     Storage::fake('local');
     config()->set('attachments.disk', 'local');
 });
@@ -35,7 +37,7 @@ it('stores files privately under a uuid name and records metadata', function ():
         ->and($first->original_name)->toBe('Invoice March.pdf')
         ->and($first->size_bytes)->toBe(120 * 1024)
         ->and((bool) $first->is_internal)->toBeFalse()
-        ->and($first->path)->toMatch('#^attachments/'.$ticket->id.'/[0-9a-f-]{36}\.pdf$#');
+        ->and($first->path)->toMatch('#^attachments/2026/11/[0-9a-f-]{36}\.pdf$#');
 
     Storage::disk('local')->assertExists($first->path);
     Storage::disk('local')->assertExists($attachments->last()->path);

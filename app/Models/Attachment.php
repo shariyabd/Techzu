@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Services\Tickets\TicketVisibility;
 use Database\Factories\AttachmentFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -45,6 +47,12 @@ class Attachment extends Model
     public function uploader(): BelongsTo
     {
         return $this->belongsTo(User::class, 'uploaded_by');
+    }
+
+    /** @param Builder<Attachment> $query */
+    public function scopeVisibleTo(Builder $query, User $user): void
+    {
+        TicketVisibility::of($user)->restrictInternal($query);
     }
 
     /** @param  array<array-key, mixed>  $previewMimeTypes */

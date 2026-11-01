@@ -133,7 +133,7 @@ it('stamps resolved_at and closed_at', function (): void {
     expect($ticket->fresh()?->closed_at?->equalTo($this->now->addHour()))->toBeTrue();
 });
 
-it('clears resolved_at on reopen and keeps the original deadline (TD-042)', function (): void {
+it('clears resolved_at on reopen and resumes the business time left at resolution', function (): void {
     $ticket = ticketInStatus(TicketStatus::Resolved, $this->now);
     $dueBefore = $ticket->sla_due_at;
 

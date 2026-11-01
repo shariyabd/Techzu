@@ -3,9 +3,20 @@ import { Link, usePage } from '@inertiajs/vue3';
 import { Bell } from '@lucide/vue';
 import { computed } from 'vue';
 import { Button } from '@/components/ui/button';
+import { realtimeChannels, useRealtimeReload } from '@/composables/useRealtime';
 import { index } from '@/routes/notifications';
 
 const page = usePage();
+
+useRealtimeReload(
+    () =>
+        page.props.auth.user
+            ? [realtimeChannels.user(page.props.auth.user.id)]
+            : [],
+    ['notification.received'],
+    () => ({ only: ['notifications'] }),
+    300,
+);
 const unread = computed(() => page.props.notifications.unread_count);
 const badge = computed(() =>
     unread.value > 99 ? '99+' : String(unread.value),

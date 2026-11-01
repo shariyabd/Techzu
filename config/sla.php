@@ -14,5 +14,7 @@ return [
 
     'scan_chunk_size' => (int) env('SLA_SCAN_CHUNK_SIZE', 500),
 
+    'redelivery_grace_seconds' => (int) env('SLA_REDELIVERY_GRACE_SECONDS', 120),
+
     'warning_threshold_percent' => (int) env('SLA_WARNING_THRESHOLD_PERCENT', 75),
 ];

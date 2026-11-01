@@ -21,21 +21,17 @@ final class TicketPageData
 {
     public function loadSummary(Ticket $ticket): Ticket
     {
-        return $ticket->loadMissing(['category:id,name,slug,is_active', 'customer:id,name', 'creator:id,name', 'assignedAgent:id,name']);
+        return $ticket->loadMissing(['category:id,name,slug,is_active', 'customer:id,name,avatar_path,last_seen_at', 'creator:id,name,avatar_path,last_seen_at', 'assignedAgent:id,name,avatar_path,last_seen_at']);
     }
 
     public function loadForShow(Ticket $ticket, User $viewer): Ticket
     {
-        $seesInternal = $viewer->can('viewInternal', $ticket);
-
         return $ticket->load([
             'category:id,name,slug,is_active',
-            'customer:id,name',
-            'creator:id,name',
-            'assignedAgent:id,name',
-            'attachments' => static fn (HasMany $q) => $q->whereNull('reply_id')
-                ->when(! $seesInternal, static fn ($b) => $b->where('is_internal', false))
-                ->orderBy('id'),
+            'customer:id,name,avatar_path,last_seen_at',
+            'creator:id,name,avatar_path,last_seen_at',
+            'assignedAgent:id,name,avatar_path,last_seen_at',
+            'attachments' => static fn (HasMany $q) => $q->whereNull('reply_id')->visibleTo($viewer)->orderBy('id'),
         ]);
     }
 
@@ -47,15 +43,14 @@ final class TicketPageData
     /** @return array{items: Collection<int, TicketReply>, has_more: bool} */
     public function replies(Ticket $ticket, User $viewer, int $pages): array
     {
-        $seesInternal = $viewer->can('viewInternal', $ticket);
         $limit = $this->showLimit($pages);
         $capped = $this->clampPages($pages) >= $this->clampPages(PHP_INT_MAX);
 
         $fetched = $ticket->replies()
             ->visibleTo($viewer)
             ->with([
-                'author:id,name',
-                'attachments' => static fn (HasMany $a) => $a->when(! $seesInternal, static fn ($b) => $b->where('is_internal', false))->orderBy('id'),
+                'author:id,name,avatar_path,last_seen_at',
+                'attachments' => static fn (HasMany $a) => $a->visibleTo($viewer)->orderBy('id'),
             ])
             ->latest()
             ->latest('id')
@@ -75,7 +70,7 @@ final class TicketPageData
         $capped = $this->clampPages($pages) >= $this->clampPages(PHP_INT_MAX);
 
         $fetched = $ticket->activitiesVisibleTo($viewer)
-            ->with('causer:id,name')
+            ->with('causer:id,name,avatar_path,last_seen_at')
             ->latest()
             ->latest('id')
             ->limit($limit + 1)
@@ -93,21 +88,27 @@ final class TicketPageData
     public function activitiesPage(Ticket $ticket, User $viewer, int $perPage): LengthAwarePaginator
     {
         return $ticket->activitiesVisibleTo($viewer)
-            ->with('causer:id,name')
+            ->with('causer:id,name,avatar_path,last_seen_at')
             ->latest()
             ->latest('id')
             ->paginate(max(1, min($perPage, (int) config('tickets.per_page.max', 100))));
     }
 
-    /** @return list<array{id: int, name: string}> */
+    /** @return list<array{id: int, name: string, avatar_url: string|null, category_ids: list<int>}> */
     public function agentOptions(): array
     {
         return User::query()
             ->availableAgents()
+            ->with('categories:categories.id')
             ->orderBy('users.name')
             ->limit(500)
-            ->get(['users.id', 'users.name'])
-            ->map(static fn (User $u): array => ['id' => $u->id, 'name' => $u->name])
+            ->get(['users.id', 'users.name', 'users.avatar_path'])
+            ->map(static fn (User $u): array => [
+                'id' => $u->id,
+                'name' => $u->name,
+                'avatar_url' => $u->avatarUrl(),
+                'category_ids' => $u->categories->map(static fn (Category $c): int => $c->id)->values()->all(),
+            ])
             ->values()
             ->all();
     }
@@ -148,16 +149,26 @@ final class TicketPageData
         ];
     }
 
-    /** @return array{statuses: list<array{value: string, label: string}>, priorities: list<array{value: string, label: string}>, slaStates: list<array{value: string, label: string}>, sorts: list<array{value: string, label: string}>, categories: list<array{id: int, name: string}>, agents: list<array{id: int, name: string}>, showPeopleFilters: bool} */
+    /** @return array{scope: string, assigned_agent_id: int}|null */
+    public function defaultListQuery(User $viewer): ?array
+    {
+        if (! $viewer->hasRole(Role::Agent)) {
+            return null;
+        }
+
+        return ['scope' => 'active', 'assigned_agent_id' => $viewer->id];
+    }
+
+    /** @return array{statuses: list<array{value: string, label: string}>, priorities: list<array{value: string, label: string}>, slaStates: list<array{value: string, label: string}>, sorts: list<array{value: string, label: string}>, responses: list<array{value: string, label: string}>, categories: list<array{id: int, name: string}>, agents: list<array{id: int, name: string, avatar_url: string|null}>, showPeopleFilters: bool} */
     public function filterOptions(User $viewer, string $scope): array
     {
-        $isStaff = $viewer->can('createOnBehalf', Ticket::class);
+        $isStaff = TicketVisibility::of($viewer)->seesAllTickets;
         $form = $this->formOptions();
 
         return [
             'statuses' => array_map(
                 static fn (TicketStatus $s): array => ['value' => $s->value, 'label' => $s->label()],
-                $scope === 'resolved' ? TicketStatus::finished() : TicketStatus::active(),
+                TicketStatus::forScope($scope),
             ),
             'priorities' => $form['priorities'],
             'slaStates' => array_map(
@@ -169,14 +180,19 @@ final class TicketPageData
                 array_keys(TicketFilter::SORTS),
                 array_values(TicketFilter::SORTS),
             ),
+            'responses' => array_map(
+                static fn (string $value, string $label): array => ['value' => $value, 'label' => $label],
+                array_keys(ResponseQuery::FILTERS),
+                array_values(ResponseQuery::FILTERS),
+            ),
             'categories' => $form['categories'],
             'agents' => $isStaff
                 ? User::query()
                     ->role(Role::Agent->value)
                     ->orderBy('users.name')
                     ->limit(500)
-                    ->get(['users.id', 'users.name'])
-                    ->map(static fn (User $u): array => ['id' => $u->id, 'name' => $u->name])
+                    ->get(['users.id', 'users.name', 'users.avatar_path'])
+                    ->map(static fn (User $u): array => ['id' => $u->id, 'name' => $u->name, 'avatar_url' => $u->avatarUrl()])
                     ->values()
                     ->all()
                 : [],

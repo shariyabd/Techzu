@@ -8,7 +8,6 @@ use App\Enums\TicketStatus;
 use App\Models\Ticket;
 use App\Models\User;
 use Carbon\CarbonImmutable;
-use Illuminate\Support\Facades\DB;
 
 final class UnassignedTicketAssigner
 {
@@ -21,11 +20,6 @@ final class UnassignedTicketAssigner
             ->update([
                 'assigned_agent_id' => $agent->getKey(),
                 'assigned_at' => $now,
-                'status' => DB::raw(sprintf(
-                    "CASE WHEN status = '%s' THEN '%s' ELSE status END",
-                    TicketStatus::Open->value,
-                    TicketStatus::InProgress->value,
-                )),
             ]);
 
         if ($affected !== 1) {

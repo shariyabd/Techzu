@@ -7,12 +7,24 @@ import {
     Pencil,
     Plus,
 } from '@lucide/vue';
-import ConfirmDialog from '@/components/ConfirmDialog.vue';
+import { ref } from 'vue';
+import SlaRecalculateOption from '@/components/admin/SlaRecalculateOption.vue';
 import TableCard from '@/components/admin/TableCard.vue';
 import EmptyState from '@/components/EmptyState.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import ResourcePagination from '@/components/ResourcePagination.vue';
-import { Button } from '@/components/ui/button';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { Button, buttonVariants } from '@/components/ui/button';
 import {
     Table,
     TableBody,
@@ -31,8 +43,19 @@ defineOptions({
 
 defineProps<{ holidays: Paginated<HolidayItem>; year: number }>();
 
+const recalculateOnDelete = ref(false);
+
+function resetOnClose(open: boolean): void {
+    if (!open) {
+        recalculateOnDelete.value = false;
+    }
+}
+
 function remove(holiday: HolidayItem): void {
-    router.delete(destroy.url(holiday.id), { preserveScroll: true });
+    router.delete(destroy.url(holiday.id), {
+        data: { recalculate_active_tickets: recalculateOnDelete.value },
+        preserveScroll: true,
+    });
 }
 </script>
 
@@ -129,19 +152,51 @@ function remove(holiday: HolidayItem): void {
                                             ></Link
                                         >
                                     </Button>
-                                    <ConfirmDialog
-                                        :title="`Delete “${holiday.name}”?`"
-                                        :description="`${holiday.weekday} ${holiday.date} becomes a normal business day for new SLA deadlines.`"
-                                        confirm-label="Delete"
-                                        @confirm="remove(holiday)"
-                                    >
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            class="text-destructive"
-                                            >Delete</Button
-                                        >
-                                    </ConfirmDialog>
+                                    <AlertDialog @update:open="resetOnClose">
+                                        <AlertDialogTrigger as-child>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                class="text-destructive"
+                                                >Delete</Button
+                                            >
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                            <AlertDialogHeader>
+                                                <AlertDialogTitle
+                                                    >Delete “{{
+                                                        holiday.name
+                                                    }}”?</AlertDialogTitle
+                                                >
+                                                <AlertDialogDescription
+                                                    >{{ holiday.weekday }}
+                                                    {{ holiday.date }} becomes a
+                                                    normal business day for new
+                                                    SLA
+                                                    deadlines.</AlertDialogDescription
+                                                >
+                                            </AlertDialogHeader>
+                                            <SlaRecalculateOption
+                                                :id="`recalculate-delete-${holiday.id}`"
+                                                v-model="recalculateOnDelete"
+                                            />
+                                            <AlertDialogFooter>
+                                                <AlertDialogCancel
+                                                    >Cancel</AlertDialogCancel
+                                                >
+                                                <AlertDialogAction
+                                                    :class="
+                                                        buttonVariants({
+                                                            variant:
+                                                                'destructive',
+                                                        })
+                                                    "
+                                                    @click="remove(holiday)"
+                                                    >Delete</AlertDialogAction
+                                                >
+                                            </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                    </AlertDialog>
                                 </div>
                             </TableCell>
                         </TableRow>

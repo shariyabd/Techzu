@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Tickets;
 
+use App\Services\Sla\SlaSettingsRepository;
 use Carbon\CarbonImmutable;
 use Illuminate\Config\Repository as Config;
 use Illuminate\Database\ConnectionInterface;
@@ -13,11 +14,12 @@ final class TicketNumberGenerator
     public function __construct(
         private readonly ConnectionInterface $connection,
         private readonly Config $config,
+        private readonly SlaSettingsRepository $settings,
     ) {}
 
     public function next(CarbonImmutable $at): string
     {
-        $year = $at->setTimezone($this->config->string('business_hours.timezone'))->year;
+        $year = $at->setTimezone($this->settings->timezone())->year;
         $prefix = $this->config->string('tickets.number_prefix');
 
         $number = $this->connection->transaction(function () use ($year): int {

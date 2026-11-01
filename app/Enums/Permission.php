@@ -23,6 +23,9 @@ enum Permission: string
     case UsersManage = 'users.manage';
     case CategoriesManage = 'categories.manage';
     case HolidaysManage = 'holidays.manage';
+    case SlaManage = 'sla.manage';
+    case SavedRepliesUse = 'saved_replies.use';
+    case SavedRepliesManageShared = 'saved_replies.manage_shared';
 
     /** @return list<self> */
     public static function forRole(Role $role): array
@@ -44,6 +47,7 @@ enum Permission: string
                 self::TicketsUpdateAssigned,
                 self::TicketsHandoffOwn,
                 self::DashboardView,
+                self::SavedRepliesUse,
             ],
             Role::Admin => [
                 self::TicketsCreate,
@@ -59,6 +63,9 @@ enum Permission: string
                 self::UsersManage,
                 self::CategoriesManage,
                 self::HolidaysManage,
+                self::SlaManage,
+                self::SavedRepliesUse,
+                self::SavedRepliesManageShared,
             ],
         };
     }
@@ -83,6 +90,9 @@ enum Permission: string
             self::UsersManage => 'Manage users and roles',
             self::CategoriesManage => 'Manage categories',
             self::HolidaysManage => 'Manage holidays',
+            self::SlaManage => 'Manage SLA rules and business hours',
+            self::SavedRepliesUse => 'Use saved replies and manage their own',
+            self::SavedRepliesManageShared => 'Manage team-wide saved replies',
         };
     }
 }

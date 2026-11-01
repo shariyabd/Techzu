@@ -5,7 +5,7 @@ import { computed } from 'vue';
 import PriorityBadge from '@/components/tickets/PriorityBadge.vue';
 import SlaBadge from '@/components/tickets/SlaBadge.vue';
 import StatusBadge from '@/components/tickets/StatusBadge.vue';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -14,9 +14,14 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { getInitials } from '@/composables/useInitials';
+import {
+    latestSeen,
+    presenceStatus,
+    usePresenceClock,
+} from '@/composables/usePresence';
 import { formatDateTime, formatRelative } from '@/lib/format';
 import { show } from '@/routes/tickets';
-import type { TicketListItem } from '@/types/tickets';
+import type { TicketListItem, UserSummary } from '@/types/tickets';
 
 const props = defineProps<{
     ticket: TicketListItem;
@@ -30,6 +35,19 @@ const isAwaitingResponse = computed(
 const clientName = computed(
     () => props.ticket.customer?.name ?? props.ticket.category?.name ?? '—',
 );
+
+const customer = computed<UserSummary | null>(() => props.ticket.customer);
+const agent = computed<UserSummary | null>(() => props.ticket.assigned_agent);
+const now = usePresenceClock();
+const customerStatus = computed(() =>
+    props.showCustomer && customer.value
+        ? presenceStatus(
+              latestSeen(customer.value.last_seen_at),
+              false,
+              now.value,
+          )
+        : null,
+);
 </script>
 
 <template>
@@ -38,22 +56,48 @@ const clientName = computed(
             'relative grid items-center gap-x-4 gap-y-3 overflow-hidden rounded-xl border p-3 pl-4 shadow-xs transition-shadow focus-within:ring-2 focus-within:ring-ring hover:shadow-md lg:grid-cols-[minmax(0,13rem)_8.5rem_minmax(0,1fr)_minmax(0,13rem)_minmax(0,10rem)_2rem] lg:py-2.5',
             isAwaitingResponse
                 ? 'border-ticket-awaiting-border bg-ticket-awaiting before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-ticket-awaiting-accent'
-                : 'border-ticket-responded-border bg-ticket-responded',
+                : 'border-border bg-card',
         ]"
         :data-ticket="ticket.number"
         :data-response="isAwaitingResponse ? 'awaiting' : 'responded'"
     >
         <div class="flex min-w-0 items-center gap-3 pr-10 lg:pr-0">
-            <Avatar class="size-9 shrink-0">
-                <AvatarFallback>{{ getInitials(clientName) }}</AvatarFallback>
-            </Avatar>
+            <span class="relative inline-flex shrink-0">
+                <Avatar class="size-9">
+                    <AvatarImage
+                        v-if="showCustomer && customer?.avatar_url"
+                        :src="customer.avatar_url"
+                        :alt="clientName"
+                    />
+                    <AvatarFallback>{{
+                        getInitials(clientName)
+                    }}</AvatarFallback>
+                </Avatar>
+                <span
+                    v-if="customerStatus?.active"
+                    class="absolute right-0 bottom-0 size-2.5 rounded-full bg-emerald-500 ring-2 ring-background"
+                    data-presence="active"
+                    aria-hidden="true"
+                />
+            </span>
             <div class="min-w-0">
                 <p class="truncate text-sm font-medium">{{ clientName }}</p>
                 <p
                     class="truncate text-xs text-muted-foreground"
                     :title="formatDateTime(ticket.created_at)"
                 >
-                    {{ formatRelative(ticket.created_at) }}
+                    {{ formatRelative(ticket.created_at)
+                    }}<template v-if="customerStatus">
+                        ·
+                        <span
+                            :class="
+                                customerStatus.active
+                                    ? 'text-emerald-700 dark:text-emerald-400'
+                                    : ''
+                            "
+                            >{{ customerStatus.label }}</span
+                        ></template
+                    >
                 </p>
             </div>
         </div>
@@ -101,6 +145,11 @@ const clientName = computed(
         <div class="flex min-w-0 items-center gap-2">
             <template v-if="ticket.assigned_agent">
                 <Avatar class="size-6 shrink-0">
+                    <AvatarImage
+                        v-if="agent?.avatar_url"
+                        :src="agent.avatar_url"
+                        :alt="ticket.assigned_agent.name"
+                    />
                     <AvatarFallback class="text-[10px]">{{
                         getInitials(ticket.assigned_agent.name)
                     }}</AvatarFallback>

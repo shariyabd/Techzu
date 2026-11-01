@@ -29,3 +29,12 @@ it('splits statuses into active and finished', function (): void {
     expect(TicketStatus::active())->toBe([TicketStatus::Open, TicketStatus::InProgress, TicketStatus::WaitingForCustomer])
         ->and(TicketStatus::finished())->toBe([TicketStatus::Resolved, TicketStatus::Closed]);
 });
+
+it('maps each list scope to the statuses it shows', function (string $scope, array $expected): void {
+    expect(TicketStatus::forScope($scope))->toBe($expected);
+})->with([
+    'active' => ['active', [TicketStatus::Open, TicketStatus::InProgress, TicketStatus::WaitingForCustomer]],
+    'resolved' => ['resolved', [TicketStatus::Resolved, TicketStatus::Closed]],
+    'all' => ['all', TicketStatus::cases()],
+    'unknown falls back to active' => ['archived', [TicketStatus::Open, TicketStatus::InProgress, TicketStatus::WaitingForCustomer]],
+]);

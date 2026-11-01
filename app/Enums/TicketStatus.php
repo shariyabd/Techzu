@@ -56,4 +56,14 @@ enum TicketStatus: string
     {
         return [self::Resolved, self::Closed];
     }
+
+    /** @return list<self> */
+    public static function forScope(string $scope): array
+    {
+        return match ($scope) {
+            'resolved' => self::finished(),
+            'all' => self::cases(),
+            default => self::active(),
+        };
+    }
 }

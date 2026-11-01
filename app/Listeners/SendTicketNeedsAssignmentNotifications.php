@@ -15,6 +15,10 @@ final class SendTicketNeedsAssignmentNotifications
 
     public function handle(TicketAutoAssignmentFailed $event): void
     {
+        if ($event->ticket->isImported()) {
+            return;
+        }
+
         Notification::send($this->recipients->admins(), new TicketNeedsAssignmentNotification($event->ticket));
     }
 }
