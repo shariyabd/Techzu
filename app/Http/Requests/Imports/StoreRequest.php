@@ -20,7 +20,13 @@ final class StoreRequest extends FormRequest
     {
         return [
             'file' => ['required', 'file', 'mimes:csv,txt', 'max:'.(int) config('imports.max_upload_kb')],
+            'auto_assign' => ['sometimes', 'boolean'],
         ];
+    }
+
+    public function autoAssign(): bool
+    {
+        return $this->boolean('auto_assign');
     }
 
     public function csv(): UploadedFile

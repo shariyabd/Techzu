@@ -1,151 +1,295 @@
-# Techzu Support
+# Techzu Support: Support Ticket & SLA Management System
 
-A support-ticket system with SLA tracking: customers open tickets, agents work them inside business-hours SLAs, and admins manage users, categories and holidays. Built with Laravel 13, Inertia 3 and Vue 3, on MySQL 8.
+## 1. What this is
 
-## Documentation
-- [PRD.md](PRD.md): the requirements
-- [docs/FEATURES.md](docs/FEATURES.md): how each feature behaves, in plain language
-- [docs/DESIGN.md](docs/DESIGN.md): the design
-- [docs/ERD.md](docs/ERD.md): the database schema and its indexes
-- [TECHNICAL_DECISIONS.md](TECHNICAL_DECISIONS.md): the decision log (TD-xxx)
+Techzu Support is a help desk web application. Customers open **tickets** (support requests) and chat with the support team inside each ticket. Support agents pick up tickets, answer them and resolve them before a deadline called the **SLA** (service level agreement), which only counts the company's business hours. Administrators manage the team, the deadlines, holidays and bulk imports, and see everything on a dashboard.
 
-## Requirements
-- PHP 8.3 with the `pdo_mysql`, `mbstring`, `openssl` and `fileinfo` extensions
-- Composer 2
-- Node.js 22 or newer, with npm
-- MySQL 8
+**Main features**
+- Tickets with numbers like `TKT-2026-000001`, five statuses, priorities and categories.
+- Three roles (Admin, Agent, Customer), each seeing only what they are allowed to see.
+- Automatic assignment to the right agent, manual assignment, and "claim" with protection against two agents grabbing the same ticket.
+- A chat-style conversation with file attachments, private **internal notes** for staff, and **saved replies** (reusable answers).
+- SLA deadlines that respect business hours and holidays, pause while waiting for the customer, and escalate automatically with email and in-app notifications.
+- Live updates: new messages, "who is viewing" and "is typing" appear without reloading the page.
+- Search and filters, a dashboard, an agents directory, CSV import of old tickets, an activity history for every ticket, and a REST API with documentation.
 
-## Setup
+---
+
+## 2. Choose how to run it
+
+| | Option A: Standard setup | Option B: Docker |
+|---|---|---|
+| Status | **Available now** | Coming soon |
+| You install | Git, PHP, Composer, Node.js and MySQL on your computer | Docker Desktop only |
+| Good for | Everyone today | Later, once it is ready |
+| Time needed | 30–60 minutes the first time | |
+
+---
+
+## 3. Option A: Standard setup, step by step
+
+A **terminal** is the text window where you type commands: on macOS open the **Terminal** app; on Windows open **PowerShell** (press the Windows key, type `PowerShell`, press Enter). Type or paste each command, then press **Enter**. Lines in the boxes below that start with `#` are explanations; you don't need to type them.
+
+### Step 1: Install the tools
+
+You need five tools. If you already have one, skip it. After installing, **close and reopen the terminal** so it finds the new tools.
+
+| Tool | What it is for | Version |
+|---|---|---|
+| **Git** | downloads the code | any recent |
+| **PHP** | runs the application (the server side) | 8.3 or newer |
+| **Composer** | installs PHP libraries | 2.x |
+| **Node.js** (includes **npm**) | builds the screens (the browser side) | 24 LTS recommended (22.18 or newer works) |
+| **MySQL** | stores the data (the **database**) | 8.x |
+
+PHP needs these **extensions** (add-ons): `pdo_mysql`, `mbstring`, `openssl`, `fileinfo`, `curl`, `xml`, `dom`, `tokenizer`, `ctype`, and `gd` (for profile pictures). The easy routes below include all of them.
+
+#### macOS
+
+**Easy route: Laravel Herd (PHP + Composer) and DBngin (MySQL)**
+1. Download and install **Herd** from <https://herd.laravel.com>. It installs PHP and Composer.
+2. Download and install **DBngin** from <https://dbngin.com>. Open it, click **+**, choose **MySQL 8**, keep port **3306**, click **Create**, then **Start**. The user is `root` with no password.
+3. Install **Node.js 24 LTS** from <https://nodejs.org> (the macOS installer).
+4. Git: run `git --version`. If macOS offers to install the "command line developer tools", click **Install**.
+
+**Alternative: MAMP** (<https://www.mamp.info>) gives you MySQL with a click: start MAMP, and MySQL runs on port **8889** with user `root` and password `root`. You still need PHP 8.3+ on the command line (Herd, or `brew install php`), Composer and Node.js.
+
+**Alternative: Homebrew** (<https://brew.sh>), for people comfortable with the terminal:
+```bash
+brew install git php composer node@24 mysql@8.0
+brew services start mysql@8.0
+```
+
+#### Windows
+
+**Easy route: Laragon** (PHP + Composer + MySQL in one installer)
+1. Download **Laragon Full** from <https://laragon.org> and install it. Open Laragon and click **Start All**. MySQL runs on port **3306** with user `root` and no password. Make sure Laragon's PHP version is 8.3 or newer (menu → PHP → version).
+2. Use Laragon's **Terminal** button for the commands below; it already knows where PHP, Composer and MySQL are.
+3. Install **Node.js 24 LTS** from <https://nodejs.org> (the Windows installer).
+4. Install **Git** from <https://git-scm.com/download/win> (accept the defaults).
+
+**Alternative: Laravel Herd for Windows** (<https://herd.laravel.com/windows>) for PHP and Composer, plus the **MySQL Installer** (<https://dev.mysql.com/downloads/installer/>) for MySQL 8. Remember the root password you choose.
+
+XAMPP ships MariaDB instead of MySQL. The app is built and tested on MySQL 8, so prefer one of the options above.
+
+#### Check that everything is installed
+
+```bash
+git --version
+php -v
+composer --version
+node -v
+npm -v
+php -m
+```
+
+What you should see: a version number for each (`PHP 8.3…` or higher, `Composer version 2…`, `v24…` or `v22.18…` or higher). `php -m` prints a list of extensions; look for `pdo_mysql`, `mbstring` and `gd` in it.
+
+### Step 2: Get the code
+
+```bash
+git clone <repository-url> techzu
+cd techzu
+```
+
+Replace `<repository-url>` with the address of this repository (on GitHub, the green **Code** button shows it, for example `https://github.com/<owner>/<repo>.git`).
+
+What you should see: Git prints `Cloning into 'techzu'...`, and `cd techzu` moves you into the project folder. **Run every following command from this folder.**
+
+### Step 3: Create the database
+
+The app needs one empty database called `techzu`. Pick one way.
+
+**With a few clicks**
+- **MAMP**: open MAMP → **WebStart** → **Tools** → **phpMyAdmin**. Click **New** in the left column, type `techzu` as the name, choose `utf8mb4_unicode_ci`, click **Create**.
+- **Laragon**: click **Database** to open HeidiSQL, right-click the connection → **Create new** → **Database**, name it `techzu`, collation `utf8mb4_unicode_ci`, **OK**.
+- **DBngin**: click the database's **Open** button (opens TablePlus if installed), then create a database named `techzu`.
+
+**With a command**
+
+```bash
+mysql -u root -p -e "CREATE DATABASE techzu CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+```
+
+Press Enter at the password prompt if your MySQL has no password (MAMP: type `root`). With MAMP the `mysql` program lives at `/Applications/MAMP/Library/bin/mysql80/bin/mysql`, and you add `-P 8889 -h 127.0.0.1`.
+
+What you should see: no error. (If you see `database exists`, it is already there, which is fine.)
+
+### Step 4: Configure the app
+
+The app reads its settings from a file called `.env`. Make it from the example:
+
+macOS:
+```bash
+cp .env.example .env
+```
+
+Windows (PowerShell):
+```powershell
+copy .env.example .env
+```
+
+Open `.env` in any text editor (TextEdit, Notepad, VS Code) and set the database lines to match your MySQL:
+
+```dotenv
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=techzu
+DB_USERNAME=root
+DB_PASSWORD=
+```
+
+| Setting | Meaning | Typical value |
+|---|---|---|
+| `DB_HOST` | the computer MySQL runs on; `127.0.0.1` means "this computer" | `127.0.0.1` |
+| `DB_PORT` | MySQL's "door number" | `3306` (MAMP: `8889`) |
+| `DB_DATABASE` | the database you created in step 3 | `techzu` |
+| `DB_USERNAME` | your MySQL user | `root` |
+| `DB_PASSWORD` | that user's password; leave empty if there is none | empty (MAMP: `root`) |
+
+Leave everything else as it is. The file already contains working settings for live updates (the `REVERB_…` lines), so there is nothing to generate for them.
+
+### Step 5: Install the libraries, create the key, build the screens
+
+Run these four commands one after the other, in this order:
+
 ```bash
 composer install
-npm ci
-cp .env.example .env
 php artisan key:generate
+npm install
+npm run build
 ```
 
-Set `DB_USERNAME` and `DB_PASSWORD` in `.env`, then create the two databases as a MySQL user that may create them:
+- `composer install` downloads the PHP libraries into a `vendor` folder. It takes a minute or two. You should see `Generating optimized autoload files` near the end and no red errors.
+- `php artisan key:generate` creates the app's secret encryption key and writes it into `.env`. You should see `INFO  Application key set successfully.` (It only works after `composer install`.)
+- `npm install` downloads the JavaScript libraries into `node_modules`. You should see `added … packages`. Yellow `warn` lines are normal; `EBADENGINE` warnings mean your Node.js version is not one of the recommended ones (24 LTS or 22.18+).
+- `npm run build` builds the screens. You should see `✓ built in …`.
+
+### Step 6: Create the tables and the demo data
+
 ```bash
-mysql -u <user> -p -e "CREATE DATABASE techzu CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE DATABASE techzu_testing CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+php artisan migrate --seed
 ```
 
-Build the schema and the demo data:
+This creates all the tables (**migrate**) and fills them with a realistic demo help desk (**seed**): an admin, six agents, twelve customers, 88 tickets with conversations and attachments, saved replies, holidays and a finished CSV import. When your computer is online it also downloads profile photos for the demo people (from Unsplash); offline it simply skips them and shows initials instead.
+
+What you should see: a list of migrations marked `DONE`, then `Seeding database.` and three seeders marked `DONE` (`RolesAndPermissionsSeeder`, `SlaDefaultsSeeder`, `DemoSeeder`). Seeding takes about 10–30 seconds.
+
+**To start over at any time** (this deletes all data and creates fresh demo data):
+
 ```bash
 php artisan migrate:fresh --seed
 ```
-Run the same command again at any time to reset the database to the demo state.
 
-## Running the app
-Two terminals:
+> Tip: SLA states (on time, approaching, breached) depend on the current time, so they drift as hours pass. Run `php artisan migrate:fresh --seed` shortly before you show the app to someone.
+
+### Step 7: Start the app
+
 ```bash
-php artisan serve
-```
-```bash
-npm run dev
-```
-Open <http://127.0.0.1:8000> and log in with a demo account.
-
-Escalation only happens when the scheduler runs. To see it, run `php artisan schedule:work` in a third terminal, or run `php artisan sla:scan` by hand.
-
-`.env.example` sets `QUEUE_CONNECTION=sync`, so queued work (auto-assignment, notifications, imports) runs inside the request and no worker is needed.
-
-### Asynchronous alternative
-To run queued work in the background, as production does:
-1. Set `QUEUE_CONNECTION=database` in `.env`.
-2. Run `composer run dev`. It runs `php artisan dev`, which starts `php artisan serve`, `php artisan queue:listen --tries=1 --timeout=0`, `php artisan pail` (live logs) and `npm run dev` together.
-3. In another terminal, run the scheduler, which drives the SLA scan:
-   ```bash
-   php artisan schedule:work
-   ```
-
-`queue:listen` there processes only the `default` queue. To process every queue in the decided priority order, run a worker yourself instead:
-```bash
-php artisan queue:work --queue=default,notifications,imports
-```
-After changing a job or listener, restart `queue:work`; it keeps the old code in memory.
-
-## Demo accounts
-Every demo account uses the password `password`.
-
-| Role | Email | Notes |
-|---|---|---|
-| Admin | `admin@example.com` | |
-| Agent | `agent1@example.com` | Billing, Technical Support |
-| Agent | `agent2@example.com` | Technical Support |
-| Agent | `agent3@example.com` | General Inquiry |
-| Agent | `agent4@example.com` | Billing, General Inquiry; unavailable, so never auto-assigned |
-| Customer | `customer1@example.com` … `customer5@example.com` | |
-
-## Tests
-Tests always run on MySQL, on the `techzu_testing` database that `phpunit.xml` selects. Each test run rebuilds the schema itself.
-```bash
-./vendor/bin/pest --parallel
-./vendor/bin/pest tests/Feature/Tickets
-```
-`--parallel` creates and uses its own `techzu_testing_test_N` databases. To use another test database, set it on the command line, where it wins over `phpunit.xml`:
-```bash
-DB_DATABASE=techzu_testing_agent1 ./vendor/bin/pest tests/Feature/Tickets
+composer run dev
 ```
 
-Checks that must pass before a commit:
+This one command starts everything the app needs, side by side:
+
+| Part | What it does |
+|---|---|
+| **server** | the website itself, at http://127.0.0.1:8000 |
+| **queue** | a background worker that sends emails, assigns tickets and runs imports, so pages don't wait for them |
+| **scheduler** | a clock that checks SLA deadlines every minute and escalates late tickets |
+| **reverb** | the live-updates server (port 8080), for new messages, "is typing" and who is online |
+| **logs** | shows what the app writes to its log (macOS and Linux only) |
+| **vite** | serves the screens and refreshes them when the code changes |
+
+Open **http://127.0.0.1:8000** in your browser. You should see the sign-in page.
+
+Keep the terminal window open while you use the app. To stop everything, click into the terminal and press **Ctrl+C** (on Windows confirm with `Y` if asked).
+
+### Step 8: Sign in
+
+Every demo account uses the password **`password`**.
+
+| Role | Email | Name | Notes |
+|---|---|---|---|
+| Admin | `admin@example.com` | Ada Mensah | can do everything |
+| Agent | `agent1@example.com` | Liam Carter | Billing, Technical Support |
+| Agent | `agent2@example.com` | Priya Sharma | Technical Support |
+| Agent | `agent3@example.com` | Marcus Chen | General Inquiry |
+| Agent | `agent4@example.com` | Sofia Rossi | Billing, General Inquiry; **on leave** (unavailable), so never auto-assigned |
+| Agent | `agent5@example.com` | Daniel Okafor | Account & Access, Technical Support |
+| Agent | `agent6@example.com` | Hannah Weber | Feature Requests, General Inquiry, Billing |
+| Customer | `customer1@example.com` … `customer12@example.com` | Emma Johnson, Noah Williams, … | each sees only their own tickets |
+
+What each role can try:
+- **Customer**: open a ticket with a file, reply, close or reopen a resolved ticket, edit your profile and picture.
+- **Agent**: work the queue, claim tickets, reply with saved replies, write internal notes, change status and priority, see the dashboard and the agents directory.
+- **Admin**: everything an agent does, plus assign any ticket, manage users and roles, categories, holidays, SLA rules, and import tickets from CSV.
+
+### Step 9: A guided tour
+
+Use two different browsers (for example Chrome and Firefox, or one normal and one private window) so you can be signed in as two people at once.
+
+1. **Customer creates a ticket.** In browser 1 sign in as `customer1@example.com`. Click **New ticket**, fill in a subject and description, choose a priority and category, attach a small PDF or image, and submit. Note the ticket number and its SLA due time.
+2. **Agent sees it live.** In browser 2 sign in as `admin@example.com` and open **Tickets**. The new ticket appears without reloading. If automatic assignment found a matching agent, it already shows an assignee.
+3. **Typing indicator.** Both open the same ticket. Start typing a reply in one browser: the other shows "… is typing", and both show who is viewing the ticket.
+4. **Saved reply.** As the admin, click **Saved replies** in the reply box, pick a reply, and watch the placeholders (customer name, ticket number) fill in. Send it: the customer's browser shows the new message at once.
+5. **Internal note.** As the admin, switch the reply box to **Internal note** and send one. The customer never sees it, not even in the history.
+6. **SLA settings.** As the admin, open **Admin → SLA & business hours**. Change the Critical target or the business hours, tick **Recalculate active tickets** if you want open tickets to follow, and save.
+7. **Import a CSV.** As the admin, open **Imports → New import** and upload [`docs/samples/tickets-import-sample.csv`](docs/samples/tickets-import-sample.csv). Tick **Auto-assign active tickets** (off by default) if you want the imported open tickets handed to agents once the import finishes. Watch the progress; the error report shows the two rows that are rejected on purpose (an email that belongs to no customer, and a duplicate of the row above it).
+8. **Agents directory.** Open **Agents** to see each agent's workload. Click a number, for example "Unresponded", to jump to exactly those tickets.
+
+Emails are not really sent in this setup: they are written to the log file `storage/logs/laravel.log` (see Troubleshooting).
+
+---
+
+## 4. Option B: Docker (coming soon)
+
+> **Not available yet.** Instructions for running the app with Docker will be added here. Until then, please use Option A.
+
+---
+
+## 5. Troubleshooting
+
+| Problem | What to do |
+|---|---|
+| **"Address already in use" / port 8000 or 8080 is busy** | Another program uses that port. Stop it, or start the website on another port with `php artisan serve --port=8001` (and open http://127.0.0.1:8001). For port 8080 change `REVERB_PORT` and `REVERB_SERVER_PORT` in `.env`, then run `npm run build` again. |
+| **"Connection refused" (SQLSTATE[HY000] [2002])** | MySQL is not running, or the port is wrong. Start MySQL (DBngin, MAMP, Laragon) and check `DB_PORT` in `.env` (MAMP uses `8889`). |
+| **"Access denied for user" (SQLSTATE[HY000] [1045])** | The username or password in `.env` is wrong. Fix `DB_USERNAME` / `DB_PASSWORD`, then run `php artisan config:clear`. |
+| **"Unknown database 'techzu'"** | Create the database (step 3). |
+| **"could not find driver"** or **"requires ext-…"** | A PHP extension is missing. Run `php -m` to see which are on. With Herd, MAMP or Laragon they are included; make sure the terminal uses that PHP (`php -v`). With Homebrew PHP, `brew reinstall php`. On Windows with a manual PHP, enable the extension in `php.ini` (remove the `;` before `extension=pdo_mysql`, `extension=gd`, …). |
+| **`npm install` fails or warns about the engine** | Check `node -v`. Install Node.js 24 LTS and run `npm install` again. If it still fails, delete the `node_modules` folder and run `npm install` again. |
+| **The page has no styles, or says "Vite manifest not found"** | Run `npm run build`, then reload the page. |
+| **Nothing updates live (no "is typing", new messages only after a reload)** | The live-updates server is not running. Use `composer run dev`, which starts it. If you start parts by hand, also run `php artisan reverb:start` and a queue worker (`php artisan queue:work`). |
+| **Tickets are never assigned, emails never arrive in the log** | The queue worker is not running. Use `composer run dev`. |
+| **Nothing ever escalates** | The scheduler is not running. Use `composer run dev`, or run `php artisan sla:scan` by hand. |
+| **Where are the emails?** | In development they are written to `storage/logs/laravel.log`. Open it in a text editor and search for the subject. Password-reset links appear there too. |
+| **Profile photos are missing in the demo** | The computer was offline while seeding, or the image server could not be reached. Run `php artisan migrate:fresh --seed` again when online. |
+| **Something is badly wrong; start over** | `php artisan migrate:fresh --seed` rebuilds the database with fresh demo data. Then `php artisan optimize:clear`. |
+
+---
+
+## 6. Running the tests
+
+The tests use a separate, empty database called `techzu_testing`. Create it once:
+
 ```bash
-./vendor/bin/pint --test
-./vendor/bin/phpstan analyse --memory-limit=1G
-./vendor/bin/pest --parallel
-npm run build && npm run check && npx vue-tsc --noEmit
+mysql -u root -p -e "CREATE DATABASE techzu_testing CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 ```
-`npm run build` generates Wayfinder's TypeScript route helpers (`resources/js/{routes,actions,wayfinder}`, gitignored), so on a fresh checkout run it before `vue-tsc`.
 
-When Pest, Pint or PHPStan run under an AI agent, `laravel/pao` replaces their report with a one-line JSON summary such as `{"tool":"pest","result":"passed",...}`. In a terminal you see the normal output.
+Then run:
 
-## Features
+```bash
+php artisan test --compact
+npm run test:js
+```
 
-- **Roles.** Admin, Agent and Customer. Permissions are defined in code and seeded; admins change a user's role and can view the permission matrix read-only.
-- **Tickets.** Numbers look like `TKT-2026-000001`: the prefix is configurable, and a per-year counter row makes them unique under concurrency. Statuses are Open, In Progress, Waiting for Customer, Resolved and Closed, and only the allowed transitions are accepted. Customers see only their own tickets; asking for anyone else's returns 404.
-- **SLA.** Resolution time depends on priority (Low 48 h, Medium 24 h, High 8 h, Critical 2 h, all in business minutes) and is counted only inside business hours, Sunday to Thursday 09:00 to 18:00 Asia/Dhaka, skipping holidays. The clock pauses while a ticket waits for the customer, and a priority change recalculates the deadline from the original start. A ticket is "approaching" after 75% of its time.
-- **Escalation.** `sla:scan` runs every minute. It marks approaching and breached tickets, notifies the right people and records the escalation in the ticket history. Running it twice changes nothing.
-- **Assignment.** Manual, claim and automatic (see below).
-- **Conversation.** Public replies from customers and staff, and internal notes that customers never see in any form. Files are validated by type and size, stored on a private disk, and downloaded only through a permission check.
-- **Notifications.** Mail and in-app notifications for created, assigned, replied, resolved, SLA approaching and SLA breached, queued and sent after the database commit. Each user has an inbox with read and unread state.
-- **Search and filters.** Ticket number, keyword (full-text), status, priority, category, agent, customer, created date and SLA state, with pagination.
-- **CSV import.** Large files are streamed in chunks on the queue. Each row is validated, duplicates are skipped, and invalid rows are reported with their errors.
-- **Dashboard.** Open, unassigned, critical, breached, approaching and recently resolved counts, plus tickets by priority and by agent, from a few indexed aggregate queries cached for 60 seconds.
-- **Activity history.** Every important change is recorded with its time and actor.
-- **REST API.** `/api/v1`, authenticated with Sanctum tokens, using the same validation, actions and policies as the web app.
+What a pass looks like: the PHP run ends with a green line such as `Tests: 1874 passed`, and the JavaScript run (`npm run test:js`, the frontend tests) ends with `Tests  49 passed`. A failing test is shown in red with the file and line. The PHP suite takes a few minutes; `./vendor/bin/pest --parallel` is faster (it creates extra `techzu_testing_test_N` databases, so your MySQL user needs permission to create databases).
 
-## Automatic assignment
+---
 
-New tickets are assigned by a queued job right after they are created, unless `TICKETS_AUTO_ASSIGN=false`. Imported tickets are not auto-assigned.
+## 7. For developers
 
-1. **Eligible agents:** available agents linked to the ticket's category.
-2. **Least load first:** the agent with the fewest active tickets (Open, In Progress, Waiting for Customer) wins.
-3. **Tie-break:** the agent whose last assignment is oldest (never-assigned agents first), then the lowest id. This acts as round-robin among equally loaded agents.
-4. **No eligible agent:** the ticket stays unassigned and shows up as unassigned on the dashboard.
+The full documentation starts at **[docs/README.md](docs/README.md)**: requirements, product requirements, architecture, business logic, database design, security, API, background processing and realtime, testing, operations, the decision log, the traceability matrix and the demo data. Contributor and AI-agent rules are in [CLAUDE.md](CLAUDE.md).
 
-The job locks the candidate agents' rows while it chooses, so a burst of new tickets doesn't pile onto one agent. Agents can also **claim** an unassigned ticket: the claim is a single conditional update, so when two agents claim at once exactly one wins and the other gets `409 ticket_already_claimed`. Admins can **assign or reassign** any ticket to an eligible agent.
-
-## API documentation
-
-The OpenAPI 3.1 spec is generated from the routes, form requests and resources by Scramble.
-
-- Browse it at `{APP_URL}/docs/api`; the raw JSON is at `{APP_URL}/docs/api.json`. Both are open in the `local` environment and admin-only everywhere else.
-- A copy is committed at `docs/api/openapi.json`. Regenerate it after changing the API: `php artisan scramble:export`.
-- Get a token with `POST /api/v1/auth/tokens` (`email`, `password`, `device_name`) and send it as `Authorization: Bearer <token>`.
-
-## Known limitations
-
-- One company-wide business calendar and timezone. Holiday changes affect new and recalculated deadlines only.
-- Agent load counts every active ticket equally, whatever its priority.
-- SLA breaches are detected up to one minute late (the scan interval).
-- Only a resolution SLA; there is no first-response SLA.
-- Full-text search ignores words shorter than three characters; search by ticket number covers the common short case.
-- Dashboard figures can be up to 60 seconds old.
-- Lists use offset pagination; very deep pages would need cursor pagination.
-- Uploaded files are not virus-scanned. On S3, downloads should switch to temporary URLs after the permission check.
-- Roles are fixed and permissions are defined in code. There is no email verification, and local mail goes to the log.
-- Mail uses the `log` mailer, so every email, including password reset links, is written to `storage/logs/laravel.log`. Set `MAIL_MAILER` and the `MAIL_*` values in `.env` to send real mail.
-- There is no Docker setup yet; the app runs on a local PHP and MySQL.
-
-## Development notes
-- The app was scaffolded from `laravel/vue-starter-kit` at commit [`fd5b58f`](https://github.com/laravel/vue-starter-kit/commit/fd5b58fb5672cae0152dd04c16ea37d9f52b1cd5); compare against it before pulling kit changes.
-- `laravel/boost` provides the `laravel-boost` MCP server (`php artisan boost:mcp`, registered in `.mcp.json`) and the guidelines at the end of `CLAUDE.md`. `boost.json` targets Claude Code only.
-- Contributor and agent rules are in [CLAUDE.md](CLAUDE.md).
+Quick links:
+- API documentation in the running app: http://127.0.0.1:8000/docs/api (open to everyone in the `local` environment).
+- Quality checks before a commit: `./vendor/bin/pint --test`, `./vendor/bin/phpstan analyse --memory-limit=1G`, `./vendor/bin/pest --parallel`, `npm run build && npm run test:js && npm run check && npx vue-tsc --noEmit`.

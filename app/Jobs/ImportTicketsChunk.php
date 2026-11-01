@@ -9,15 +9,16 @@ use App\Models\Category;
 use App\Models\TicketImport;
 use App\Models\TicketImportError;
 use App\Services\Imports\ImportDuplicateTracker;
+use App\Services\Imports\ImportFileAccess;
 use App\Services\Imports\ImportTicketRowRules;
 use App\Services\Imports\TicketCsvReader;
+use App\Services\Sla\SlaSettingsRepository;
 use Carbon\CarbonImmutable;
 use Illuminate\Bus\Batchable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Throwable;
 
@@ -39,7 +40,7 @@ final class ImportTicketsChunk implements ShouldQueue
         $this->onQueue('imports');
     }
 
-    public function handle(TicketCsvReader $reader, ImportTicketRow $importRow): void
+    public function handle(TicketCsvReader $reader, ImportTicketRow $importRow, SlaSettingsRepository $settings, ImportFileAccess $files): void
     {
         if ($this->batch()?->cancelled() === true) {
             return;
@@ -51,19 +52,20 @@ final class ImportTicketsChunk implements ShouldQueue
             return;
         }
 
-        $path = Storage::disk((string) config('imports.disk'))->path($import->path);
-        $header = $reader->header($path);
-        $rules = new ImportTicketRowRules(
-            CarbonImmutable::now(),
-            (string) config('business_hours.timezone'),
-            Category::query()->active()->pluck('slug')->all(),
-        );
+        $files->withLocalPath((string) config('imports.disk'), $import->path, function (string $path) use ($reader, $importRow, $settings, $import): void {
+            $header = $reader->header($path);
+            $rules = new ImportTicketRowRules(
+                CarbonImmutable::now(),
+                $settings->timezone(),
+                Category::query()->active()->pluck('slug')->all(),
+            );
 
-        $duplicates = new ImportDuplicateTracker;
+            $duplicates = new ImportDuplicateTracker;
 
-        foreach ($reader->records($path, $this->startLine, $this->endLine, $this->startOffset) as $line => $values) {
-            $this->importRecord($import, $importRow, $rules, $duplicates, $header, $values, $line + 1);
-        }
+            foreach ($reader->records($path, $this->startLine, $this->endLine, $this->startOffset) as $line => $values) {
+                $this->importRecord($import, $importRow, $rules, $duplicates, $header, $values, $line + 1);
+            }
+        });
     }
 
     public function failed(Throwable $exception): void

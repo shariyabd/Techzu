@@ -24,6 +24,7 @@ class TicketImport extends Model
         'processed_rows' => 0,
         'succeeded_rows' => 0,
         'failed_rows' => 0,
+        'auto_assign' => false,
     ];
 
     /** @return array<string, string> */
@@ -35,6 +36,7 @@ class TicketImport extends Model
             'processed_rows' => 'integer',
             'succeeded_rows' => 'integer',
             'failed_rows' => 'integer',
+            'auto_assign' => 'boolean',
             'started_at' => 'immutable_datetime',
             'finished_at' => 'immutable_datetime',
             'created_at' => 'immutable_datetime',

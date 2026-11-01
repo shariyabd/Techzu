@@ -117,7 +117,7 @@
   <div class="steps">
     <div class="step par"><div><h3>Waves</h3><p>Parallel implementers write tests first and run only their own test files, each on <code>techzu_testing_agent&lt;N&gt;</code>. No git, no build, no full suite.</p></div></div>
     <div class="step gate"><div><h3>Gate, once</h3><p><code>pint --test</code>, <code>phpstan</code>, <code>pest --parallel</code>, and the frontend build, check and <code>vue-tsc</code> when the plan touched frontend code.</p></div></div>
-    <div class="step par"><div><h3>Review in parallel</h3><p>Spec reviewer, quality reviewer, and security and test reviewer (opus), plus a documenter for <code>docs/FEATURES.md</code> (sonnet).</p></div></div>
+    <div class="step par"><div><h3>Review in parallel</h3><p>Spec reviewer, quality reviewer, and security and test reviewer (opus), plus a documenter for <code>docs/04-business-logic.md</code> (sonnet).</p></div></div>
     <div class="step"><div><h3>Fix</h3><p>Implementers fix the confirmed findings, then only the affected tests, pint and phpstan run again.</p></div></div>
     <div class="step"><div><h3>Browser check</h3><p>Playwright MCP against <code>php artisan serve --port=8010</code>, only for plans that change UI.</p></div></div>
     <div class="step human"><div><h3>Report and wait</h3><p>Features, results and limitations, plus each subtask's files and proposed commit message. The owner approves.</p></div></div>
@@ -140,7 +140,7 @@ Implements: TD-050, TD-051</pre>
     <tr><td>Session (controller)</td><td>Runs the waves, the gate and the reviews, reports, and commits after approval</td><td>opus</td></tr>
     <tr><td>Implementer</td><td>One subtask, its own files and tests only</td><td>sonnet (opus where the plan says)</td></tr>
     <tr><td>Reviewers</td><td>Spec, quality, security and tests, all in parallel, once per plan</td><td>opus</td></tr>
-    <tr><td>Documenter</td><td>The plan's sections of <code>docs/FEATURES.md</code></td><td>sonnet</td></tr>
+    <tr><td>Documenter</td><td>The plan's sections of <code>docs/04-business-logic.md</code></td><td>sonnet</td></tr>
     <tr><td>Owner</td><td>Approves commits and pushes</td><td>human</td></tr>
   </table>
 </main>

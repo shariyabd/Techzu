@@ -4,154 +4,258 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
-use App\Enums\TicketPriority;
+use App\Actions\Admin\CreateCategory;
+use App\Actions\Admin\CreateHoliday;
+use App\Actions\Admin\CreateUser;
+use App\Actions\Admin\SyncAgentProfile;
+use App\Actions\Assignment\AssignTicket;
+use App\Actions\Imports\StartTicketImport;
+use App\Actions\Notifications\MarkAllNotificationsRead;
+use App\Actions\SavedReplies\CreateSavedReply;
+use App\Enums\Role;
 use App\Enums\TicketStatus;
-use App\Models\Category;
 use App\Models\Ticket;
 use App\Models\User;
-use App\Services\Sla\SlaCalculator;
+use App\Services\Assignment\AgentSelector;
+use App\Services\Sla\BusinessCalendar;
+use App\Services\Sla\SlaSettingsRepository;
 use Carbon\CarbonImmutable;
+use Database\Seeders\Demo\DemoAvatars;
+use Database\Seeders\Demo\DemoCast;
+use Database\Seeders\Demo\DemoContent;
+use Database\Seeders\Demo\DemoDirector;
+use Database\Seeders\Demo\DemoEnvironment;
+use Database\Seeders\Demo\DemoPeople;
+use Database\Seeders\Demo\DemoPlanner;
+use Database\Seeders\Demo\DemoStories;
+use Database\Seeders\Demo\DemoTimeline;
+use Faker\Factory as FakerFactory;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 
 final class DemoSeeder extends Seeder
 {
-    private const int TICKETS = 60;
+    public const int FAKER_SEED = 20261101;
 
-    private const array STATUS_CYCLE = [
-        TicketStatus::Open,
-        TicketStatus::InProgress,
-        TicketStatus::WaitingForCustomer,
-        TicketStatus::InProgress,
-        TicketStatus::Resolved,
-        TicketStatus::Closed,
-    ];
+    private const int SETUP_DAYS_AGO = 40;
 
-    public function run(): void
+    private const int SAVED_REPLIES_DAYS_AGO = 29;
+
+    private const int SCAN_EVERY_MINUTES = 120;
+
+    private const int LEAVE_DAYS_AGO = 6;
+
+    private const int IMPORT_HOURS_AGO = 70;
+
+    private const string PASSWORD = 'password';
+
+    private const array FILE_WIPE_ENVIRONMENTS = ['local', 'testing'];
+
+    public function run(DemoEnvironment $environment): void
     {
         if (User::query()->where('email', 'admin@example.com')->exists()) {
             return;
         }
 
-        DB::transaction(function (): void {
-            $categories = $this->categories();
-            $agentsByCategory = $this->agents($categories);
-            $customers = $this->customers();
+        if (app()->environment(self::FILE_WIPE_ENVIRONMENTS) && Ticket::query()->doesntExist()) {
+            $this->removeOrphanedFiles();
+        }
 
-            $this->tickets($categories, $agentsByCategory, $customers);
-
-            User::factory()->admin()->create(['name' => 'Ada Admin', 'email' => 'admin@example.com']);
+        $environment->isolate(function (): void {
+            $this->seedDemo(CarbonImmutable::now()->startOfSecond());
         });
     }
 
-    /** @return list<Category> */
-    private function categories(): array
+    private function seedDemo(CarbonImmutable $now): void
     {
-        return [
-            Category::factory()->create(['name' => 'Billing', 'slug' => 'billing']),
-            Category::factory()->create(['name' => 'Technical Support', 'slug' => 'technical-support']),
-            Category::factory()->create(['name' => 'General Inquiry', 'slug' => 'general-inquiry']),
-        ];
-    }
+        $faker = FakerFactory::create();
+        $faker->seed(self::FAKER_SEED);
+        mt_srand(self::FAKER_SEED);
 
-    /**
-     * @param  list<Category>  $categories
-     * @return array<int, list<User>>
-     */
-    private function agents(array $categories): array
-    {
-        [$billing, $technical, $general] = $categories;
+        $cast = new DemoCast;
 
-        $profiles = [
-            1 => [[$billing->id, $technical->id], true],
-            2 => [[$technical->id], true],
-            3 => [[$general->id], true],
-            4 => [[$billing->id, $general->id], false],
-        ];
+        DemoTimeline::travelTo($now->subDays(self::SETUP_DAYS_AGO));
+        $this->categories($cast);
+        $this->holidays($now);
+        $this->people($cast);
 
-        $byCategory = [];
+        DemoTimeline::travelTo($now->subDays(self::SAVED_REPLIES_DAYS_AGO));
+        $this->savedReplies($cast);
 
-        foreach ($profiles as $n => [$categoryIds, $available]) {
-            $factory = User::factory()->agent($categoryIds);
+        $settings = app(SlaSettingsRepository::class)->current();
+        $planner = new DemoPlanner($now, app(BusinessCalendar::class), $settings->resolutionMinutes, $faker, $cast);
+        $director = app()->make(DemoDirector::class, ['cast' => $cast]);
+        $timeline = new DemoTimeline;
 
-            if (! $available) {
-                $factory = $factory->unavailable();
-            }
+        foreach (DemoStories::all() as $story) {
+            $planner->prepare($story);
+            $moments = $planner->moments($story);
 
-            $agent = $factory->create(['name' => "Agent {$n}", 'email' => "agent{$n}@example.com"]);
+            $timeline->at($moments[0], static fn () => $director->create($story));
 
-            if ($available) {
-                foreach ($categoryIds as $categoryId) {
-                    $byCategory[$categoryId][] = $agent;
-                }
+            foreach ($story->steps as $position => $step) {
+                $timeline->at($moments[$position + 1], static fn () => $director->perform($story, $step));
             }
         }
 
-        return $byCategory;
-    }
+        $timeline->at($now->subDays(self::LEAVE_DAYS_AGO)->addMinutes(75), fn () => $this->sendOnLeave($cast, 'a4'));
+        $timeline->at($now->subHours(self::IMPORT_HOURS_AGO), fn () => $this->import($cast, $now));
+        $timeline->at($now->subHours(50), fn () => $this->readNotifications($cast, 'a2'));
+        $timeline->at($now->subHours(26), fn () => $this->readNotifications($cast, 'c1'));
+        $timeline->at($now->subHours(20), fn () => $this->readNotifications($cast, 'a1'));
+        $timeline->at($now->subHours(4), fn () => $this->readNotifications($cast, 'admin'));
 
-    /** @return list<User> */
-    private function customers(): array
-    {
-        $customers = [];
+        $earliest = $timeline->earliest() ?? $now;
 
-        foreach (range(1, 5) as $n) {
-            $customers[] = User::factory()->customer()->create(['name' => "Customer {$n}", 'email' => "customer{$n}@example.com"]);
+        for ($scanAt = $earliest->addMinutes(self::SCAN_EVERY_MINUTES); $scanAt->lessThan($now); $scanAt = $scanAt->addMinutes(self::SCAN_EVERY_MINUTES)) {
+            $timeline->at($scanAt, self::scan(...));
         }
 
-        return $customers;
+        $timeline->at($now, self::scan(...));
+        $timeline->run();
+
+        $this->presence($cast, $now);
     }
 
-    /**
-     * @param  list<Category>  $categories
-     * @param  array<int, list<User>>  $agentsByCategory
-     * @param  list<User>  $customers
-     */
-    private function tickets(array $categories, array $agentsByCategory, array $customers): void
+    private function removeOrphanedFiles(): void
     {
-        $prefix = (string) config('tickets.number_prefix', 'TKT');
-        $now = CarbonImmutable::now();
-        $priorities = TicketPriority::cases();
-        $calculator = app(SlaCalculator::class);
+        $directories = [
+            [config('avatars.disk'), config('avatars.directory')],
+            [config('attachments.disk'), config('attachments.directory')],
+            [config('imports.disk'), StartTicketImport::DIRECTORY],
+        ];
 
-        for ($i = 1; $i <= self::TICKETS; $i++) {
-            $category = $categories[$i % count($categories)];
-            $customer = $customers[$i % count($customers)];
-            $status = self::STATUS_CYCLE[$i % count(self::STATUS_CYCLE)];
+        foreach ($directories as [$disk, $directory]) {
+            Storage::disk((string) $disk)->deleteDirectory((string) $directory);
+        }
+    }
 
-            $factory = Ticket::factory()
-                ->priority($priorities[$i % count($priorities)])
-                ->status($status)
-                ->state([
-                    'number' => sprintf('%s-%d-%06d', $prefix, $now->year, $i),
-                    'category_id' => $category->id,
-                    'customer_id' => $customer->id,
-                    'created_by_id' => $customer->id,
-                    'created_at' => $now->subHours((self::TICKETS - $i) * 3),
+    private static function scan(): void
+    {
+        Artisan::call('sla:scan');
+    }
+
+    private function categories(DemoCast $cast): void
+    {
+        $create = app(CreateCategory::class);
+
+        foreach (DemoPeople::CATEGORIES as $slug => [$name, $active]) {
+            $cast->addCategory($create->handle(['name' => $name, 'slug' => $slug, 'is_active' => $active]));
+        }
+    }
+
+    private function holidays(CarbonImmutable $now): void
+    {
+        $settings = app(SlaSettingsRepository::class);
+        $create = app(CreateHoliday::class);
+
+        foreach (DemoContent::holidays($now->setTimezone($settings->timezone())->startOfDay()) as $holiday) {
+            $create->handle($holiday);
+        }
+
+        app()->forgetScopedInstances();
+    }
+
+    private function people(DemoCast $cast): void
+    {
+        $password = Hash::make(self::PASSWORD);
+        $avatars = app(DemoAvatars::class);
+        $createUser = app(CreateUser::class);
+        $admin = null;
+
+        foreach (DemoPeople::all() as $key => $person) {
+            if ($person['role'] === Role::Admin) {
+                $user = User::query()->create(['name' => $person['name'], 'email' => $person['email'], 'password' => $password]);
+                $user->assignRole(Role::Admin);
+                $admin = $user;
+            } else {
+                $user = $createUser->handle($admin ?? $cast->admin(), [
+                    'name' => $person['name'],
+                    'email' => $person['email'],
+                    'password' => $password,
+                    'role' => $person['role']->value,
+                    'category_ids' => array_map(static fn (string $slug): int => $cast->category($slug)->id, $person['categories']),
+                    'is_available' => true,
                 ]);
-
-            if ($status !== TicketStatus::Open) {
-                $pool = $agentsByCategory[$category->id];
-                $factory = $factory->assignedTo($pool[$i % count($pool)]);
             }
 
-            if ($i % 10 === 3) {
-                $factory = $factory->breached();
-            } elseif ($i % 10 === 7) {
-                $factory = $factory->approaching();
-            }
+            $cast->addUser($key, $user, $person['company']);
 
-            $ticket = $factory->create();
-
-            if ($i % 10 !== 3 && $i % 10 !== 7) {
-                $calculator->applyInitial($ticket, $now);
-                $ticket->save();
+            if ($person['photo'] !== null) {
+                $avatars->attach($user, $person['photo']);
             }
         }
+    }
 
-        DB::table('ticket_sequences')->updateOrInsert(
-            ['year' => $now->year],
-            ['last_number' => self::TICKETS, 'created_at' => $now, 'updated_at' => $now],
+    private function savedReplies(DemoCast $cast): void
+    {
+        $create = app(CreateSavedReply::class);
+
+        foreach (DemoContent::savedReplies() as $reply) {
+            $create->handle($reply['owner'] === null ? $cast->admin() : $cast->user($reply['owner']), [
+                'title' => $reply['title'],
+                'body' => $reply['body'],
+                'category_id' => $reply['category'] === null ? null : $cast->category($reply['category'])->id,
+                'shared' => $reply['owner'] === null,
+            ]);
+        }
+    }
+
+    private function sendOnLeave(DemoCast $cast, string $key): void
+    {
+        $agent = $cast->user($key);
+        $categoryIds = $agent->categories()->pluck('categories.id')->map(static fn (mixed $id): int => (int) $id)->values()->all();
+
+        app(SyncAgentProfile::class)->handle($cast->admin(), $agent, $categoryIds, false);
+
+        $selector = app(AgentSelector::class);
+        $assign = app(AssignTicket::class);
+
+        Ticket::query()
+            ->where('assigned_agent_id', $agent->id)
+            ->whereIn('status', array_map(static fn (TicketStatus $status): string => $status->value, TicketStatus::active()))
+            ->lazyById()
+            ->each(static function (Ticket $ticket) use ($selector, $assign, $agent): void {
+                $replacement = $selector->selectFor($ticket);
+
+                if ($replacement !== null) {
+                    $assign->handle($agent, $ticket, $replacement);
+                }
+            });
+    }
+
+    private function import(DemoCast $cast, CarbonImmutable $now): void
+    {
+        $timezone = app(SlaSettingsRepository::class)->timezone();
+        $lines = ['external_reference,subject,description,priority,category,customer_email,status,created_at'];
+
+        foreach (DemoContent::importRows() as [$reference, $subject, $description, $priority, $category, $email, $status, $daysAgo]) {
+            $createdAt = $now->setTimezone($timezone)->subDays($daysAgo)->setTime(10, 30)->format('Y-m-d H:i');
+            $lines[] = implode(',', array_map(
+                static fn (string $value): string => '"'.str_replace('"', '""', $value).'"',
+                [$reference, $subject, $description, $priority, $category, $email, $status, $createdAt],
+            ));
+        }
+
+        app(StartTicketImport::class)->handle(
+            $cast->admin(),
+            UploadedFile::fake()->createWithContent('legacy-helpdesk-export.csv', implode("\n", $lines)."\n"),
         );
+    }
+
+    private function readNotifications(DemoCast $cast, string $key): void
+    {
+        app(MarkAllNotificationsRead::class)->handle($cast->user($key));
+    }
+
+    private function presence(DemoCast $cast, CarbonImmutable $now): void
+    {
+        foreach (DemoPeople::all() as $key => $person) {
+            $minutes = $person['last_seen_minutes'];
+            $cast->user($key)->forceFill(['last_seen_at' => $minutes === null ? null : $now->subMinutes($minutes)])->saveQuietly();
+        }
     }
 }

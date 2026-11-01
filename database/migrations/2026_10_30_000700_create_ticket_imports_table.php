@@ -21,6 +21,7 @@ return new class extends Migration
             $table->unsignedInteger('processed_rows')->default(0);
             $table->unsignedInteger('succeeded_rows')->default(0);
             $table->unsignedInteger('failed_rows')->default(0);
+            $table->boolean('auto_assign')->default(false);
             $table->string('batch_id', 36)->nullable();
             $table->timestamp('started_at')->nullable();
             $table->timestamp('finished_at')->nullable();
@@ -28,10 +29,18 @@ return new class extends Migration
 
             $table->index(['user_id', 'created_at']);
         });
+
+        Schema::table('tickets', function (Blueprint $table): void {
+            $table->foreign('ticket_import_id')->references('id')->on('ticket_imports')->nullOnDelete();
+        });
     }
 
     public function down(): void
     {
+        Schema::table('tickets', function (Blueprint $table): void {
+            $table->dropForeign(['ticket_import_id']);
+        });
+
         Schema::dropIfExists('ticket_imports');
     }
 };

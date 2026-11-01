@@ -15,10 +15,12 @@ use Throwable;
 
 final class StartTicketImport
 {
-    public function handle(User $admin, UploadedFile $file): TicketImport
+    public const string DIRECTORY = 'imports';
+
+    public function handle(User $admin, UploadedFile $file, bool $autoAssign = false): TicketImport
     {
         $disk = (string) config('imports.disk');
-        $path = $file->store('imports', $disk);
+        $path = $file->store(self::DIRECTORY, $disk);
 
         if ($path === false) {
             throw new RuntimeException('The import file could not be stored.');
@@ -26,6 +28,7 @@ final class StartTicketImport
 
         $import = new TicketImport(['original_name' => Str::limit($file->getClientOriginalName(), 250, ''), 'path' => $path]);
         $import->user_id = $admin->id;
+        $import->auto_assign = $autoAssign;
 
         try {
             $import->save();

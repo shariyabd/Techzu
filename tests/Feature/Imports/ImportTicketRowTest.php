@@ -85,3 +85,21 @@ it('turns a unique-index race on external_reference into a duplicate error row a
         ->and($error->errors)->toBe(['external_reference' => ['The external reference has already been taken.']])
         ->and($error->raw['external_reference'])->toBe('EXT-RACE');
 });
+
+it('turns a race between parallel chunks on the same row without reference into one ticket and one duplicate error', function (?string $createdAt): void {
+    $row = ImportCsvFixture::row(['external_reference' => null, 'created_at' => $createdAt]);
+    $importRow = app(ImportTicketRow::class);
+
+    $first = $importRow->handle($this->import, $row, 2);
+    $second = $importRow->handle($this->import, ImportCsvFixture::row(['external_reference' => null, 'created_at' => $createdAt, 'subject' => 'PRINTER ON FIRE ']), 9);
+
+    $error = TicketImportError::query()->where('ticket_import_id', $this->import->id)->sole();
+    expect($first)->not->toBeNull()
+        ->and($second)->toBeNull()
+        ->and(Ticket::query()->count())->toBe(1)
+        ->and($error->row_number)->toBe(9)
+        ->and($error->errors)->toBe(['row' => ['Duplicate of an existing ticket.']]);
+})->with([
+    'dated row' => ['2026-10-29 17:00'],
+    'undated row' => [null],
+]);

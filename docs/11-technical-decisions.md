@@ -1,10 +1,11 @@
-# Technical Decisions
+# 11 · Technical decisions
 
 This document records every significant technical decision made for the Support Ticket & SLA Management System. For each one it records **what** was decided, **why**, which **alternatives** were considered and why they were rejected, and the **trade-offs** we accepted.
 
-- Requirements: [`PRD.md`](PRD.md)
-- Design spec: [`docs/DESIGN.md`](docs/DESIGN.md)
-- Status values: **Accepted** (in force), **Superseded by TD-xxx**, **Amended** (with a dated note)
+- Requirements: [01 · Requirements](01-requirements.md) and [02 · Product requirements](02-product-requirements.md)
+- Architecture: [03 · Architecture](03-architecture.md); behaviour in plain language: [04 · Business logic](04-business-logic.md)
+- Status values: **Accepted** (in force), **Superseded by TD-xxx** (kept for history, no longer in force), **Amended** (in force, with a dated note saying what changed)
+- TD numbers are stable: a decision keeps its number for life, and a replacement gets a new number.
 
 Guiding principle (from the PRD): *use Laravel features where they are appropriate, not for the sake of using them.* Every decision below should be explainable in one sentence; anything that can't be explained that way was cut.
 
@@ -15,19 +16,28 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 | Area | Decisions |
 |---|---|
 | Architecture & stack | TD-001 – TD-005 |
-| Authorization & security model | TD-010 – TD-012, TD-120 |
+| Authorization & security model | TD-010 – TD-012, TD-120, TD-121 |
 | Database | TD-020 – TD-026 |
 | Testing & tooling | TD-030 – TD-034 |
-| Ticket lifecycle & SLA | TD-040 – TD-045 |
+| Ticket lifecycle & SLA | TD-040 – TD-048 (TD-045 superseded by TD-046) |
 | Assignment & concurrency | TD-050 – TD-053 |
-| Conversation & storage | TD-060 – TD-061 |
-| Events, notifications, queues | TD-070 – TD-072 |
+| Conversation & storage | TD-060 – TD-063 |
+| Events, notifications, queues, realtime | TD-070 – TD-075 |
 | Search | TD-080 |
 | CSV import | TD-090 |
-| Dashboard & performance | TD-100 – TD-101 |
+| Dashboard & performance | TD-100 – TD-103 |
 | Error handling | TD-110 |
 | Configuration | TD-130 |
 | Development process | TD-140, TD-141 |
+
+**Changes on 2026-11-01 (waves 1–3 and the fix pass)**
+
+| Kind | Decisions |
+|---|---|
+| New | TD-046, TD-047, TD-062, TD-063, TD-073, TD-074, TD-075, TD-102, TD-103, TD-121 |
+| Superseded | TD-045 (by TD-046) |
+| Partly superseded | TD-071: its rejection of broadcasting/websockets is superseded by TD-073; the queued-notification decision itself stays in force |
+| Amended | TD-002, TD-005, TD-010, TD-011, TD-012, TD-021, TD-030, TD-034, TD-040, TD-042, TD-043, TD-044 (rewritten), TD-050, TD-051, TD-053, TD-061, TD-070, TD-072, TD-080, TD-090, TD-100, TD-101, TD-110, TD-120, TD-130, TD-140 |
 
 ---
 
@@ -99,7 +109,9 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 - Local PHP is 8.3, so Pest stays on 4 and activitylog on 4.12. Pest 5 and activitylog 5 need PHP 8.4.
 - spatie/permission moves to ^8.3. Its v7/v8 breaking changes (renamed event and command classes, type hints) don't affect code that goes through Policies and `can()`. API tokens (TD-003) are issued separately and don't go through Fortify's two-factor flow. This is documented as a known limitation.
 
-**Trade-offs.** It's a JS build step plus a second language in the repo. Frontend tests are limited to type-checking and linting. Behavior is tested at the HTTP/Inertia level (`assertInertia`), because all the rules live on the server.
+**A self-service profile page is added back (amended 2026-11-01; see TD-121).** Every user can change their name and password and upload a profile picture. It is three small controller actions and three Actions, not Fortify's settings pages; two-factor auth, passkeys and email verification stay out.
+
+**Trade-offs.** It's a JS build step plus a second language in the repo. Frontend tests are limited to type-checking, linting and a few Vitest unit tests for client-side logic (amended 2026-11-01, TD-030). Behavior is tested at the HTTP/Inertia level (`assertInertia`), because all the rules live on the server.
 
 ---
 
@@ -148,7 +160,7 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 - Every infrastructure choice stays an `.env` driver switch: `QUEUE_CONNECTION`, `CACHE_STORE`, `MAIL_MAILER`, `ATTACHMENTS_DISK`.
 - During development the app runs on the owner's machine with the two standard commands `php artisan serve` and `npm run dev` (amended 2026-10-29, owner decision: Apache dropped):
   - system **MySQL 8** (`127.0.0.1:3306`), with the databases `techzu`, `techzu_testing` and `techzu_testing_agent1..8`;
-  - `QUEUE_CONNECTION=sync` locally, so queued work runs inline without a worker. `composer run dev` with `QUEUE_CONNECTION=database` plus `php artisan schedule:work` is the realistic asynchronous setup, documented in the README;
+  - `QUEUE_CONNECTION=sync` locally, so queued work runs inline without a worker. `composer run dev` with `QUEUE_CONNECTION=database` plus `php artisan schedule:work` is the realistic asynchronous setup, documented in the README; **(amended 2026-11-01: `.env.example` now ships `QUEUE_CONNECTION=database` and `BROADCAST_CONNECTION=reverb`, and `composer run dev` starts the web server, a worker for all queues, the scheduler, Reverb, the log tail and Vite in one command, TD-072, TD-073)**
   - the `database` cache and session, and the `log` mailer.
 - **No Sail or Docker in T00–T14.** Containerisation (Dockerfile/compose for app, MySQL, queue worker and scheduler) is a separate **final task after T14**, written when the owner asks for it.
 
@@ -178,7 +190,7 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
    - Capabilities are named `<resource>.<action>[.<scope>]` and referenced through `App\Enums\Permission`:
      - tickets: `tickets.create`, `tickets.create.on_behalf`, `tickets.view.any`, `tickets.view.own`, `tickets.reply`, `tickets.notes.internal`, `tickets.claim`, `tickets.update.any`, `tickets.update.assigned`, `tickets.update.own`, `tickets.assign.any`, `tickets.handoff.own`
      - admin areas: `dashboard.view`, `imports.manage`, `users.manage`, `categories.manage`, `holidays.manage`
-   - The role → permission mapping is defined in one place, `Permission::forRole()`, and `RolesAndPermissionsSeeder` applies it (idempotent; it runs in deploys and in tests). The matrix is fixed and read-only: there is no runtime editing.
+   - The role → permission mapping is defined in one place, `Permission::forRole()`, and `RolesAndPermissionsSeeder` applies it (idempotent; it runs in deploys and in tests). ~~The matrix is fixed and read-only: there is no runtime editing.~~ (Amended 2026-10-30: admin-editable, see below.)
 2. **Policies: *on which record*.**
    - `TicketPolicy`, `TicketReplyPolicy`, `AttachmentPolicy` and the admin policies combine a capability with ownership or relationship facts. For example:
      ```php
@@ -206,7 +218,7 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 - Two concepts to understand (permission and policy). Mitigated by the strict rule that the Policy is always the entry point.
 - Permission checks rely on the package's cache. Tests must seed `RolesAndPermissionsSeeder` and reset the cache (`PermissionRegistrar::forgetCachedPermissions()`), which happens in a shared Pest `beforeEach`.
 - Finding agents means joining through `model_has_roles` (indexed by the package). Eligible-agent queries go through a single `User::scopeAvailableAgents()` scope.
-- The matrix is not editable at runtime, so the seeded mapping is always the one the matrix test runs against.
+- ~~The matrix is not editable at runtime, so the seeded mapping is always the one the matrix test runs against.~~ The matrix test runs against the seeded mapping; runtime edits are covered by the visibility amendment below.
 
 **The role → permission matrix becomes admin-editable (amended 2026-10-30, owner decision).**
 - Admins who hold `users.manage` may change which permissions each seeded role has, through one admin Action (`UpdateRolePermissions`), from the web and the API. The matrix page loses its read-only marks and becomes checkboxes.
@@ -214,6 +226,11 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 - Two hard guards in the Action: the customer role can never receive `tickets.notes.internal` (the internal-note leak boundary, TD-120), and the admin role can never lose `users.manage` (no lockout of permission management).
 - Changes take effect immediately for every signed-in user because the Action resets the spatie permission cache.
 - Sanctum token abilities are not re-issued after a matrix change. Nothing checks `tokenCan()`; Policies resolve live permissions through the package, so abilities stay informational (TD-003).
+
+**One permission-based visibility rule; new permissions (amended 2026-11-01).**
+- Visibility is computed from permissions, never from role names: `TicketVisibility::of($user)` reads `tickets.view.any`, `tickets.view.own` and `tickets.notes.internal` once and drives the ticket list, queue counts, the ticket page, the conversation, attachments, the timeline and channel authorization. The role-based `User::isStaff()` was removed. Editing the matrix can therefore never make two surfaces disagree, and nobody without `tickets.notes.internal` receives internal notes, their attachments or their timeline entries.
+- New permissions, seeded through `Permission::forRole()`: `sla.manage` (admin, TD-046), `saved_replies.use` (agent, admin) and `saved_replies.manage_shared` (admin) (TD-062).
+- Staff-only areas use existing permissions: the agents directory requires `tickets.view.any` (TD-103); the customer lookup requires `tickets.view.any` or `tickets.create.on_behalf`.
 
 **Alternatives rejected (for the amendment).**
 - *Editing the user ↔ permission relation directly.* Bypasses roles, makes the matrix test meaningless, and is the leak-prone design TD-002 originally avoided.
@@ -236,6 +253,13 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 | Assign to another agent | ✗ | hand off own ticket | all |
 | Dashboard | ✗ | ✓ | ✓ |
 | CSV import, users, categories, holidays | ✗ | ✗ | ✓ |
+| SLA rules and business hours (amended 2026-11-01) | ✗ | ✗ | ✓ |
+| Saved replies (amended 2026-11-01) | ✗ | own personal, use team | own and team |
+| Agents directory, customer lookup (amended 2026-11-01) | ✗ | ✓ | ✓ |
+| Profile: name, password, picture (amended 2026-11-01) | ✓ | ✓ | ✓ |
+| Assign outside the ticket's category (amended 2026-11-01, TD-050) | ✗ | ✗ | ✓ |
+
+The full permission × role table is in [06 · Security and authorization](06-security-and-authorization.md).
 
 **Why.** This mirrors common help-desk practice (Zendesk, Freshdesk). Agents can see the whole queue and contribute replies and internal notes anywhere, so they can collaborate. *Changing the state* of a ticket is restricted to its owner or an admin, so accountability for a ticket stays clear.
 
@@ -260,6 +284,10 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 
 **Trade-offs.** It's slightly less obvious to debug. Tests assert the exact status codes for each role.
 
+**Scope note (amended 2026-11-01).**
+- 404 applies wherever existence must stay hidden: tickets, replies and attachments the user may not see, another user's personal saved reply, an agent-directory profile of a non-staff user, a profile picture the viewer may not see, another user's notification.
+- Staff-only areas that exist for everyone (dashboard, agents directory, customer lookup, saved replies) answer customers with **403**: there is nothing secret about their existence, so a plain "forbidden" is clearer.
+
 ---
 
 ### TD-120 — Security hardening
@@ -277,6 +305,31 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 | Search input | Parameter binding everywhere. FULLTEXT boolean-mode operators in the input are sanitized. Sort columns come from a whitelist. | `FulltextSearchTermTest`: *turns user input into a safe boolean-mode expression*; `TicketKeywordSearchTest`: *neutralises boolean operators and unbalanced quotes typed by the user*; `TicketIndexFilteringTest`: *rejects a sort column outside the whitelist*. |
 | 404 not 403 (TD-012) | Policies deny a customer as not found when the ticket is not theirs, so existence is never confirmed. | `ConversationRoutesAuthorizationTest`: *enforces the conversation matrix* (the customer-on-another-customer's-ticket rows answer 404). |
 | CSRF / XSS | Laravel CSRF for the web. Vue escapes output by default, and `v-html` is forbidden by the guardrails. | CSRF: framework default for the `web` group; not re-tested. XSS: `SecurityChecklistTest`: *never renders raw HTML in Vue*. |
+| Permission-scoped visibility (amended 2026-11-01) | One `TicketVisibility` rule built from permissions drives every ticket surface (TD-010). | `PermissionScopedVisibilityTest`: *keeps lists, queue counts, ticket pages, replies and activities in line with an edited permission matrix*. |
+| Realtime (amended 2026-11-01) | Identifier-only payloads; channels authorized by the same policies; internal notes only on the staff channel; whispers only from members (TD-073, TD-074). | `ChannelAuthorizationTest`, `PresenceChannelTest`, `TicketBroadcastsTest`: *broadcasts an internal note only on the staff channel and never on the customer channel*. |
+| Profile pictures (amended 2026-11-01) | Validated by extension, MIME type and dimensions; re-encoded by GD; private disk; policy-checked serving with `nosniff` and a sandbox CSP (TD-063). | `AvatarTest`, `AvatarRoutesAuthorizationTest`. |
+| Sessions after a password change (amended 2026-11-01) | Self-service and admin password changes end the user's other sessions and revoke tokens (TD-121). | `ProfileTest`: *keeps the current session and ends the user's other sessions…*, *keeps the API token used for the change and revokes the others*; `UserActionsTest`. |
+| Escalation hidden from customers (amended 2026-11-01) | Escalation level only in resources for `tickets.view.any`; approaching/escalated timeline entries only for `tickets.notes.internal`. | `TicketEscalationVisibilityTest`. |
+| Rate limits (amended 2026-11-01) | Added: profile password change 6/min; customer lookup and saved-reply picker 60/min; avatar upload under `uploads`. | `SecurityChecklistTest`: *throttles every route that accepts uploads*; `CustomerLookupTest`. |
+
+---
+
+### TD-121 — Self-service profile, without a policy, and session hygiene on password change
+**Status:** Accepted (2026-11-01)
+
+**Decision.**
+- Every signed-in user has a profile page (web) and `/api/v1/me/*` endpoints (API) to change their name, change their password and set or remove their profile picture. Email changes stay admin-only.
+- These routes have **no Policy**: the subject is always the signed-in user, taken from the session or token, never from the URL. The route audit lists them as auth-only so the "every route has a policy" check still holds.
+- A password change requires the current password and a different new one. It rotates the remember-me token, revokes every other API token, and deletes the user's other rows in the `sessions` table; the session or token that made the change stays valid.
+- An admin setting a user's password does the same for all of that user's sessions and tokens (keeping the admin's own session when they edit themselves).
+
+**Why.** A user must be able to fix their own name and password. A stolen session or token should not survive a password change, which is the moment users expect to lock others out.
+
+**Alternatives rejected.**
+- *A `ProfilePolicy` with `update(User $user, User $model)`.* It would only ever compare a user with themselves; the route shape already guarantees that.
+- *Laravel's `logoutOtherDevices()`.* It needs the plain password and works per guard; deleting the database session rows also covers sessions on other devices immediately.
+
+**Trade-offs.** Ending other sessions relies on the `database` session driver; with another driver only tokens and remember-me are revoked.
 
 ---
 
@@ -329,6 +382,14 @@ Each index exists to serve a named query:
 | `agent_category(category_id, user_id)` | agents per category |
 | `notifications(notifiable_type, notifiable_id, created_at)` | inbox page (newest first, no filesort) and unread count and filter |
 | `notifications(read_at, created_at)` | chunked prune of old read notifications (`notifications:prune`) |
+| `tickets(status, category_id, assigned_agent_id)` (amended 2026-11-01) | queue counts per visibility scope |
+| `tickets(customer_id, subject)` (amended 2026-11-01) | CSV import duplicate detection against existing tickets |
+| `tickets_escalation_redelivery_index (status, escalated_at, escalation_notified_level, escalation_level)` (amended 2026-11-01) | the redelivery pass of `sla:scan` (TD-044) |
+| `tickets(ticket_import_id)` (amended 2026-11-01) | the tickets of one import (auto-assignment after import, TD-090) |
+| `tickets(import_fingerprint)` unique (amended 2026-11-01) | race-safe duplicate detection for rows without a reference (TD-090) |
+| `users(last_seen_at)` (amended 2026-11-01) | presence "last active" (TD-075) |
+| `saved_replies(user_id, title)`, `saved_replies(category_id, title)` (amended 2026-11-01) | "My replies" sorted by title; category-first picker (TD-062) |
+| `business_hour_windows(weekday, starts_at)` (amended 2026-11-01) | loading the week in order (TD-046) |
 
 **Why.** Indexes cost write throughput and storage, so each one must be justified by a query that the plan's tests or the dashboard exercises. Composite indexes put the equality column (`status`) first and the range column (time) second.
 
@@ -503,6 +564,8 @@ Each index exists to serve a named query:
 
 **Trade-offs.** No end-to-end UI tests. UI regressions are caught by `vue-tsc` and manual review, not automated clicks.
 
+**Frontend unit tests (amended 2026-11-01).** Client-side logic that has real rules gets Vitest tests (`npm run test:js`, with happy-dom): the saved-reply placeholder renderer, presence labels, typing routing (internal-note typing only on the staff channel) and the business-timezone formatter. Components and layout are still not unit-tested.
+
 ---
 
 ### TD-031 — Tests run against MySQL, not in-memory SQLite
@@ -557,7 +620,7 @@ Each index exists to serve a named query:
 ### TD-034 — CI pipeline
 **Status:** Accepted
 
-GitHub Actions runs: `composer install` → `pint --test` → `phpstan analyse` → `pest --parallel` (MySQL service) → `npm ci && npm run build && npm run check && vue-tsc --noEmit`. The build runs first because it generates Wayfinder's gitignored TypeScript, and `npm run check` is the kit's lint/format check (amended 2026-10-29 for the Laravel 13 kit). The same commands form the local gate every task must pass (TD-140).
+GitHub Actions runs: `composer install` → `pint --test` → `phpstan analyse` → `pest --parallel` (MySQL service) → `npm ci && npm run build && npm run check && vue-tsc --noEmit`. (Amended 2026-11-01: `npm run test:js` (Vitest) runs after the build.) The build runs first because it generates Wayfinder's gitignored TypeScript, and `npm run check` is the kit's lint/format check (amended 2026-10-29 for the Laravel 13 kit). The same commands form the local gate every task must pass (TD-140).
 
 ---
 
@@ -577,7 +640,8 @@ GitHub Actions runs: `composer install` → `pint --test` → `phpstan analyse` 
   - `Resolved → Closed | InProgress` (reopen)
   - `Closed` is terminal
 - A customer reply on a ticket in `WaitingForCustomer` moves it to `InProgress`, with the system as actor.
-- Two sanctioned exceptions write status outside `ChangeTicketStatus`: the atomic claim and auto-assign conditional update that moves Open to In Progress (TD-051), and ticket creation by CSV import, which sets the status from the row.
+- ~~Two sanctioned exceptions write status outside `ChangeTicketStatus`: the atomic claim and auto-assign conditional update that moves Open to In Progress (TD-051), and ticket creation by CSV import, which sets the status from the row.~~ **Amended 2026-11-01:** claim, manual assignment and auto-assignment now move Open → In Progress through `ChangeTicketStatus::handleLocked()` inside their own transaction, so the transition rules, SLA side effects and the `TicketStatusChanged` event apply as for any other change. Ticket creation by CSV import still sets the initial status from the row.
+- **Amended 2026-11-01:** a customer's public reply on a **Resolved** ticket also moves it to `InProgress` (a reopen, TD-042), and the customer, not the system, is recorded as the actor of that status change. A Closed ticket refuses replies, edits, priority changes and status changes; a Resolved ticket refuses priority changes.
 
 **Why.**
 - Invalid states (for example re-opening a closed ticket) are impossible to reach through the application.
@@ -617,16 +681,21 @@ GitHub Actions runs: `composer install` → `pint --test` → `phpstan analyse` 
 - One company-wide calendar and timezone (per-team calendars are out of scope).
 - DST: we compute in local wall-clock time and convert. Asia/Dhaka has no DST, and for zones with DST, wall-clock windows are the intended behavior.
 
+**Amended 2026-11-01 (second precision).** `addBusinessSeconds()` and `businessSecondsBetween()` were added; the minute methods now delegate to them (`businessMinutesBetween` truncates the seconds). `SlaCalculator` uses the second variants for the remaining time on resume and reopen and for the paused total, so truncation no longer loses up to 59 seconds per pause. The calendar stays pure.
+
 ---
 
 ### TD-042 — The SLA pauses in `WaitingForCustomer` and is resumed by recomputing the remaining time
-**Status:** Accepted
+**Status:** Accepted (amended 2026-11-01: reopen now resumes the remaining budget)
 
 **Decision.**
 - Entering `WaitingForCustomer` sets `sla_paused_at`.
 - Leaving it computes `remaining = businessMinutesBetween(paused_at, due_at)` and sets `due_at = addBusinessMinutes(now, remaining)`. `warning_at` is recomputed the same way, floored at zero. `paused_at` is then cleared.
 - If the deadline moves later, `escalation_level` is lowered to match the new state, so the ticket can escalate again.
-- Resolved and Closed tickets are "stopped" and excluded from every SLA query. Reopening keeps the original deadline. The SLA is not credited for the time the ticket spent resolved.
+- Resolved and Closed tickets are "stopped" and excluded from every SLA query. ~~Reopening keeps the original deadline. The SLA is not credited for the time the ticket spent resolved.~~
+- **Reopen (amended 2026-11-01).** Time spent resolved does not count. On reopen (Resolved → In Progress, by staff, by the customer, or by the customer's public reply) the business time that was left at resolution is counted forward from the reopen, exactly like a resume. A ticket already breached at resolution has zero left and stays breached. The escalation level may be lowered, never raised. The timeline records "SLA resumed" with the new due and warning times.
+- **Paused time is accumulated (amended 2026-11-01).** Each resume and reopen adds the business time the clock was stopped to `tickets.sla_paused_seconds` (TD-043). ~~The column was `sla_paused_minutes`, and `remaining` was truncated to whole minutes, so each pause could drift the deadline by up to 59 s and a later recalculation could disagree with the resumed deadline.~~ Remaining and paused time are now counted in business seconds (TD-041).
+- **Timeline (amended 2026-11-01).** "SLA resumed" is recorded only when the clock restarts: Waiting for Customer → an active status, or Resolved → In Progress. Waiting for Customer → Resolved records only the status change.
 
 **Why.**
 - Industry-standard behavior: agents aren't penalized for time the ticket was waiting on the customer.
@@ -634,16 +703,16 @@ GitHub Actions runs: `composer install` → `pint --test` → `phpstan analyse` 
 
 **Alternatives rejected.**
 - *Never pausing.* Simpler, but unfair breaches skew the dashboard.
-- *Accumulating `paused_minutes` and computing `due = start + sla + paused`.* Still needs business-time arithmetic at read time and can't be indexed.
+- *Accumulating `paused_minutes` and computing `due = start + sla + paused` at read time.* Still needs business-time arithmetic at read time and can't be indexed. (We now accumulate the minutes too, but only to recompute the stored deadlines on write; reads still use the stored, indexed timestamps.)
 
 **Trade-offs.**
 - Gaming risk (agents could park tickets in WaitingForCustomer). Mitigated by the activity history, which records every pause and resume.
-- Reopened tickets may be breached immediately. This is intentional, since they weren't actually resolved.
+- ~~Reopened tickets may be breached immediately. This is intentional, since they weren't actually resolved.~~ Superseded by the reopen amendment: a reopened ticket gets back exactly the time it had left, so it is breached only if it already was.
 
 ---
 
 ### TD-043 — Priority change recalculates the SLA from the original start
-**Status:** Accepted
+**Status:** Accepted (amended 2026-11-01: paused credit is kept)
 
 **Decision.** A priority change recomputes the deadlines from `sla_started_at` (not from now) using the new priority's duration. If the ticket is currently paused, the pause is preserved.
 
@@ -653,46 +722,128 @@ GitHub Actions runs: `composer install` → `pint --test` → `phpstan analyse` 
 
 **Trade-offs.** A ticket can become breached immediately after an upgrade. That's correct, and it gets escalated on the next scan.
 
-Because recalculation starts from `sla_started_at`, business time credited by an earlier, completed pause/resume cycle is lost when the priority later changes; an ongoing pause is kept. Keeping that credit would need an accumulated paused-minutes column.
+**Amended 2026-11-01.** ~~Business time credited by an earlier, completed pause/resume cycle is lost when the priority later changes.~~ A recalculation is now `sla_started_at` + the new target + `tickets.sla_paused_seconds` (renamed from `sla_paused_minutes`, now in seconds), all in business time, so a priority change never takes back time already credited for waiting or for a resolved period. An ongoing pause is still kept as it is. The same formula is used when admins recalculate active tickets after changing the SLA rules (TD-047).
 
 ---
 
-### TD-044 — Escalation by a scheduled, idempotent scan (`sla:scan`, every minute)
-**Status:** Accepted
+### TD-044 — Escalation by a scheduled scan (`sla:scan`, every minute), delivered at least once to idempotent consumers
+**Status:** Accepted (amended 2026-11-01: the original at-most-once delivery is replaced by at-least-once delivery with idempotent consumers)
 
 **Decision.**
-- `sla:scan` runs every minute with `withoutOverlapping()->onOneServer()`. It streams active, unpaused tickets by id, 500 at a time.
-- For each threshold it runs a conditional `UPDATE … SET escalation_level = N WHERE id IN (…) AND escalation_level < N` and dispatches `TicketSlaApproaching` or `TicketSlaBreached` only for rows it actually changed.
-- Listeners record the activity and send queued notifications: approaching → the assigned agent (or admins); breached → the agent and the admins.
+- `sla:scan` runs every minute with `withoutOverlapping()->onOneServer()`. It streams active tickets with a running clock by id, `sla.scan_chunk_size` (500) at a time.
+- **Escalate.** For each threshold (approaching, then breached) and each chunk, one transaction locks the candidate rows, re-checks the condition, runs a conditional `UPDATE … SET escalation_level = N, escalated_at = now WHERE … AND escalation_level < N`, and dispatches `TicketSlaApproaching` or `TicketSlaBreached` for exactly those tickets. The level bump and the event dispatch share the transaction. `escalated_at` is set at every escalation, not only on breach.
+- **Deliver once.** `tickets.escalation_notified_level` is bookkeeping for "highest level already announced". `SendSlaNotifications` hands each event to the `DeliverEscalation` Action, which locks the ticket, returns if the ticket's level is below the event's level or the level was already announced, and otherwise records the activity, queues the notifications and sets `escalation_notified_level`, all in one transaction (retried on deadlock).
+- **Redeliver.** Each scan first finds active tickets whose `escalation_notified_level` is behind `escalation_level` and whose `escalated_at` is older than `sla.redelivery_grace_seconds` (120), and dispatches their event again. The `tickets_escalation_redelivery_index` serves this query.
+- **Re-escalation.** When a recalculation lowers `escalation_level`, the next escalation caps `escalation_notified_level` below the new level, so the re-escalation is announced again.
+- **Writers (amended 2026-11-01).** Escalation bookkeeping (`escalation_level`, `escalation_notified_level`) is written only by `SlaCalculator`, `sla:scan` and `DeliverEscalation`. The import's "already announced" level is set by `SlaCalculator::applyCurrentLevelAsNotified()`, no longer by `ImportTicketRow` directly.
+- Recipients: approaching → the assigned agent (or all admins if unassigned); breached → the agent and all admins. Never the customer.
 
 **Why.**
-- Idempotent at the database level, so overlapping runs, retries or multiple servers never send duplicate escalations.
-- Self-healing: if the scheduler is down for an hour, the next run catches up.
+- Self-healing: if the scheduler is down for an hour, the next run catches up; if a process dies between escalating and announcing, the redelivery pass announces it.
+- Idempotent at the database level: overlapping runs, retries, redelivery or several servers never announce the same level twice, because the consumer checks and sets the announced level under a row lock.
 - Works with any queue driver.
 
 **Alternatives rejected.**
+- *At-most-once (the original design).* Simple, but a crash between commit and dispatch silently lost the notification for an SLA breach, which is the alert that matters most.
+- *A transactional outbox table.* Correct and general, but a new table, a relay process and its own retention for one kind of event; the per-ticket announced level gives the same guarantee here with one column.
 - *A delayed job per ticket (`dispatch()->delay($dueAt)`).* Every priority change or pause/resume would require cancelling and re-dispatching (Laravel has no native cancel). Jobs are lost if the queue is flushed, and delays beyond SQS's 15-minute limit don't work.
 - *Computing escalations on read.* Can't send notifications or create history at the right moment.
 
 **Trade-offs.**
-- Delivery is **at most once**. Each escalation is committed before its event is dispatched, so a process crash between the two loses that notification rather than ever sending a duplicate. The activity log and the ticket's `escalation_level` remain correct, and the dashboard still shows the breach.
+- One extra column and one extra indexed query per scan.
+- A lost announcement arrives up to the grace period plus one scan interval late (about 3 minutes).
+- The "never twice" guarantee is exact when the queue is the `database` driver, because queueing the notification is part of the delivery transaction. With an external queue (Redis, SQS), a crash after the push but before the commit can, in theory, send one duplicate on redelivery.
 - Up to 1 minute of latency in detecting a breach. That's acceptable for SLAs measured in hours.
 - The scan touches only indexed active rows, so cost stays flat as closed tickets accumulate.
 
 ---
 
 ### TD-045 — SLA rules live only in `config/sla.php`
-**Status:** Accepted
+**Status:** **Superseded by TD-046** (2026-11-01). Kept for history.
 
-**Decision.** `resolution_minutes` per priority and `warning_threshold_percent` are read **only** by `SlaCalculator`. Business hours live in `config/business_hours.php`. Holidays live in the database, because they're operational data that admins edit.
+**Decision (historical).** `resolution_minutes` per priority and `warning_threshold_percent` are read **only** by `SlaCalculator`. Business hours live in `config/business_hours.php`. Holidays live in the database, because they're operational data that admins edit.
 
-**Why.** The PRD requires that changing SLA rules shouldn't need changes throughout the application. One config file plus one consumer satisfies that.
+**Why (historical).** The PRD requires that changing SLA rules shouldn't need changes throughout the application. One config file plus one consumer satisfies that.
 
-**Alternatives rejected.** *An `sla_policies` database table editable in an admin UI.* More flexible, but it would need versioning (which policy applied to an old ticket?) and more UI and tests for a requirement the PRD doesn't make. The config's shape can easily be moved into a table later behind the same `SlaCalculator` interface.
+**Alternatives rejected (historical).** *An `sla_policies` database table editable in an admin UI.* More flexible, but it would need versioning (which policy applied to an old ticket?) and more UI and tests for a requirement the PRD doesn't make. The config's shape can easily be moved into a table later behind the same `SlaCalculator` interface.
+
+**Why it was superseded.** Changing a target or the opening hours needed a deploy. The owner asked for admin-editable rules; the "versioning" concern is answered by storing deadlines on each ticket and recalculating only on request (TD-047).
+
+---
+
+### TD-046 — SLA rules and business hours are admin-editable, stored in the database, with config as defaults
+**Status:** Accepted (2026-11-01). Supersedes TD-045.
+
+**Decision.**
+- Three small tables hold the live rules: `sla_settings` (one row: timezone, warning percentage), `sla_targets` (resolution minutes per priority) and `business_hour_windows` (weekday, start, end; several per day).
+- `SlaSettingsRepository` loads them once and caches them forever (`sla.settings`), flushed by `UpdateSlaSettings`. If no row exists, the values from `config/sla.php` and `config/business_hours.php` are used; `SlaDefaultsSeeder` copies those defaults into the tables once.
+- `SlaCalculator`, `BusinessCalendar` (built from the settings and holidays), the business timezone used for ticket numbers, date filters, dashboard days, email times and import dates all read the repository. `BusinessCalendar` stays pure: the settings are injected.
+- Admins with the new `sla.manage` permission edit the rules on one page and through `PUT /api/v1/admin/sla`.
+- `SlaSettingsRules` validates the whole set before anything is saved: each target 1 minute to 720 hours; warning 1–99%; a valid timezone identifier; each window `HH:MM` with end after start (24:00 allowed as an end only, "until midnight"); no overlapping windows on a day; at most 6 windows a day; at least one open window in the week. A failure raises `InvalidSlaSettings` (422) and saves nothing.
+
+**Why.**
+- SLA targets and opening hours are business decisions that change more often than code. Admins can now change them without a deploy, which still satisfies the brief: the rules are changed in one place and every consumer follows.
+- Caching forever with an explicit flush makes the hot path (every SLA calculation) free, and the settings change rarely.
+- The validation rules make an unusable calendar (no open time, overlaps) impossible to save, so the calculator's 366-day guard is practically never hit.
+
+**Alternatives rejected.**
+- *Keep config only (TD-045).* Needs a deploy for every change.
+- *A versioned `sla_policies` table with history.* Tickets already store their deadlines, so history per ticket exists where it matters; full policy versioning would add UI and tests the brief doesn't need.
+- *A generic key/value settings table.* Loses types, constraints and the one-row-per-priority shape.
 
 **Trade-offs.**
-- Changing SLA durations requires a deploy (or an env override).
-- Existing tickets keep their stored deadlines. A config change applies only to new or recalculated tickets, which is intended.
+- One more cache key to keep consistent; it is flushed in the same Action that writes.
+- One company-wide calendar and timezone remain (per-team calendars are still out of scope).
+
+**Amended 2026-11-01 (versioned cache).** ~~`rememberForever` with `forget()` after commit.~~ A cold-cache reader that loaded the old rows before the commit could write them back after the flush, and they stayed forever. `SlaSettingsRepository` and `HolidayRepository` now go through `SlaRulesCache`: each entry is stored with a version read *before* the value is computed, and a change rotates the version (`flush()`, called after the write) instead of deleting the entry. A stale write lands under the old version and is ignored by the next reader. Same pattern as TD-102.
+
+---
+
+### TD-047 — SLA rule changes apply to new tickets; active tickets are recalculated only on request
+**Status:** Accepted (2026-11-01)
+
+**Decision.**
+- Saving SLA settings, or creating, editing or deleting a holiday, dispatches `SlaRulesChanged(recalculateActiveTickets)`.
+- By default nothing else happens: new tickets use the new rules; active tickets keep their stored deadlines until something recalculates them anyway (a priority change, or a resume/reopen that counts the remaining time in the new business hours).
+- With "Recalculate active tickets" ticked, `QueueSlaRecalculation` queues `RecalculateActiveTicketSlas` on `default`. The job is unique until processing and wrapped in `WithoutOverlapping`, and walks active tickets by id; `RecalculateTicketSla` locks one ticket at a time, recomputes `start + target + sla_paused_seconds`, may lower the escalation level (never raise it), and dispatches `TicketSlaRecalculated` when the due time moved. That event writes a "Deadline updated" timeline entry (visible to the customer too), rotates the ticket-data version and refreshes open pages.
+- Every screen, filter, count and email reads the stored deadlines, so screens never disagree, whether or not a recalculation ran.
+
+**Why.**
+- Changing the promise on tickets already in flight is a deliberate business choice, so the admin makes it explicitly.
+- Locking one ticket at a time keeps lock duration short and lets normal work continue during a large recalculation.
+- Stored deadlines keep reads simple and indexed (TD-023).
+
+**Alternatives rejected.**
+- *Always recalculate everything.* Could suddenly breach many tickets because of a typo, with no opt-out.
+- *Never recalculate.* Leaves no way to apply a corrected calendar (for example a forgotten holiday) to open work.
+- *Recalculate in the request.* Too slow and too long a lock for thousands of tickets.
+
+**Trade-offs.** Without recalculation, tickets created before and after a change follow different rules for a while. The timeline shows which ones were recalculated.
+
+---
+
+### TD-048 — The SLA countdown is computed in business time on the server; the client ticks only between transitions
+**Status:** Accepted (2026-11-01)
+
+**Decision.**
+- Ticket resources carry `sla.clock`: `remaining_seconds` (business seconds from now, or from the pause, to the due time; negative when overdue), `running` (active, not paused, and inside a business window), `changes_at` (the next moment the business calendar opens or closes) and `resumes_at` (the next opening when the clock is stopped). Finished tickets get `null`.
+- `BusinessCalendar::nextTransition()` returns the end of the current window or the start of the next one, using the same window walk and 366-day look-ahead as the deadline math. Adjacent windows that meet at midnight (`24:00` → `00:00`) count as one, so a round-the-clock schedule has no false stop; no transition within the look-ahead returns `null`.
+- The browser decrements the value once per second from a single shared interval, only while `running`, and stops at `changes_at`. Without a server-provided `resumes_at` it keeps the frozen value until the next realtime reload refreshes the block.
+- The ticket page shows seconds; lists show minutes. A "d" in the display is 24 business hours.
+
+**Why.**
+- A wall-clock "due in 62 hours" on Thursday evening is wrong by a factor of 60 for a ticket with one business hour left; only the business calendar knows which hours count.
+- Holidays, lunch breaks, timezones and DST stay on the server, in the one calendar the deadlines use, so the countdown can never disagree with the due time or the escalation scan.
+- Between two transitions business time and wall time advance at the same rate, so a plain decrement is exact there; sending the transition time keeps the client free of calendar logic.
+- It is pure CPU over the stored SLA columns and the cached calendar, so the query count of list and detail pages is unchanged.
+
+**Alternatives rejected.**
+- *Wall-clock relative time.* Misleading outside business hours, which is most of the week.
+- *Ship the business calendar to the browser.* Duplicates the calendar, its holiday cache and its timezone rules in TypeScript.
+- *Poll the server every second or minute.* Network and query load for something the client can do exactly.
+- *One timer per row.* Wasteful on 100-row lists; one shared interval drives all subscribers.
+
+**Trade-offs.** The client trusts its own clock between transitions, so a badly skewed device clock can stop the countdown slightly early or late; the next reload corrects it.
 
 ---
 
@@ -720,6 +871,14 @@ Because recalculation starts from `sla_started_at`, business time credited by an
 
 **Trade-offs.** Load counts all active tickets equally (a Critical ticket weighs the same as a Low one). It's simple, and documented as a known simplification.
 
+**Manual assignment eligibility (amended 2026-11-01).**
+- `AgentEligibility` is the single check for manual assignment and hand-off: the target must have the agent role, be available (row locked), and handle the ticket's category.
+- An admin holding `tickets.assign.any` may knowingly assign outside the category by sending `outside_category=true`; the request then also needs `TicketPolicy::assignOutsideCategory`. The UI shows these agents in a separate "Outside this category" group. Role and availability can never be overridden.
+- Assigning an Open ticket moves it to In Progress, as a claim does (TD-051).
+- *Why:* manual assignment used to accept any available agent, so a billing ticket could silently land with someone who never sees billing work. The override keeps admins able to handle exceptions on purpose.
+
+**Imported tickets (amended 2026-11-01, see TD-090).** Tickets created by a CSV import are never queued one by one at creation. When the admin opts in for that import (`auto_assign`, off by default) and `tickets.auto_assign` is on, `AutoAssignImportedTickets` assigns the import's active, unassigned tickets after the import finishes, 100 per job, with the same selection rules. Each agent who received tickets gets one summary notification.
+
 ---
 
 ### TD-051 — Concurrent claim prevented by an atomic conditional UPDATE
@@ -746,6 +905,14 @@ UPDATE tickets
 - *A unique constraint.* There's nothing to make unique: a ticket has one nullable assignee column.
 
 **Trade-offs.** None significant. The losing agent gets a clear 409 instead of a silent overwrite. Admin reassignment (`AssignTicket`) deliberately bypasses the `IS NULL` check, since overriding an assignment is its purpose, and it runs under a transaction with `lockForUpdate`.
+
+**Amended 2026-11-01.**
+- The conditional update now sets only the assignee (`UnassignedTicketAssigner::assignIfUnassigned`). The Open → In Progress move then goes through `ChangeTicketStatus::handleLocked()` in the same transaction, so the history shows the assignment followed by the status change, and the status rules apply.
+- Manual assignment (`AssignTicket`) also moves an Open ticket to In Progress. It locks the ticket row, so a claim racing a manual assignment waits for the lock and then loses with a 409; `tests/Concurrency/AssignTicketConcurrencyTest.php` proves it.
+
+**Amended 2026-11-01 (availability, re-authorization).**
+- `ClaimTicket` refuses an agent whose `is_available` is false (read under a row lock in the claim transaction) with `AgentUnavailable` (422, `agent_unavailable`). Category is deliberately **not** required for a claim: claiming is a self-assignment the agent chooses from the shared unassigned queue, while the category rule exists to stop work being pushed onto agents who don't handle it (TD-050).
+- `AssignTicket` re-runs `Gate::forUser($actor)->authorize('assign', $ticket)` after locking and refreshing the row, like `UpdateTicket`. A hand-off authorized against a stale copy (the agent was the assignee) is refused with 403 if an admin reassigned the ticket in between, instead of overwriting the admin's choice.
 
 ---
 
@@ -783,6 +950,13 @@ UPDATE tickets
 
 **Trade-offs.** File storage can't be part of a database transaction. `AddReply` stores files first and deletes them if the commit fails (TD-060).
 
+**Amended 2026-11-01.**
+- `CreateTicket` and `AddReply` **stage** uploads (write them to disk) before opening the transaction, then insert the rows in a short transaction. The ticket-number row lock (TD-022) is therefore never held during file I/O. Staged files are discarded only if the ticket or reply itself fails to save; once the reply is saved its attachments are kept even if a later step (for example a notification) fails. Uploads go to monthly folders (`attachments/YYYY/MM/`).
+- In `sla:scan` the escalation level bump and the event dispatch share one transaction, and the delivery has its own (TD-044).
+- SLA recalculation locks and saves one ticket per transaction (TD-047).
+
+**Amended 2026-11-01 (commit failure).** `AddReply` marks the reply as committed with a `DB::afterCommit()` callback registered first in its own transaction, and discards staged files on any failure before that point, including a failure of the commit itself (for example a deadlock). It is not a flag set inside the closure (which was true before the commit) nor after `DB::transaction()` returns (after-commit listeners run inside that call, so a failing listener would then delete the files of a committed reply). The customer-reply status change uses `ChangeTicketStatus::handleLocked()` on the already locked row, so its after-commit events are registered after the marker. `tests/Concurrency/AddReplyCommitFailureTest.php` fails the commit for real.
+
 ---
 
 ## Conversation & storage
@@ -808,13 +982,17 @@ UPDATE tickets
 
 **Trade-offs.** A missing `visibleTo` scope would leak data. This is mitigated by the three-layer defense (TD-120), each layer with dedicated tests.
 
+**Amended 2026-11-01.**
+- ~~`AddReply` forces `is_internal=false` for customers.~~ A request for an internal note from anyone without `addInternalNote` (a customer, or staff whose role lost `tickets.notes.internal`) is refused with 403: `Conversation\StoreRequest::authorize` also inspects `addInternalNote` when `is_internal` is set, and `AddReply` throws `InternalNoteForbidden` (403, `internal_note_forbidden`) as a guard for every other caller. A silent downgrade would have posted an intended note publicly and emailed it to the customer.
+- Only a public reply touches the ticket's `updated_at`. An internal note doesn't, so customers can't infer staff activity from "last updated" or list order. The `-updated_at` sort therefore reflects public activity and ticket changes for staff too; no separate staff-activity column was added.
+
 ---
 
 ### TD-061 — Private disk storage with authorized streaming downloads
 **Status:** Accepted
 
 **Decision.**
-- Files are stored on the private `local` disk (or S3 via `ATTACHMENTS_DISK`) at `attachments/{ticket_id}/{uuid}.{ext}`.
+- Files are stored on the private `local` disk (or S3 via `ATTACHMENTS_DISK`) at ~~`attachments/{ticket_id}/{uuid}.{ext}`~~ `attachments/YYYY/MM/{uuid}.{ext}` (amended 2026-11-01: monthly folders, because files are staged before the ticket id exists, TD-053).
 - Allowed types, extensions, max size (10 MB) and max count (5 per reply) live in `config/attachments.php` and are validated with `File::types()->max()`.
 - Downloads go through a controller that checks `AttachmentPolicy::view` and streams with `Content-Disposition: attachment` and `X-Content-Type-Options: nosniff`.
 
@@ -834,6 +1012,48 @@ UPDATE tickets
 
 ---
 
+### TD-062 — Saved replies: personal or team, placeholders validated on save and filled in the browser
+**Status:** Accepted (2026-11-01)
+
+**Decision.**
+- One `saved_replies` table. `user_id` set = a personal reply of that user; `user_id` null = a team reply. Optional `category_id` (set null on delete).
+- The owner always comes from the actor in `CreateSavedReply`, never from the request. The scope (personal or team) is fixed at creation; `UpdateRequest` drops the `shared` field.
+- Permissions: `saved_replies.use` (agents, admins) to use replies and manage one's own; `saved_replies.manage_shared` (admins) to create, edit and delete team replies. `SavedReplyPolicy` denies another user's personal reply as 404 and customers as 403.
+- Placeholders are a fixed enum (`SavedReplyPlaceholder`: `{customer_name}`, `{customer_first_name}`, `{ticket_number}`, `{ticket_subject}`, `{agent_name}`, `{agent_first_name}`). Unknown placeholders are rejected on save. The browser fills them in when the reply is inserted at the cursor, from data the page already has; the text is then an ordinary reply the agent can edit.
+- The picker (`GET saved-replies/picker`, 60/min) returns at most 50 replies the user may use, ranked with the ticket's category first; it works in reply and internal-note mode. Indexes `(user_id, title)` and `(category_id, title)` serve the lists.
+
+**Why.** Agents answer the same questions many times; templates cut time to first response. Rendering in the browser keeps the server out of templating (no injection surface, no second rendering path), and validating names on save means a typo is caught when the template is written, not when a customer reads `{custmer_name}`.
+
+**Alternatives rejected.**
+- *Server-side rendering of placeholders on send.* The agent could not see or edit the final text before sending.
+- *A templating language (Blade, Twig) in reply bodies.* Far more power than needed and a security risk.
+- *Separate tables for personal and team replies.* Duplicates every query for one nullable column.
+
+**Trade-offs.** Placeholders are limited to the six fixed names; adding one is a code change in the enum and the browser renderer.
+
+---
+
+### TD-063 — Profile pictures: validated, re-encoded with GD, private and policy-checked
+**Status:** Accepted (2026-11-01; amended by the fix pass: serving is policy-checked)
+
+**Decision.**
+- Uploads (profile page, `/api/v1/me/avatar`, or an admin editing a user) accept JPG, PNG or WebP up to 2 MB and 64–4096 px per side (`AvatarRules`: extension, MIME type and dimensions).
+- `AvatarStorer` centre-crops to a 256 px square with GD and re-encodes it (WebP, or PNG when WebP is unavailable), which strips metadata such as EXIF location. If GD is missing, the validated original is stored.
+- Files live on the private `avatars` directory of `AVATARS_DISK` under a random 40-character name; replacing or removing a picture deletes the old file.
+- `GET /avatars/{user}` is served by `AvatarController` after `UserPolicy::viewAvatar`: everyone may see their own, `tickets.view.any` sees all, customers see staff pictures only; anything else is 404. Responses carry `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox`, `Cache-Control: private` and an ETag.
+- `User::avatarUrl()` adds `?v=` derived from the stored path, so a new picture busts caches while unchanged pictures cache for a week.
+
+**Why.** User-uploaded images are a classic vector (polyglot files, SVG scripts, metadata leaks). Re-encoding produces a file we generated ourselves; private storage and the policy keep customers from enumerating each other's faces.
+
+**Alternatives rejected.**
+- *Public disk with `storage:link`.* Anyone with the URL could fetch any picture.
+- *spatie/medialibrary or Intervention Image.* More than we need for one 256 px variant; GD is bundled with PHP.
+- *Gravatar.* Leaks email hashes to a third party and doesn't work offline.
+
+**Trade-offs.** PHP streams each picture (cheap at 256 px, cached by the browser). Without GD, metadata is not stripped.
+
+---
+
 ## Events, notifications, queues
 
 ### TD-070 — Domain events drive the side effects; Actions don't call notifiers directly
@@ -845,6 +1065,8 @@ UPDATE tickets
   - `RecordTicketActivity` (sync)
   - `Send*Notification` (dispatch queued notifications)
   - `QueueAutoAssignment`
+  - `RotateTicketDataVersion` (cache invalidation, TD-102) and `BroadcastTicketChanges` / `BroadcastNotificationReceived` (realtime, TD-073) (amended 2026-11-01)
+- New events (amended 2026-11-01): `TicketUnassigned`, `TicketAutoAssignmentFailed`, `TicketSlaRecalculated`, `SlaRulesChanged`, `ImportedTicketsAutoAssigned`. The full event → listener table is in [03 · Architecture](03-architecture.md#6-events-and-listeners).
 - The event classes are created up front, in task T05, as a stable contract.
 
 **Why.**
@@ -856,16 +1078,17 @@ UPDATE tickets
 - *Calling `Notification::send()` inside Actions.* Couples every use case to every channel, and testing an Action would require faking notifications.
 - *Model observers.* No business intent (TD-026).
 
-**Trade-offs.** It's an indirection: to see what happens on ticket creation, you read the listeners. This is mitigated by documenting the event → listener flow in `docs/FEATURES.md`.
+**Trade-offs.** It's an indirection: to see what happens on ticket creation, you read the listeners. This is mitigated by documenting the event → listener flow in [03 · Architecture](03-architecture.md#6-events-and-listeners) and the behaviour in [04 · Business logic](04-business-logic.md).
 
 ---
 
 ### TD-071 — Queued notifications on the mail and database channels, sent after commit
-**Status:** Accepted
+**Status:** Accepted, **partly superseded** (2026-11-01): the rejected alternative "Broadcast / websockets" is superseded by TD-073. Queued mail and database notifications remain the decision.
 
 **Decision.**
 - Every notification implements `ShouldQueue`, runs on the `notifications` queue, and uses `afterCommit()`.
 - Channels are `mail` and `database`; internal-note notifications use `database` only.
+- **Staff-only notifications (amended 2026-11-01).** When a user becomes a customer, `ChangeUserRole` deletes every notification they received as staff: internal-note notifications store a 160-character excerpt, and the others name other customers' tickets. At read time `NotificationFeed` (list and unread count) leaves internal-note notifications out for viewers without `tickets.notes.internal`, and `NotificationResource` blanks their title and body, as defence in depth after a permission is removed from a role.
 - The actor of an event is never notified about their own action.
 - The recipient rules (see the spec, §11) live in each listener.
 
@@ -873,27 +1096,31 @@ UPDATE tickets
 
 **Alternatives rejected.**
 - *Synchronous mail.* Blocks the request and fails it when SMTP is down.
-- *Broadcast / websockets.* Realtime isn't required.
+- ~~*Broadcast / websockets.* Realtime isn't required.~~ Superseded by TD-073: realtime updates were added as a bonus, alongside (not instead of) these notifications.
 
-**Trade-offs.** A queue worker must be running. Without one, notifications pile up in `jobs` but aren't lost. Locally `QUEUE_CONNECTION=sync` avoids this (TD-005). The README documents `composer run dev` / `queue:work` and `schedule:work` for the asynchronous setup.
+**Trade-offs.** A queue worker must be running. Without one, notifications pile up in `jobs` but aren't lost. ~~Locally `QUEUE_CONNECTION=sync` avoids this (TD-005).~~ `composer run dev` starts a worker (amended 2026-11-01). Escalation notifications are the one exception to `afterCommit`: they are queued `beforeCommit` inside the delivery transaction (TD-044). Import results and imported-ticket assignment summaries are one message per admin or agent, never per ticket (TD-090). The README documents `composer run dev` / `queue:work` and `schedule:work` for the asynchronous setup.
 
 ---
 
 ### TD-072 — Queue topology and job reliability
-**Status:** Accepted
+**Status:** Accepted (amended 2026-11-01: a `broadcasts` queue; order `default,broadcasts,notifications,imports`)
 
 **Decision.**
 - Queues:
   - `default`: auto-assign
   - `notifications`
   - `imports`: prepare, chunk and finalize jobs, so a large import never delays notifications
-- **Worker priority order: `--queue=default,notifications,imports`.**
+- ~~**Worker priority order: `--queue=default,notifications,imports`.**~~
+- **Worker priority order (amended 2026-11-01): `--queue=default,broadcasts,notifications,imports`**, defined once in `config('queue.worker_queues')` and used by `composer run dev`.
+  - `broadcasts` holds the tiny identifier-only realtime events (TD-073); they go before notifications so live updates feel instant.
+  - `default` also runs `RecalculateActiveTicketSlas` (TD-047); `imports` also runs `AutoAssignImportedTickets` (TD-090).
   - `default` (auto-assign) goes first, because a ticket's SLA clock runs while it waits for an agent.
   - Bulk imports go last; in production they get their own worker pool.
 - Jobs declare `tries=3`, `backoff=[10, 60, 300]`, and `failed()` logging.
 - **Exception (amended 2026-10-29): import chunk jobs use `tries=1`.** A chunk commits row by row, so a retry would re-process rows that were already committed. Duplicates are prevented by `external_reference`, but rows without a reference would be duplicated. A failed chunk is recorded on the import instead, and the admin re-uploads the remaining rows.
 - Import chunks are `Batchable`.
 - `AutoAssignTicket` is `ShouldBeUnique` per ticket.
+- (Amended 2026-11-01.) An interrupted `PrepareTicketImport` resumes on retry (it re-dispatches the batch only when none exists yet); a final failure marks the import Failed. `RecalculateActiveTicketSlas` is unique until processing, uses `WithoutOverlapping`, and stops after 3 exceptions. Broadcast events have 3 tries and `ShouldRescue`, so a broadcasting failure never fails the request or the dispatching job.
 
 **Why.**
 - Isolating slow bulk work from user-facing latency.
@@ -905,13 +1132,68 @@ UPDATE tickets
 
 ---
 
+### TD-073 — Realtime with Laravel Reverb and identifier-only payloads
+**Status:** Accepted (2026-11-01). Supersedes the "no websockets" part of TD-071.
+
+**Decision.**
+- Laravel Reverb is the WebSocket server; Laravel Echo with `pusher-js` is the client. `BROADCAST_CONNECTION=reverb` in `.env.example`, with local-only Reverb keys so a fresh checkout works.
+- Every broadcast carries only `{ticket, kind, at}`. On receipt the page reloads the affected Inertia props over HTTP, so the normal policies decide what the user sees. A broadcast can never leak content.
+- Channels (authorized in `routes/channels.php` with the same policies as the pages): `tickets.{number}` (anyone who may view the ticket), `tickets.{number}.staff` (internal-notes permission), `tickets.queue` (`tickets.view.any`), and each user's own `App.Models.User.{id}` channel. Ticket changes go to the ticket, the queue and the ticket's customer's user channel (so customer lists update live); internal notes go only to the staff channel; database notifications ping the recipient's user channel.
+- Broadcasts are `ShouldDispatchAfterCommit`, queued on `broadcasts`, and `ShouldRescue`. Imports do not broadcast per row; one `queue.changed` is sent when an import finishes.
+- Pages refresh at most one at a time, with one trailing refresh when many messages arrive together. Without Reverb (no key, or server down) pages work and simply don't update live.
+
+**Why.** Live updates are a listed bonus and make the agent experience much better (no manual reloads, presence and typing). Identifier-only payloads mean the realtime layer needs no authorization logic of its own beyond joining a channel, so it can't drift from the policies.
+
+**Alternatives rejected.**
+- *Polling.* Simple, but either slow or wasteful, and no presence or typing.
+- *Pusher or Ably (hosted).* Same protocol, but a third-party account and data leaving the machine; Reverb is first-party and self-hosted.
+- *Server-Sent Events.* One-way only, so no whispers for typing, and no presence.
+- *Broadcasting full payloads.* Every payload would need per-recipient filtering for internal content; a single mistake would leak.
+
+**Trade-offs.**
+- One more long-running process (`reverb:start`) and one more queue.
+- Each message costs the receiver one HTTP refetch.
+- SLA escalation changes (`sla_approaching`, `sla_breached`) are announced only on the ticket's staff channel and the staff queue channel, as `ticket.changed`, so customers never learn of an escalation. Other kinds reach the ticket and customer channels without content.
+- The API has no WebSocket access; API clients poll.
+
+---
+
+### TD-074 — Per-ticket presence and typing via whispers
+**Status:** Accepted (2026-11-01)
+
+**Decision.**
+- Each ticket page joins the presence channel `presence.tickets.{number}`, authorized by `TicketPolicy::view`. Member info is only `id`, `name`, `avatar_url` and `role` (`customer` or `staff`, relative to that ticket); never the email. There is no site-wide presence.
+- Typing is sent as client events (whispers), throttled to one per 2 seconds and expired after 4 seconds. Public-reply typing goes on the presence channel and the displayed name comes from the presence member list matched by the sender's user id, not from the payload. Internal-note typing goes only on the private staff channel, so a customer never learns that a note is being written.
+- Reverb accepts client events only from channel members (`REVERB_APP_ACCEPT_CLIENT_EVENTS_FROM=members`).
+
+**Why.** Seeing that a colleague is already answering prevents double replies; the customer seeing "typing…" is reassuring. Whispers cost the server nothing.
+
+**Alternatives rejected.** *Global presence.* Not needed for the use case and leaks who is online to customers. *Server-relayed typing events.* A request per keystroke burst for no gain.
+
+**Trade-offs.** Typing names on the staff channel come from the payload; only staff can whisper there, so this is accepted.
+
+---
+
+### TD-075 — "Last seen" tracking, throttled to one write a minute
+**Status:** Accepted (2026-11-01)
+
+**Decision.** The `TrackLastSeen` middleware (web and API groups) writes `users.last_seen_at` after the response, at most once a minute per user (a `Cache::add` guard), with a plain query-builder update (no model events). "Active now" means in a ticket's presence channel or seen within 5 minutes; otherwise "Active N m/h/d ago" or "Offline". `users(last_seen_at)` is indexed.
+
+**Why.** Presence alone only covers people on a ticket page; the agents directory and avatars need a cheap "recently active" signal.
+
+**Alternatives rejected.** *A write on every request.* Hot-row contention for no benefit. *Session-table scanning.* Driver-specific and slow.
+
+**Trade-offs.** "Last seen" is up to a minute stale.
+
+---
+
 ## Search
 
 ### TD-080 — `TicketFilter` query object with FULLTEXT keyword search and indexed filters
 **Status:** Accepted
 
 **Decision.**
-- `IndexTicketsRequest` validates: `number`, `q`, `status[]`, `priority[]`, `category_id`, `assigned_agent_id`, `unassigned`, `customer_id`, `created_from`, `created_to`, `sla_state`, `sort` (whitelisted), `per_page` (≤ 100).
+- `IndexTicketsRequest` (implemented as `Http/Requests/Tickets/ListRequest`) validates: `number`, `q`, `status[]`, `priority[]`, `category_id`, `assigned_agent_id`, `unassigned`, `customer_id`, `created_from`, `created_to`, `sla_state`, `sort` (whitelisted), `per_page` (≤ 100).
 - `TicketFilter::apply()` composes the query:
   - `Ticket::visibleTo($user)` first
   - `MATCH(subject, description) AGAINST(? IN BOOLEAN MODE)` for `q`
@@ -919,6 +1201,7 @@ UPDATE tickets
   - range scopes for `sla_state`
 - Eager loading: `category:id,name`, `customer:id,name`, `assignedAgent:id,name`, and `withCount('replies')`.
 - Results use offset pagination.
+- (Amended 2026-11-01.) A `response` filter (`unresponded`: no public reply from anyone but the customer; `awaiting`: the latest public message is the customer's) via `ResponseQuery`, and a `scope=all` list next to `active` and `resolved`. Visibility now comes from `TicketVisibility` (TD-010) instead of a role check. Staff choose the customer filter from a typeahead backed by `GET customers/lookup` (prefix match on name or email, at most 10, customers only, 60/min).
 
 **Why.**
 - One reusable, testable object serves both the web and the API.
@@ -940,7 +1223,7 @@ UPDATE tickets
 ## CSV import
 
 ### TD-090 — Streamed, chunked, batched import with per-row validation and an error table
-**Status:** Accepted
+**Status:** Accepted (amended 2026-11-01: duplicate fingerprint, opt-in auto-assignment, resume on retry)
 
 **Decision.**
 1. An admin uploads a CSV (≤ 50 MB). `StartTicketImport` stores it privately, creates `ticket_imports(pending)` and dispatches `PrepareTicketImport`.
@@ -968,7 +1251,17 @@ UPDATE tickets
 
 **Trade-offs.**
 - Per-row transactions and number allocation make imports slower than bulk inserts (around a few hundred rows per second per worker). That's acceptable, and scales with the number of workers.
-- Duplicates are detected only through `external_reference`. Rows without one are treated as new by design, since matching on subject and customer is ambiguous.
+- ~~Duplicates are detected only through `external_reference`. Rows without one are treated as new by design, since matching on subject and customer is ambiguous.~~ Superseded by the amendment below.
+
+**Amended 2026-11-01.**
+- **Duplicates without a reference.** Rows with a created-at date match on customer + subject + created-at; rows without one match on a fingerprint of customer, subject (case and surrounding spaces ignored) and a hash of the description (case and whitespace ignored). Matches are reported against an earlier row in the chunk ("Duplicate of row N.") or an existing ticket ("Duplicate of an existing ticket."), the latter served by `tickets(customer_id, subject)`.
+- **Race-safe.** Every imported ticket without a reference stores `tickets.import_fingerprint` (SHA-256 of that key, unique). Identical rows handled at the same moment by different workers can no longer both be imported; the database refuses the second and it is reported as a duplicate. Unique violations are now told apart by index name (a latent bug reported every unique violation as an external-reference clash).
+- **No per-ticket emails.** Imported tickets send no creation, "needs assignment" or assignment messages; the importing admin gets one summary. Their escalation level is set at import and counts as already announced (TD-044).
+- **Auto-assignment is opt-in per import** (`ticket_imports.auto_assign`, the "Auto-assign active tickets" checkbox or the API's `auto_assign` field; off by default; also requires `tickets.auto_assign`). After the import finishes, `AutoAssignImportedTickets` assigns its active, unassigned tickets 100 per job; Resolved and Closed rows are never assigned. Each agent who received tickets gets one summary notification (mail and database).
+- **Resume.** An interrupted preparation step resumes on retry; a final failure marks the import Failed.
+- *Why opt-in:* old tickets arrive with their original SLA clock, often already breached; dumping them on agents automatically would distort workloads and alarms, so the admin decides per file.
+
+**Amended 2026-11-01 (storage disks).** The jobs no longer call `Storage::disk()->path()`, which only works on local disks. `ImportFileAccess::withLocalPath()` passes the real path for a local adapter, and for any other disk copies the file through `readStream()` to a temporary local file, which is deleted afterwards. `TicketCsvReader` keeps reading paths because it seeks to chunk offsets, which remote streams don't support. Each chunk job of a remote import copies the file once.
 
 ---
 
@@ -982,7 +1275,7 @@ UPDATE tickets
 2. A `GROUP BY priority` query.
 3. A `GROUP BY assigned_agent_id` query joined to the agents' names.
 
-The result is cached in `Cache::remember('dashboard:'.$scope, 60)`.
+~~The result is cached in `Cache::remember('dashboard:'.$scope, 60)`.~~ (Amended 2026-11-01: cached through `TicketDataCache`, invalidated on change, TD-102.) The dashboard also shows SLA health (within, approaching, breached, paused), counts by status, every agent's active and breached counts, and a 14-day created/resolved trend counted in the business timezone.
 
 **Why.**
 - Three indexed queries instead of N count queries or loading models.
@@ -993,7 +1286,7 @@ The result is cached in `Cache::remember('dashboard:'.$scope, 60)`.
 - *Pre-aggregated counter tables updated by listeners.* Instant reads, but counters drift, need reconciliation, and add more points of failure.
 - *No cache.* Fine at small scale. The cache is essentially free and protects against "dashboard on a TV refreshing every 5 seconds".
 
-**Trade-offs.** Counts can be up to 60 seconds stale. Per-ticket views are always live.
+**Trade-offs.** ~~Counts can be up to 60 seconds stale.~~ Counts refresh on every count-changing ticket event; only purely time-driven changes (a ticket crossing its due time) can lag up to the 60-second TTL (TD-102). Per-ticket views are always live.
 
 ---
 
@@ -1004,7 +1297,45 @@ The result is cached in `Cache::remember('dashboard:'.$scope, 60)`.
 - Paginate every list endpoint, capped at `per_page ≤ 100`.
 - Scans and imports use `chunkById` / `lazyById` (never `get()` on unbounded sets).
 - Only Actions run writes, and none of them run in loops without batching.
-- Holidays are cached (`Cache::rememberForever`, invalidated on change), because the calendar consults them on every SLA calculation.
+- Holidays are cached (`Cache::rememberForever`, invalidated on change), because the calendar consults them on every SLA calculation. SLA settings are cached the same way (TD-046) (amended 2026-11-01).
+- Lists that join counts per row (agents directory) aggregate only the rows on the current page (amended 2026-11-01, TD-103).
+
+---
+
+### TD-102 — Dashboard and queue counts: cached, versioned, invalidated by ticket events
+**Status:** Accepted (2026-11-01)
+
+**Decision.**
+- `TicketDataVersion` holds one random version id in the cache. `RotateTicketDataVersion` replaces it on every count-changing event: `TicketCreated`, `TicketStatusChanged`, `TicketAssigned`, `TicketUnassigned`, `TicketPriorityChanged`, `TicketSlaApproaching`, `TicketSlaBreached`, `TicketSlaRecalculated`, and `TicketUpdated` when the category changed.
+- `TicketDataCache` stores each cached view under **one fixed key** as `{version, data}`. A read with another version recomputes and overwrites. The dashboard uses one key (variant: the business timezone); queue counts use one key per visibility scope (`all`, or one customer).
+- The TTL (`DASHBOARD_CACHE_TTL_SECONDS`, `TICKETS_QUEUE_COUNTS_CACHE_TTL_SECONDS`, both 60) is a backstop for time-driven changes.
+
+**Why.** A 60-second-stale dashboard right after an agent resolves a ticket looks broken. Versioning gives fresh figures after every change while still absorbing repeated refreshes. Fixed keys stop the `cache` table from growing with one row per version.
+
+**Alternatives rejected.**
+- *Cache tags.* Not supported by the `database` cache store (TD-005).
+- *A versioned key per version (`dashboard:{version}`).* Correct, but every rotation leaves an orphan row behind until it expires; this was the first implementation and was replaced.
+- *No cache.* Fine at small scale, but every page view would run the aggregate queries.
+
+**Trade-offs.** Busy desks rotate the version often, so the cache helps most when reads outnumber writes (the usual case).
+
+---
+
+### TD-103 — Agents directory from one grouped aggregate per page
+**Status:** Accepted (2026-11-01)
+
+**Decision.**
+- Staff with `tickets.view.any` get an agents directory (web and API): per agent, total assigned, active, **unresponded** (active, no public reply from anyone other than the customer), **awaiting reply** (latest public message is the customer's), **breached** (active, running clock past due), resolved in the last 30 days, and last active.
+- `AgentDirectory` computes these in one grouped subquery over tickets (`SUM(CASE …)` per column) joined to the users of the current page only; the summary row is one more query. Sorting and filters come from whitelists. A non-staff profile answers 404; customers get 403.
+- Every number links to the ticket list with the matching filters, including the new `response` filter (TD-080) and `scope=all` for "total assigned".
+
+**Why.** Leads need to see who is overloaded or behind on first responses; linking each number to the list makes the figure actionable. Aggregating in SQL keeps the query count constant (`AgentDirectoryQueryCountTest`).
+
+**Alternatives rejected.** *Per-agent `withCount` calls.* One query per statistic and harder to sort by. *Denormalized counters on users.* Drift and need reconciliation.
+
+**Trade-offs.** The correlated subqueries for "unresponded" and "awaiting" read `ticket_replies` per ticket; they are served by `ticket_replies(ticket_id, is_internal, created_at)`.
+
+**Amended 2026-11-01 (cached aggregates).** The summary and the per-agent active figures used by the workload sorts aggregate every active ticket (with the correlated `NOT EXISTS`), so they now go through `TicketDataCache` under two fixed keys (`agents:directory-summary`, `agents:directory-sort-stats`), TTL `tickets.agent_directory.cache_ttl_seconds` (60). The variant is `AgentDirectoryVersion`, rotated after commit by `SyncAgentProfile` (availability, categories) and `ChangeUserRole`, and by `RotateAgentDirectoryVersion` on a public staff reply (which can end "unresponded"); ticket changes rotate the ticket-data version (TD-102). The sort applies the cached figures as `ORDER BY CASE users.id WHEN ? THEN ? … ELSE 0 END`, so the per-page query count is unchanged. Breaches caused only by time passing appear within the TTL.
 
 ---
 
@@ -1021,11 +1352,15 @@ The result is cached in `Cache::remember('dashboard:'.$scope, 60)`.
   - `TicketClosed` (422)
   - `ImportHeaderInvalid` (422)
   - `CannotChangeOwnRole` (422): an admin can't change their own role
+  - `CannotRemoveUserManagement` (422) and `CustomerInternalNotesForbidden` (422): the two permission-matrix guards (TD-010)
+  - `InvalidSlaSettings` (422): SLA rules that break a validation rule (TD-046) (amended 2026-11-01)
+  - `InternalNoteForbidden` (403): an internal note requested without the permission (TD-060) (amended 2026-11-01)
+  - `AgentUnavailable` (422): an unavailable agent tried to claim (TD-051) (amended 2026-11-01)
 - `bootstrap/app.php` renders them in one place:
   - The API gets JSON `{message, code}`.
   - The web gets `back()->with('error', …)`, and Inertia shows a toast.
 - Validation, authorization (403) and not-found (404) errors use the framework defaults.
-- `NoEligibleAgent` during auto-assignment is logged, not thrown to a user.
+- When auto-assignment finds no eligible agent, nothing is thrown: it logs the fact and dispatches `TicketAutoAssignmentFailed`, which tells the admins (there is no `NoEligibleAgent` exception class).
 
 **Why.**
 - Business rules fail with meaningful, machine-readable codes. API clients branch on `code`, not on message text.
@@ -1047,11 +1382,15 @@ The result is cached in `Cache::remember('dashboard:'.$scope, 60)`.
 
 | File | Contents |
 |---|---|
-| `config/sla.php` | resolution minutes per priority, warning threshold % |
-| `config/business_hours.php` | timezone, weekly windows |
-| `config/tickets.php` | number prefix, auto-assign on/off, per-page max |
-| `config/attachments.php` | disk, allowed types/extensions, max size, max files |
+| `config/sla.php` | **defaults** for resolution minutes per priority and warning threshold % (the live values are admin-edited, TD-046); scan chunk size; redelivery grace |
+| `config/business_hours.php` | **defaults** for timezone and weekly windows (TD-046) |
+| `config/tickets.php` | number prefix, auto-assign on/off, page sizes, dashboard and queue-count cache TTLs, dashboard windows |
+| `config/attachments.php` | disk, allowed types/extensions, max size, max files, inline-preview types |
+| `config/avatars.php` | disk, types, max size, dimensions, output size, cache lifetime (TD-063) |
 | `config/imports.php` | max upload size, chunk size |
+| `config/retention.php` | notification, failed-job and batch retention, prune chunk size |
+| `config/queue.php` → `worker_queues` | the worker queue order (TD-072) |
+| `config/broadcasting.php`, `config/reverb.php` | realtime (TD-073) |
 
 **Why.**
 - Rules are discoverable in one place, can be changed per environment, and work with `config:cache`.
@@ -1067,7 +1406,7 @@ The result is cached in `Cache::remember('dashboard:'.$scope, 60)`.
 **Status:** Accepted (rewritten 2026-10-29 by owner decision; the worktree flow used for T00–T05 is retired)
 
 **Decision.**
-- The remaining work is six plans (`docs/plans/P1…P6`), executed in order on `main` in the main checkout, following `docs/plans/ROADMAP.md`. There are no worktrees and no task branches.
+- The remaining work is six plans (`docs/plans/P1…P6`, now archived in `docs/archive/plans/`), executed in order on `main` in the main checkout, following `ROADMAP.md`. There are no worktrees and no task branches.
 - Each plan is split into waves. A wave's subtasks never share a file, and each subtask gets its own implementer subagent, running in parallel. Implementers run only their own test files on their own test database (`techzu_testing_agent<N>`), and never touch git.
 - After the last wave, the session runs the full gate **once**. Spec, quality and security reviewers and a documenter then run in parallel on the uncommitted diff. Fixes rerun only the affected tests.
 - Nothing is committed until the owner approves. Then the session creates one Conventional Commit per subtask (staging that subtask's files), with a `Refs: Pn.m` trailer and no AI attribution. The owner pushes.

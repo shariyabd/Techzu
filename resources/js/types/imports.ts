@@ -11,6 +11,7 @@ export type TicketImportItem = {
     original_name: string;
     status: EnumValue<ImportStatusValue>;
     is_finished: boolean;
+    auto_assign: boolean;
     total_rows: number;
     processed_rows: number;
     succeeded_rows: number;

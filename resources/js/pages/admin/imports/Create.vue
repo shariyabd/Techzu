@@ -7,6 +7,8 @@ import PageHeader from '@/components/PageHeader.vue';
 import SubmitButton from '@/components/SubmitButton.vue';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { formatBytes } from '@/lib/format';
 import { create, index, store } from '@/routes/admin/imports';
@@ -21,9 +23,16 @@ defineOptions({
     },
 });
 
-const props = defineProps<{ maxUploadKb: number; columns: ImportColumns }>();
+const props = defineProps<{
+    maxUploadKb: number;
+    autoAssignAvailable: boolean;
+    columns: ImportColumns;
+}>();
 
-const form = useForm<{ file: File | null }>({ file: null });
+const form = useForm<{ file: File | null; auto_assign: boolean }>({
+    file: null,
+    auto_assign: false,
+});
 const dragging = ref(false);
 
 const maxSize = computed(() => formatBytes(props.maxUploadKb * 1024));
@@ -97,6 +106,36 @@ function submit(): void {
                         />
                     </label>
                     <InputError :message="form.errors.file" />
+                    <div class="flex flex-col gap-1">
+                        <Label
+                            for="auto_assign"
+                            class="flex items-center gap-3"
+                        >
+                            <Checkbox
+                                id="auto_assign"
+                                :model-value="form.auto_assign"
+                                :disabled="!autoAssignAvailable"
+                                @update:model-value="
+                                    (value) =>
+                                        (form.auto_assign = value === true)
+                                "
+                            />
+                            <span>Auto-assign active tickets</span>
+                        </Label>
+                        <p class="pl-7 text-sm text-muted-foreground">
+                            <template v-if="autoAssignAvailable"
+                                >Open, in progress and waiting tickets go to
+                                agents when the import finishes. Each agent gets
+                                one summary instead of an email per
+                                ticket.</template
+                            >
+                            <template v-else
+                                >Automatic assignment is switched off, so
+                                imported tickets stay unassigned.</template
+                            >
+                        </p>
+                        <InputError :message="form.errors.auto_assign" />
+                    </div>
                     <Progress
                         v-if="form.progress"
                         :model-value="form.progress.percentage ?? 0"

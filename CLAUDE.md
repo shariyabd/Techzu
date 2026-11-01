@@ -1,10 +1,10 @@
 # CLAUDE.md — Guardrails for contributors and subagents
 
 Read before writing any code. Sources of truth:
-- `PRD.md` — the requirements
-- `docs/DESIGN.md` — the design
-- `TECHNICAL_DECISIONS.md` (TD-xxx) — the decision log
-- `docs/plans/ROADMAP.md` and `docs/plans/P*.md` — the execution rules and the remaining plans
+- `docs/01-requirements.md` — the requirements
+- `docs/03-architecture.md` — the design
+- `docs/11-technical-decisions.md` (TD-xxx) — the decision log
+- `docs/archive/plans/ROADMAP.md` and `docs/archive/plans/P*.md` — the execution rules and the remaining plans
 
 If these disagree, **stop and report**. Don't improvise.
 
@@ -51,7 +51,7 @@ Laravel 13 · PHP 8.3 · MySQL 8 · Inertia 3 + Vue 3 (`<script setup lang="ts">
 - **No comments in code (strict).** This applies to every file we write or rewrite: PHP, TypeScript/JavaScript, Vue, CSS, Blade, SQL, and config files (`.env.example`, `*.neon`, `*.yml`, `vite.config.ts`, `config/*.php`).
   - Banned: `//`, `#`, `/* … */`, `<!-- … -->`, prose in docblocks, commented-out code, TODOs.
   - **Only exception:** PHPDoc *type tags* that Larastan level 6 needs, with no prose: `@var`, `@param`, `@return`, `@property`, `@property-read`, `@method`, `@mixin`, `@use`, `@template`, `@extends`, `@implements`, `@throws`. For example `/** @return array<string, string> */`.
-  - Explanations go in the commit body, `docs/FEATURES.md` or TECHNICAL_DECISIONS.md, never in the code. Names should make the intent clear.
+  - Explanations go in the commit body, `docs/04-business-logic.md` or docs/11-technical-decisions.md, never in the code. Names should make the intent clear.
   - **Plan code blocks are transcribed without their comments.** Where a plan snippet still contains one, drop it. Kit files we don't edit keep their own comments; any kit file we rewrite loses its prose comments.
   - Shell commands that an agent runs, and Markdown docs, aren't code. `#` comments are fine there.
 - Vue: Composition API with `<script setup lang="ts">`, typed props with `defineProps<...>()`. Pages go in `resources/js/pages/<feature>/`, components in `resources/js/components/<feature>/`. Use the shared types in `resources/js/types/`.
@@ -60,7 +60,7 @@ Laravel 13 · PHP 8.3 · MySQL 8 · Inertia 3 + Vue 3 (`<script setup lang="ts">
 - Touch **only** the files your task lists under "Files". If you need to change another file, stop and report, and explain why.
 - Routes: add them only to your feature's files, `routes/web/<feature>.php` and `routes/api/v1/<feature>.php`.
 - During development (nothing deployed), a column or index on an existing table is added by editing that table's migration, and the dev and test databases are rebuilt with `migrate:fresh`. A new migration is only for a new table.
-- Exception: the task's own section of `docs/FEATURES.md` is always in scope for its documenter.
+- Exception: the task's own section of `docs/04-business-logic.md` is always in scope for its documenter.
 
 ## Testing (TD-030, TD-031)
 - Work test-first: write the failing test, make it pass, then refactor.
@@ -135,7 +135,7 @@ Implements: TD-031, TD-050
 5. **Before finishing any task**, run `pgrep -af mysqld` (and check any other server you started) and report every server you started that is still running.
 
 ## Feature documentation (TD-140)
-- `docs/FEATURES.md` is the single, living explanation of the business logic, written for a reader who hasn't read the code. It has one section per feature, and nothing else.
+- `docs/04-business-logic.md` is the single, living explanation of the business logic, written for a reader who hasn't read the code. It has one section per feature, and nothing else.
 - Each plan's **documenter** subagent writes or updates only its own features' sections: what the feature does, its rules and its flow, in plain language. No file, class, method or test references.
 - Document only behaviour that exists in the code. The spec reviewer checks the section against the code before the plan is reported.
 

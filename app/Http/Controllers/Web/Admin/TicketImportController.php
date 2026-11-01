@@ -36,6 +36,7 @@ final class TicketImportController extends Controller
     {
         return Inertia::render('admin/imports/Create', [
             'maxUploadKb' => (int) config('imports.max_upload_kb'),
+            'autoAssignAvailable' => (bool) config('tickets.auto_assign'),
             'columns' => [
                 'required' => TicketCsvReader::REQUIRED_COLUMNS,
                 'optional' => array_values(array_diff(TicketCsvReader::COLUMNS, TicketCsvReader::REQUIRED_COLUMNS)),
@@ -47,7 +48,7 @@ final class TicketImportController extends Controller
     {
         $admin = $request->user();
         assert($admin instanceof User);
-        $import = $start->handle($admin, $request->csv());
+        $import = $start->handle($admin, $request->csv(), $request->autoAssign());
 
         return to_route('admin.imports.show', $import)->with('success', 'Import started. Progress updates on this page.');
     }
@@ -55,7 +56,7 @@ final class TicketImportController extends Controller
     public function show(Request $request, TicketImport $import): Response
     {
         return Inertia::render('admin/imports/Show', [
-            'ticketImport' => fn (): mixed => TicketImportResource::make($import->load('user:id,name'))->toResponse($request)->getData(true)['data'],
+            'ticketImport' => fn (): mixed => TicketImportResource::make($import->load('user:id,name,avatar_path,last_seen_at'))->toResponse($request)->getData(true)['data'],
             'importErrors' => fn (): AnonymousResourceCollection => TicketImportErrorResource::collection($this->imports->errors($import, 25)),
         ]);
     }

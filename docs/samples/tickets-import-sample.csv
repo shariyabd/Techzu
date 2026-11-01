@@ -1,0 +1,8 @@
+external_reference,subject,description,priority,category,customer_email,status,created_at
+SAMPLE-001,Card payment declined at checkout,"Our company card is declined when we try to renew, but the bank says nothing was blocked.",high,billing,customer1@example.com,open,2026-01-05 10:15
+SAMPLE-002,Export to Excel is missing columns,The monthly export no longer includes the cost centre column.,medium,technical-support,customer2@example.com,in_progress,2026-01-06 14:30
+SAMPLE-003,Add a second admin to our account,Please make our finance lead an administrator as well.,low,account-access,customer5@example.com,waiting_for_customer,2026-01-07 09:00
+SAMPLE-004,Dark mode for the mobile app,It would be great if the mobile app had a dark theme.,low,feature-requests,customer7@example.com,resolved,2026-01-02 16:45
+SAMPLE-005,Password reset email never arrives,"I asked for a reset link three times, nothing in inbox or spam.",critical,account-access,not-a-customer@example,open,2026-01-08 11:20
+,Invoice address is wrong,Our invoices still show our old office address.,medium,billing,customer3@example.com,open,
+,Invoice address is wrong,Our invoices still show our old office address.,medium,billing,customer3@example.com,open,

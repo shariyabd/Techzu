@@ -35,14 +35,16 @@ it('rejects a non-CSV or oversized upload', function (Closure $file): void {
     'larger than 50 MB' => [fn (): UploadedFile => UploadedFile::fake()->create('tickets.csv', 51201, 'text/csv')],
 ]);
 
-it('stores the upload privately under a random name and redirects to the import', function (): void {
+it('stores the upload privately under a random name with the auto-assign choice and redirects to the import', function (): void {
     $response = $this->actingAs($this->admin)->post(route('admin.imports.store'), [
         'file' => UploadedFile::fake()->createWithContent('tickets.csv', ImportCsvFixture::mixed()),
+        'auto_assign' => '1',
     ]);
 
     $import = TicketImport::query()->sole();
     $response->assertRedirect(route('admin.imports.show', $import));
     expect($import->original_name)->toBe('tickets.csv')
+        ->and($import->auto_assign)->toBeTrue()
         ->and($import->path)->toStartWith('imports/')
         ->and($import->path)->not->toContain('tickets.csv');
     Storage::disk((string) config('imports.disk'))->assertExists($import->path);

@@ -21,6 +21,7 @@ final class TicketImportResource extends JsonResource
             'original_name' => $this->original_name,
             'status' => ['value' => $this->status->value, 'label' => $this->status->label()],
             'is_finished' => $finished,
+            'auto_assign' => (bool) $this->auto_assign,
             'total_rows' => $this->total_rows,
             'processed_rows' => $this->processed_rows,
             'succeeded_rows' => $this->succeeded_rows,

@@ -14,7 +14,7 @@ final class TicketImportQuery
     /** @return LengthAwarePaginator<int, TicketImport> */
     public function paginate(int $perPage): LengthAwarePaginator
     {
-        return TicketImport::query()->with('user:id,name')->latest('id')->paginate($perPage);
+        return TicketImport::query()->with('user:id,name,avatar_path,last_seen_at')->latest('id')->paginate($perPage);
     }
 
     /** @return LengthAwarePaginator<int, TicketImportError> */

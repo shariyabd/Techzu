@@ -9,6 +9,7 @@ use App\Events\TicketImportFinished;
 use App\Exceptions\Domain\ImportHeaderInvalid;
 use App\Models\TicketImport;
 use App\Models\TicketImportError;
+use App\Services\Imports\ImportFileAccess;
 use App\Services\Imports\TicketCsvReader;
 use Carbon\CarbonImmutable;
 use Illuminate\Bus\Batch;
@@ -17,7 +18,6 @@ use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 final class PrepareTicketImport implements ShouldQueue
@@ -34,28 +34,34 @@ final class PrepareTicketImport implements ShouldQueue
         $this->onQueue('imports');
     }
 
-    public function handle(TicketCsvReader $reader): void
+    public function handle(TicketCsvReader $reader, ImportFileAccess $files): void
     {
         $import = TicketImport::query()->find($this->importId);
 
-        if ($import === null || $import->status !== ImportStatus::Pending) {
+        if ($import === null || ! $this->needsPreparing($import)) {
             return;
         }
 
-        $path = Storage::disk((string) config('imports.disk'))->path($import->path);
-
         try {
-            $reader->header($path);
+            ['rows' => $rows, 'chunks' => $chunks] = $files->withLocalPath(
+                (string) config('imports.disk'),
+                $import->path,
+                static function (string $path) use ($reader): array {
+                    $reader->header($path);
+
+                    return $reader->scan($path, max(1, (int) config('imports.chunk_size')));
+                },
+            );
         } catch (ImportHeaderInvalid $exception) {
             $this->markFailed($import, ['header' => [$exception->getMessage()]]);
 
             return;
         }
 
-        ['rows' => $rows, 'chunks' => $chunks] = $reader->scan($path, max(1, (int) config('imports.chunk_size')));
         $import->status = ImportStatus::Processing;
         $import->total_rows = $rows;
-        $import->started_at = CarbonImmutable::now();
+        $import->batch_id = null;
+        $import->started_at ??= CarbonImmutable::now();
         $import->save();
 
         if ($rows === 0) {
@@ -70,6 +76,9 @@ final class PrepareTicketImport implements ShouldQueue
             ->name('ticket-import-'.$importId)
             ->onQueue('imports')
             ->allowFailures()
+            ->before(static function (Batch $batch) use ($stampBatch): void {
+                $stampBatch($batch);
+            })
             ->finally(static function (Batch $batch) use ($importId, $stampBatch): void {
                 $stampBatch($batch);
                 FinalizeTicketImport::dispatch($importId);
@@ -86,6 +95,15 @@ final class PrepareTicketImport implements ShouldQueue
         if ($import !== null && ! $import->status->isFinished()) {
             $this->markFailed($import, ['import' => ['The import could not be prepared. See the application log.']]);
         }
+    }
+
+    private function needsPreparing(TicketImport $import): bool
+    {
+        return match ($import->status) {
+            ImportStatus::Pending => true,
+            ImportStatus::Processing => $import->batch_id === null || Bus::findBatch($import->batch_id) === null,
+            default => false,
+        };
     }
 
     /**

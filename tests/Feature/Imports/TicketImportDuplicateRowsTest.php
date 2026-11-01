@@ -83,3 +83,37 @@ it('points a duplicate only at a row that was actually imported', function (): v
 
     expect($tracker->check($row, 4, $timezone))->toBe('Duplicate of row 3.');
 });
+
+function undatedCsv(string ...$rows): string
+{
+    return implode("\n", ['subject,description,priority,category,customer_email', ...$rows])."\n";
+}
+
+it('rejects an undated row without reference whose customer, subject and description match an existing ticket', function (): void {
+    Ticket::factory()->create(['customer_id' => $this->customer->id, 'subject' => 'Printer on fire', 'description' => 'The printer   is on fire']);
+
+    $import = ImportCsvFixture::run($this->admin, undatedCsv(
+        'printer on fire,THE PRINTER IS ON FIRE,low,hardware,Customer@example.com',
+        'Printer on fire,A different problem,low,hardware,customer@example.com',
+    ));
+
+    $error = TicketImportError::query()->where('ticket_import_id', $import->id)->sole();
+    expect($import->succeeded_rows)->toBe(1)
+        ->and($error->row_number)->toBe(2)
+        ->and($error->errors)->toBe(['row' => ['Duplicate of an existing ticket.']]);
+});
+
+it('rejects a repeated undated row without reference in the same file and points at the first', function (): void {
+    config(['imports.chunk_size' => 500]);
+
+    $import = ImportCsvFixture::run($this->admin, undatedCsv(
+        'Printer on fire,Broken,low,hardware,customer@example.com',
+        'Printer on fire,Broken again,low,hardware,customer@example.com',
+        'Printer on fire,  broken ,high,hardware,customer@example.com',
+    ));
+
+    $error = TicketImportError::query()->where('ticket_import_id', $import->id)->sole();
+    expect($import->succeeded_rows)->toBe(2)
+        ->and($error->row_number)->toBe(4)
+        ->and($error->errors)->toBe(['row' => ['Duplicate of row 2.']]);
+});

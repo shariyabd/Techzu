@@ -22,14 +22,14 @@ final class TicketImportController extends Controller
     {
         $admin = $request->user();
         assert($admin instanceof User);
-        $import = $start->handle($admin, $request->csv());
+        $import = $start->handle($admin, $request->csv(), $request->autoAssign());
 
-        return TicketImportResource::make($import->load('user:id,name'))->response()->setStatusCode(202);
+        return TicketImportResource::make($import->load('user:id,name,avatar_path,last_seen_at'))->response()->setStatusCode(202);
     }
 
     public function show(TicketImport $import): TicketImportResource
     {
-        return TicketImportResource::make($import->load('user:id,name'));
+        return TicketImportResource::make($import->load('user:id,name,avatar_path,last_seen_at'));
     }
 
     public function errors(ListRequest $request, TicketImport $import, TicketImportQuery $imports): AnonymousResourceCollection
