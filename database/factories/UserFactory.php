@@ -25,6 +25,7 @@ class UserFactory extends Factory
             'remember_token' => Str::random(10),
             'is_available' => true,
             'last_assigned_at' => null,
+            'last_seen_at' => null,
         ];
     }
 
@@ -45,6 +46,13 @@ class UserFactory extends Factory
     public function customer(): static
     {
         return $this->afterCreating(fn (User $user): User => $user->assignRole(Role::Customer));
+    }
+
+    public function withAvatar(?string $path = null): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'avatar_path' => $path ?? 'avatars/'.Str::random(40).'.webp',
+        ]);
     }
 
     public function unavailable(): static

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { Link, useForm } from '@inertiajs/vue3';
+import { computed } from 'vue';
 import InputError from '@/components/InputError.vue';
+import AvatarField from '@/components/profile/AvatarField.vue';
 import SubmitButton from '@/components/SubmitButton.vue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -13,6 +15,7 @@ import {
 import { index, store, update } from '@/routes/admin/users';
 import type {
     AdminUser,
+    AvatarRules,
     CategoryOption,
     RoleOption,
     RoleValue,
@@ -23,6 +26,8 @@ const props = defineProps<{
     roles: RoleOption[];
     categories: CategoryOption[];
     isSelf?: boolean;
+    avatarUrl?: string | null;
+    avatarRules?: AvatarRules;
 }>();
 
 const form = useForm<{
@@ -32,6 +37,8 @@ const form = useForm<{
     role: RoleValue;
     category_ids: number[];
     is_available: boolean;
+    avatar: File | null;
+    remove_avatar: boolean;
 }>({
     name: props.user?.name ?? '',
     email: props.user?.email ?? '',
@@ -39,7 +46,23 @@ const form = useForm<{
     role: props.user?.role ?? 'customer',
     category_ids: props.user?.categories?.map((category) => category.id) ?? [],
     is_available: props.user?.is_available ?? true,
+    avatar: null,
+    remove_avatar: false,
 });
+
+const currentAvatar = computed(() =>
+    form.remove_avatar ? null : (props.avatarUrl ?? null),
+);
+
+const selectAvatar = (file: File): void => {
+    form.avatar = file;
+    form.remove_avatar = false;
+};
+
+const removeAvatar = (): void => {
+    form.avatar = null;
+    form.remove_avatar = true;
+};
 
 const toggleCategory = (id: number, checked: boolean): void => {
     form.category_ids = checked
@@ -48,9 +71,23 @@ const toggleCategory = (id: number, checked: boolean): void => {
 };
 
 const submit = (): void => {
+    if (props.user && form.avatar !== null) {
+        form.transform((data) => ({
+            ...data,
+            category_ids:
+                data.category_ids.length > 0 ? data.category_ids : null,
+            _method: 'patch',
+        })).post(update.url(props.user.id), {
+            forceFormData: true,
+            onSuccess: () => form.reset('password', 'avatar', 'remove_avatar'),
+        });
+
+        return;
+    }
+
     if (props.user) {
-        form.patch(update.url(props.user.id), {
-            onSuccess: () => form.reset('password'),
+        form.transform((data) => data).patch(update.url(props.user.id), {
+            onSuccess: () => form.reset('password', 'avatar', 'remove_avatar'),
         });
 
         return;
@@ -62,6 +99,25 @@ const submit = (): void => {
 
 <template>
     <form class="flex flex-col gap-5" @submit.prevent="submit">
+        <div v-if="user && avatarRules" class="grid gap-2">
+            <span class="text-sm font-medium">Profile image</span>
+            <AvatarField
+                :name="form.name || user.name"
+                :src="currentAvatar"
+                :pending="form.avatar"
+                :rules="avatarRules"
+                :error="form.errors.avatar"
+                @select="selectAvatar"
+                @remove="removeAvatar"
+            />
+            <p
+                v-if="form.avatar || form.remove_avatar"
+                class="text-xs text-muted-foreground"
+            >
+                The image change is saved with the rest of the form.
+            </p>
+        </div>
+
         <div class="grid gap-2">
             <Label for="name">Name</Label>
             <Input id="name" v-model="form.name" required maxlength="255" />

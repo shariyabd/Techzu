@@ -4,14 +4,18 @@ declare(strict_types=1);
 
 use App\Enums\TicketPriority;
 use App\Enums\TicketStatus;
+use App\Events\TicketCreated;
 use App\Models\Category;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Services\Dashboard\DashboardStats;
 use App\Services\Sla\SlaQuery;
+use App\Services\Sla\SlaSettingsRepository;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
     Cache::flush();
@@ -63,9 +67,9 @@ it('lists every priority, critical first, counting active tickets only', functio
 
 it('lists active and breached tickets per agent, including idle agents', function (): void {
     expect(app(DashboardStats::class)->summary()['by_agent'])->toBe([
-        ['agent_id' => $this->alpha->id, 'name' => 'Agent Alpha', 'active' => 2, 'breached' => 1],
-        ['agent_id' => $this->bravo->id, 'name' => 'Agent Bravo', 'active' => 2, 'breached' => 0],
-        ['agent_id' => $this->charlie->id, 'name' => 'Agent Charlie', 'active' => 0, 'breached' => 0],
+        ['agent_id' => $this->alpha->id, 'name' => 'Agent Alpha', 'avatar_url' => null, 'active' => 2, 'breached' => 1],
+        ['agent_id' => $this->bravo->id, 'name' => 'Agent Bravo', 'avatar_url' => null, 'active' => 2, 'breached' => 0],
+        ['agent_id' => $this->charlie->id, 'name' => 'Agent Charlie', 'avatar_url' => null, 'active' => 0, 'breached' => 0],
     ]);
 });
 
@@ -97,6 +101,7 @@ it('buckets created and resolved tickets by business-timezone day over the trend
 });
 
 it('runs five queries on a cold cache', function (): void {
+    app(SlaSettingsRepository::class)->current();
     DB::enableQueryLog();
     app(DashboardStats::class)->summary();
     $cold = count(DB::getQueryLog());
@@ -110,6 +115,18 @@ it('serves cached figures for 60 seconds', function (): void {
     expect(app(DashboardStats::class)->summary())->toBe($first);
     $this->travel(61)->seconds();
     expect(app(DashboardStats::class)->summary()['totals']['open'])->toBe(6);
+});
+
+it('serves fresh figures right after a ticket event that changes the counts', function (): void {
+    Notification::fake();
+    Queue::fake();
+    $first = app(DashboardStats::class)->summary();
+    $ticket = Ticket::factory()->create(['status' => TicketStatus::Open, 'assigned_agent_id' => null]);
+
+    TicketCreated::dispatch($ticket, null);
+
+    expect($first['totals']['open'])->toBe(5)
+        ->and(app(DashboardStats::class)->summary()['totals']['open'])->toBe(6);
 });
 
 it("returns the viewer's active assigned tickets, soonest deadline first", function (): void {

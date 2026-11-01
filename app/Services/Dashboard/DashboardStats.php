@@ -10,12 +10,13 @@ use App\Enums\TicketStatus;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Services\Sla\SlaQuery;
+use App\Services\Sla\SlaSettingsRepository;
+use App\Services\Tickets\TicketDataCache;
 use Carbon\CarbonImmutable;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Query\Builder as QueryBuilder;
-use Illuminate\Support\Facades\Cache;
 
 final class DashboardStats
 {
@@ -23,10 +24,17 @@ final class DashboardStats
 
     private const SLA_HEALTH_KEYS = ['within', 'approaching', 'breached', 'paused'];
 
-    /** @return array{totals: array<string, int>, sla_health: array<string, int>, by_status: list<array{status: string, count: int}>, by_priority: list<array{priority: string, count: int}>, by_agent: list<array{agent_id: int, name: string, active: int, breached: int}>, trend: list<array{date: string, created: int, resolved: int}>} */
+    public function __construct(
+        private readonly TicketDataCache $cache,
+        private readonly SlaSettingsRepository $settings,
+    ) {}
+
+    /** @return array{totals: array<string, int>, sla_health: array<string, int>, by_status: list<array{status: string, count: int}>, by_priority: list<array{priority: string, count: int}>, by_agent: list<array{agent_id: int, name: string, avatar_url: string|null, active: int, breached: int}>, trend: list<array{date: string, created: int, resolved: int}>} */
     public function summary(): array
     {
-        return Cache::remember(self::CACHE_KEY, (int) config('tickets.dashboard.cache_ttl_seconds'), function (): array {
+        $timezone = $this->settings->timezone();
+
+        return $this->cache->remember(self::CACHE_KEY, (int) config('tickets.dashboard.cache_ttl_seconds'), function () use ($timezone): array {
             $now = CarbonImmutable::now();
             $counts = $this->totals($now);
             $breakdown = $this->activeBreakdown();
@@ -37,9 +45,9 @@ final class DashboardStats
                 'by_status' => $breakdown['by_status'],
                 'by_priority' => $breakdown['by_priority'],
                 'by_agent' => $this->byAgent($now),
-                'trend' => $this->trend($now),
+                'trend' => $this->trend($now, $timezone),
             ];
-        });
+        }, $timezone);
     }
 
     /** @return Collection<int, Ticket> */
@@ -132,10 +140,10 @@ final class DashboardStats
     }
 
     /** @return list<array{date: string, created: int, resolved: int}> */
-    private function trend(CarbonImmutable $now): array
+    private function trend(CarbonImmutable $now, string $timezone): array
     {
         $days = max(1, (int) config('tickets.dashboard.trend_days'));
-        $today = $now->setTimezone((string) config('business_hours.timezone'))->startOfDay();
+        $today = $now->setTimezone($timezone)->startOfDay();
         $starts = array_map(static fn (int $offset): CarbonImmutable => $today->subDays($offset), range($days - 1, 0));
         $bounds = array_map(
             static fn (CarbonImmutable $start): array => [$start->utc(), $start->addDay()->utc()],
@@ -184,13 +192,13 @@ final class DashboardStats
         return array_map(static fn (int $day): int => (int) ($row["d{$day}"] ?? 0), array_keys($bounds));
     }
 
-    /** @return list<array{agent_id: int, name: string, active: int, breached: int}> */
+    /** @return list<array{agent_id: int, name: string, avatar_url: string|null, active: int, breached: int}> */
     private function byAgent(CarbonImmutable $now): array
     {
         $active = self::values(TicketStatus::active());
 
         return User::query()
-            ->select(['id', 'name'])
+            ->select(['id', 'name', 'avatar_path'])
             ->whereHas('roles', static fn (Builder $roles): Builder => $roles->where('name', Role::Agent->value))
             ->withCount([
                 'assignedTickets as active_count' => static fn (Builder $tickets): Builder => $tickets->whereIn('status', $active),
@@ -203,6 +211,7 @@ final class DashboardStats
             ->map(static fn (User $agent): array => [
                 'agent_id' => $agent->id,
                 'name' => $agent->name,
+                'avatar_url' => $agent->avatarUrl(),
                 'active' => (int) $agent->getAttribute('active_count'),
                 'breached' => (int) $agent->getAttribute('breached_count'),
             ])

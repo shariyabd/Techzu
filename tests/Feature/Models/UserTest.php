@@ -4,17 +4,16 @@ declare(strict_types=1);
 
 use App\Models\User;
 
-it('reports staff and admin status from the spatie role', function (?string $state, bool $staff, bool $admin): void {
+it('reports admin status from the spatie role', function (?string $state, bool $admin): void {
     $factory = User::factory();
     $user = ($state === null ? $factory : $factory->{$state}())->create();
 
-    expect($user->isStaff())->toBe($staff)
-        ->and($user->isAdmin())->toBe($admin);
+    expect($user->isAdmin())->toBe($admin);
 })->with([
-    'admin' => ['admin', true, true],
-    'agent' => ['agent', true, false],
-    'customer' => ['customer', false, false],
-    'no role' => [null, false, false],
+    'admin' => ['admin', true],
+    'agent' => ['agent', false],
+    'customer' => ['customer', false],
+    'no role' => [null, false],
 ]);
 
 it('scopes available agents to the agent role with is_available', function (): void {

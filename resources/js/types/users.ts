@@ -8,11 +8,25 @@ export type AdminUser = {
     id: number;
     name: string;
     email: string;
+    avatar_url: string | null;
     role: RoleValue | null;
     is_available: boolean;
     last_assigned_at: string | null;
     categories?: { id: number; name: string }[];
     created_at: string | null;
+};
+
+export type AvatarRules = {
+    max_kb: number;
+    extensions: string[];
+    min_dimension: number;
+    max_dimension: number;
+};
+
+export type ProfileData = {
+    name: string;
+    email: string;
+    avatar_url: string | null;
 };
 
 export type UserFilters = { q: string | null; role: RoleValue | null };

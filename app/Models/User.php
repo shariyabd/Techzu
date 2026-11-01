@@ -27,6 +27,8 @@ use Spatie\Permission\Traits\HasRoles;
  * @property string|null $remember_token
  * @property bool $is_available
  * @property CarbonImmutable|null $last_assigned_at
+ * @property string|null $avatar_path
+ * @property CarbonImmutable|null $last_seen_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -64,6 +66,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_available' => 'boolean',
             'last_assigned_at' => 'immutable_datetime',
+            'last_seen_at' => 'immutable_datetime',
         ];
     }
 
@@ -85,9 +88,15 @@ class User extends Authenticatable
         return $this->hasMany(Ticket::class, 'customer_id');
     }
 
-    public function isStaff(): bool
+    public function avatarUrl(): ?string
     {
-        return $this->hasAnyRole([Role::Admin, Role::Agent]);
+        $path = $this->getAttributeFromArray('avatar_path');
+
+        if (! is_string($path) || $path === '') {
+            return null;
+        }
+
+        return route('avatars.show', ['user' => $this->getKey(), 'v' => substr(sha1($path), 0, 12)]);
     }
 
     public function isAdmin(): bool

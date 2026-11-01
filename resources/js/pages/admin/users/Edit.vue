@@ -5,13 +5,20 @@ import PageHeader from '@/components/PageHeader.vue';
 import { Card, CardContent } from '@/components/ui/card';
 import { edit, index } from '@/routes/admin/users';
 import type { BreadcrumbItem } from '@/types';
-import type { AdminUser, CategoryOption, RoleOption } from '@/types/users';
+import type {
+    AdminUser,
+    AvatarRules,
+    CategoryOption,
+    RoleOption,
+} from '@/types/users';
 
 defineProps<{
     user: AdminUser;
     roles: RoleOption[];
     categories: CategoryOption[];
     isSelf: boolean;
+    avatarUrl: string | null;
+    avatarRules: AvatarRules;
 }>();
 
 defineOptions({
@@ -36,6 +43,8 @@ defineOptions({
                     :roles="roles"
                     :categories="categories"
                     :is-self="isSelf"
+                    :avatar-url="avatarUrl"
+                    :avatar-rules="avatarRules"
                 />
             </CardContent>
         </Card>

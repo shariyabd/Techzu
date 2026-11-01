@@ -12,6 +12,7 @@ use App\Http\Requests\Users\StoreRequest;
 use App\Http\Requests\Users\UpdateRequest;
 use App\Http\Resources\V1\AdminUserResource;
 use App\Models\User;
+use App\Services\Users\AvatarRules;
 use App\Services\Users\UserDirectory;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -20,7 +21,10 @@ use Inertia\Response;
 
 final class UserController extends Controller
 {
-    public function __construct(private readonly UserDirectory $directory) {}
+    public function __construct(
+        private readonly UserDirectory $directory,
+        private readonly AvatarRules $avatarRules,
+    ) {}
 
     public function index(ListRequest $request): Response
     {
@@ -55,6 +59,8 @@ final class UserController extends Controller
             'roles' => $this->directory->roleOptions(),
             'categories' => $this->directory->categoryOptions(),
             'isSelf' => $this->admin($request)->is($user),
+            'avatarUrl' => $user->avatarUrl(),
+            'avatarRules' => $this->avatarRules->hints(),
         ]);
     }
 

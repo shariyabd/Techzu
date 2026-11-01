@@ -1,10 +1,10 @@
-import { FileUp, LayoutGrid, Settings, Ticket } from '@lucide/vue';
+import { FileUp, Headset, LayoutGrid, Settings, Ticket } from '@lucide/vue';
 import type { Component } from 'vue';
 import type { SharedProps } from '@/types/shared';
 
 export type NavGroup = 'support' | 'admin';
 
-export type RailKey = 'tickets' | 'dashboard' | 'imports' | 'admin';
+export type RailKey = 'tickets' | 'dashboard' | 'agents' | 'imports' | 'admin';
 
 export type NavItem = {
     title: string;
@@ -52,6 +52,7 @@ export function groupedNavigationFor(props: SharedProps): NavSection[] {
 const railDefinitions: { key: RailKey; label: string; icon: Component }[] = [
     { key: 'tickets', label: 'Tickets', icon: Ticket },
     { key: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
+    { key: 'agents', label: 'Agents', icon: Headset },
     { key: 'imports', label: 'Imports', icon: FileUp },
     { key: 'admin', label: 'Admin', icon: Settings },
 ];

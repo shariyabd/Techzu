@@ -27,8 +27,8 @@ const user = computed(() => page.props.auth.user);
             >
                 <Avatar class="size-8">
                     <AvatarImage
-                        v-if="user.avatar"
-                        :src="user.avatar"
+                        v-if="user.avatar_url"
+                        :src="user.avatar_url"
                         :alt="user.name"
                     />
                     <AvatarFallback

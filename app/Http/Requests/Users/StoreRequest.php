@@ -24,7 +24,7 @@ class StoreRequest extends FormRequest
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', Rule::unique('users', 'email')],
             'password' => ['required', 'string', Password::defaults()],
             'role' => ['required', Rule::enum(Role::class)],
-            'category_ids' => ['sometimes', 'array'],
+            'category_ids' => ['sometimes', 'nullable', 'array'],
             'category_ids.*' => ['integer', 'distinct', Rule::exists('categories', 'id')],
             'is_available' => ['sometimes', 'boolean'],
         ];

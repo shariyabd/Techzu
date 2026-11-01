@@ -5,6 +5,7 @@ import { computed, ref, watch } from 'vue';
 import TableCard from '@/components/admin/TableCard.vue';
 import EmptyState from '@/components/EmptyState.vue';
 import PageHeader from '@/components/PageHeader.vue';
+import UserAvatar from '@/components/UserAvatar.vue';
 import ResourcePagination from '@/components/ResourcePagination.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -169,15 +170,23 @@ const agentProfile = (user: AdminUser): string => {
                     <TableBody>
                         <TableRow v-for="user in users.data" :key="user.id">
                             <TableCell class="font-medium">
-                                <Link
-                                    :href="edit(user.id)"
-                                    class="hover:underline"
-                                    >{{ user.name }}</Link
-                                >
-                                <div
-                                    class="text-xs font-normal text-muted-foreground md:hidden"
-                                >
-                                    {{ user.email }}
+                                <div class="flex items-center gap-3">
+                                    <UserAvatar
+                                        :name="user.name"
+                                        :src="user.avatar_url"
+                                    />
+                                    <div class="min-w-0">
+                                        <Link
+                                            :href="edit(user.id)"
+                                            class="hover:underline"
+                                            >{{ user.name }}</Link
+                                        >
+                                        <div
+                                            class="text-xs font-normal text-muted-foreground md:hidden"
+                                        >
+                                            {{ user.email }}
+                                        </div>
+                                    </div>
                                 </div>
                             </TableCell>
                             <TableCell class="hidden md:table-cell">{{

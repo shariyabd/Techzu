@@ -3,7 +3,7 @@ export type User = {
     name: string;
     email: string;
     roles: string[];
-    avatar?: string;
+    avatar_url: string | null;
 };
 
 export type AuthCan = {
@@ -13,6 +13,9 @@ export type AuthCan = {
     manageCategories: boolean;
     manageHolidays: boolean;
     createOnBehalf: boolean;
+    manageSla: boolean;
+    viewAgents: boolean;
+    useSavedReplies: boolean;
 };
 
 export type Auth = {

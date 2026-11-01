@@ -17,6 +17,8 @@ return new class extends Migration
             $table->string('password');
             $table->boolean('is_available')->default(true)->index();
             $table->timestamp('last_assigned_at')->nullable();
+            $table->string('avatar_path')->nullable();
+            $table->timestamp('last_seen_at')->nullable()->index();
             $table->rememberToken();
             $table->timestamps();
         });

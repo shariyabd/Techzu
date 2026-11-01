@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { Link, router } from '@inertiajs/vue3';
-import { LogOut } from '@lucide/vue';
+import { LogOut, UserCog } from '@lucide/vue';
 import {
     DropdownMenuItem,
     DropdownMenuLabel,
     DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import UserInfo from '@/components/UserInfo.vue';
+import { disconnectRealtime } from '@/lib/echo';
 import { logout } from '@/routes';
+import { edit as editProfile } from '@/routes/profile';
 import type { User } from '@/types';
 
 type Props = {
@@ -31,8 +33,20 @@ defineProps<Props>();
     <DropdownMenuItem :as-child="true">
         <Link
             class="block w-full cursor-pointer"
+            :href="editProfile()"
+            data-test="profile-link"
+        >
+            <UserCog class="mr-2 h-4 w-4" />
+            Profile settings
+        </Link>
+    </DropdownMenuItem>
+    <DropdownMenuSeparator />
+    <DropdownMenuItem :as-child="true">
+        <Link
+            class="block w-full cursor-pointer"
             :href="logout()"
             @click="handleLogout"
+            @success="disconnectRealtime"
             as="button"
             data-test="logout-button"
         >

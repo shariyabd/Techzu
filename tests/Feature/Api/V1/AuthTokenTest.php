@@ -90,6 +90,7 @@ it('returns the authenticated user with roles and permissions', function (): voi
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
+            'avatar_url' => null,
             'roles' => [],
             'permissions' => ['example.read'],
         ]]);

@@ -2,6 +2,7 @@
 import { Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import type { ChartHref } from '@/components/dashboard/chart';
+import UserAvatar from '@/components/UserAvatar.vue';
 import type { AgentLoad } from '@/types/dashboard';
 
 const props = defineProps<{
@@ -40,12 +41,19 @@ const width = (value: number): string => `${(value / largest.value) * 100}%`;
             <li v-for="agent in agents" :key="agent.agent_id">
                 <Link
                     :href="hrefFor(agent)"
-                    class="group grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_4.5rem] items-center gap-3 rounded-md px-2 py-2 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                    class="group grid grid-cols-[minmax(0,11rem)_minmax(0,1fr)_4.5rem] items-center gap-3 rounded-md px-2 py-2 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
                     :title="`${agent.name}: ${agent.active} active, ${agent.breached} breached`"
                 >
-                    <span class="truncate text-sm group-hover:underline">{{
-                        agent.name
-                    }}</span>
+                    <span class="flex min-w-0 items-center gap-2">
+                        <UserAvatar
+                            :name="agent.name"
+                            :src="agent.avatar_url"
+                            class="size-6"
+                        />
+                        <span class="truncate text-sm group-hover:underline">{{
+                            agent.name
+                        }}</span>
+                    </span>
                     <span
                         class="flex h-2.5 overflow-hidden rounded-full bg-muted"
                         aria-hidden="true"

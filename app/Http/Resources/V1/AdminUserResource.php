@@ -19,6 +19,7 @@ final class AdminUserResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'email' => $this->email,
+            'avatar_url' => $this->resource->avatarUrl(),
             'role' => $this->relationLoaded('roles') ? $this->getRoleNames()->first() : null,
             'is_available' => (bool) $this->is_available,
             'last_assigned_at' => $this->last_assigned_at?->toIso8601String(),

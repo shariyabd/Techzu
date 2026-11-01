@@ -18,6 +18,7 @@ final class CurrentUserResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'email' => $this->email,
+            'avatar_url' => $this->resource instanceof User ? $this->resource->avatarUrl() : null,
             'roles' => $this->getRoleNames()->values()->all(),
             'permissions' => $this->getAllPermissions()->pluck('name')->values()->all(),
         ];

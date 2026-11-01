@@ -22,6 +22,7 @@ import PageHeader from '@/components/PageHeader.vue';
 import PriorityBadge from '@/components/tickets/PriorityBadge.vue';
 import SlaBadge from '@/components/tickets/SlaBadge.vue';
 import StatusBadge from '@/components/tickets/StatusBadge.vue';
+import { realtimeChannels, useRealtimeReload } from '@/composables/useRealtime';
 import { dashboard } from '@/routes';
 import { index as ticketsIndex, show as ticketShow } from '@/routes/tickets';
 import type { AgentLoad, DashboardStats, SlaHealth } from '@/types/dashboard';
@@ -42,6 +43,13 @@ const props = defineProps<{
 }>();
 
 usePoll(60_000, { only: ['stats', 'myTickets'] });
+
+useRealtimeReload(
+    () => [realtimeChannels.queue()],
+    ['ticket.changed', 'queue.changed'],
+    () => ({ only: ['stats', 'myTickets'] }),
+    1500,
+);
 
 const active = (query: Record<string, string | string[]> = {}) =>
     ticketsIndex({ query: { scope: 'active', ...query } });

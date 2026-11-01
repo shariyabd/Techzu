@@ -19,6 +19,7 @@ export type PriorityCount = { priority: TicketPriorityValue; count: number };
 export type AgentLoad = {
     agent_id: number;
     name: string;
+    avatar_url: string | null;
     active: number;
     breached: number;
 };

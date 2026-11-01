@@ -17,6 +17,8 @@ final class UserSummaryResource extends JsonResource
         return [
             'id' => $this->id,
             'name' => $this->name,
+            'avatar_url' => $this->resource instanceof User ? $this->resource->avatarUrl() : null,
+            'last_seen_at' => $this->last_seen_at?->toIso8601String(),
         ];
     }
 }
