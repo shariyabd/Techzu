@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Form, Head, usePage } from '@inertiajs/vue3';
-import { store } from '@/actions/App/Http/Controllers/Auth/RegisterController';
+import { store } from '@/actions/App/Http/Controllers/Web/Auth/RegisterController';
 import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
 import TextLink from '@/components/TextLink.vue';

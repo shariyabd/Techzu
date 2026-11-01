@@ -9,7 +9,7 @@ Read before writing any code. Sources of truth:
 If these disagree, **stop and report**. Don't improvise.
 
 ## Stack
-Laravel 13 · PHP 8.3 · MySQL 8 · Inertia 3 + Vue 3 (`<script setup lang="ts">`) · Tailwind + shadcn-vue · Sanctum (API tokens) + plain session auth with password reset (no Fortify, no email verification, TD-002) · spatie/laravel-permission · spatie/laravel-activitylog · Pest 4 · Larastan level 6 · Pint.
+Laravel 13 · PHP 8.3 · MySQL 8 · Inertia 3 + Vue 3 (`<script setup lang="ts">`) · Tailwind + shadcn-vue · Sanctum (API tokens) + plain session auth with password reset and email verification for self-registered customers (no Fortify; TD-002, TD-006) · spatie/laravel-permission · spatie/laravel-activitylog · Pest 4 · Larastan level 6 · Pint.
 
 ## Architecture rules (TD-001)
 1. **Controllers are thin.** Their only steps are `authorize` → FormRequest → one Action or Service → Inertia response or API Resource. No queries beyond route-model binding, and no business logic.
@@ -58,7 +58,8 @@ Laravel 13 · PHP 8.3 · MySQL 8 · Inertia 3 + Vue 3 (`<script setup lang="ts">
 
 ## File ownership (TD-140)
 - Touch **only** the files your task lists under "Files". If you need to change another file, stop and report, and explain why.
-- Routes: add them only to your feature's files, `routes/web/<feature>.php` and `routes/api/v1/<feature>.php`.
+- Routes (TD-007): all web routes live in `routes/web.php` and all `/api/v1` routes in `routes/api.php`. Add a route inside the existing group that matches its middleware (guest, signed-in, verified app, or the `admin` prefix group) and keep its `can:` middleware. Because these files are shared, a plan gives route changes in one wave to a single subtask.
+- Controllers (TD-007): `app/Http/Controllers/Web/` for non-admin web controllers, `Web/Auth/` for authentication, `Admin/` for the web admin area, `Api/V1/` for the API and `Api/V1/Admin/` for the API admin area.
 - During development (nothing deployed), a column or index on an existing table is added by editing that table's migration, and the dev and test databases are rebuilt with `migrate:fresh`. A new migration is only for a new table.
 - Exception: the task's own section of `docs/04-business-logic.md` is always in scope for its documenter.
 

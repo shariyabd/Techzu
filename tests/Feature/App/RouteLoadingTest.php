@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Support\Facades\Route;
 
-it('loads feature route files from routes/web inside the web middleware group', function (): void {
+it('loads the web routes inside the web middleware group', function (): void {
     $route = Route::getRoutes()->getByName('dashboard');
 
     expect($route)->not->toBeNull()

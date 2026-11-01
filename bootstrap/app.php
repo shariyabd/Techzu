@@ -13,27 +13,17 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Route;
 use Inertia\Middleware\EncryptHistory;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
-        web: array_merge(
-            [__DIR__.'/../routes/web.php'],
-            glob(__DIR__.'/../routes/web/*.php') ?: [],
-        ),
+        web: __DIR__.'/../routes/web.php',
+        api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
-        then: function (): void {
-            foreach (glob(__DIR__.'/../routes/api/v1/*.php') ?: [] as $file) {
-                Route::middleware('api')
-                    ->prefix('api/v1')
-                    ->name('api.v1.')
-                    ->group($file);
-            }
-        },
+        apiPrefix: 'api/v1',
     )
-    ->withBroadcasting(__DIR__.'/../routes/channels.php', ['middleware' => ['web', 'auth']])
+    ->withBroadcasting(__DIR__.'/../routes/channels.php', ['middleware' => ['web', 'auth', 'verified']])
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->encryptCookies(except: ['sidebar_state']);
         $middleware->redirectUsersTo(fn (): string => route('home'));

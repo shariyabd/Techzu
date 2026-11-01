@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Actions\Auth;
 
+use App\Exceptions\Domain\EmailUnverified;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Timebox;
@@ -23,6 +24,10 @@ final class IssueApiToken
 
             if ($user === null || ! Hash::check($password, $user->password)) {
                 throw ValidationException::withMessages(['email' => __('auth.failed')]);
+            }
+
+            if (! $user->hasVerifiedEmail()) {
+                throw new EmailUnverified;
             }
 
             $abilities = $user->getAllPermissions()->pluck('name')->values()->all();

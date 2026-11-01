@@ -28,6 +28,8 @@ final class CreateUser
                 'is_available' => $isAvailable,
             ]);
 
+            $user->markEmailAsVerified();
+
             $role = Role::from($data['role']);
             $this->changeRole->handle($admin, $user, $role);
 

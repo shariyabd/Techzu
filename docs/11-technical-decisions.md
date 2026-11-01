@@ -15,7 +15,7 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 
 | Area | Decisions |
 |---|---|
-| Architecture & stack | TD-001 – TD-005 |
+| Architecture & stack | TD-001 – TD-007 (TD-002 partly superseded by TD-006) |
 | Authorization & security model | TD-010 – TD-012, TD-120, TD-121 |
 | Database | TD-020 – TD-026 |
 | Testing & tooling | TD-030 – TD-034 |
@@ -51,7 +51,7 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 **Decision.**
 - Single-purpose **Action** classes (`app/Actions/...`) are the only code that changes domain state. Each owns its transaction and dispatches domain events.
 - **Services** hold reusable logic that isn't a use case: `BusinessCalendar`, `SlaCalculator`, `TicketNumberGenerator`, `AgentSelector`, `TicketFilter`, `DashboardStats`.
-- Controllers in `Http/Controllers/Web` and `Http/Controllers/Api/V1` do only four things: authorize, validate (shared FormRequests), call one Action or Service, and return an Inertia response or an API Resource.
+- Controllers in `Http/Controllers/Web`, `Http/Controllers/Admin` and `Http/Controllers/Api/V1` (layout in TD-007) do only four things: authorize, validate (shared FormRequests), call one Action or Service, and return an Inertia response or an API Resource.
 
 **Why.**
 - One source of truth per rule. The web and API cannot drift apart.
@@ -68,7 +68,7 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 ---
 
 ### TD-002 — Inertia 3 + Vue 3 (TypeScript) via the official Laravel Vue starter kit
-**Status:** Accepted
+**Status:** Accepted; partly superseded by TD-006 (its "no email verification" rule is no longer in force)
 
 **Decision.** Use the Laravel 13 Vue starter kit (`laravel/vue-starter-kit:dev-main`): Inertia 3, Vue 3 Composition API with `<script setup lang="ts">`, Tailwind, and shadcn-vue components.
 
@@ -95,10 +95,10 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 - **Why:** the PRD asks for none of those features, and says not to use components for their own sake. Session login plus self-registration is three small classes.
 - **Alternatives rejected:** *keeping Fortify with most features disabled.* It still brings its provider, its action classes and the rule traits, which is indirection for two forms.
 
-**Password reset added back; email verification stays out (amended 2026-10-29, owner decision; plan P2).**
+**Password reset added back; email verification stays out (amended 2026-10-29, owner decision; plan P2). The email-verification part is superseded by TD-006 (2026-11-01).**
 - Forgot/reset password uses Laravel's built-in Password broker and the `password_reset_tokens` table. It has one small `PasswordResetController` and its FormRequests, with no Fortify.
 - Mail uses the `log` mailer (TD-005), so the reset link appears in `storage/logs/laravel.log`. Switching to SMTP is only a matter of setting `MAIL_MAILER`.
-- Email verification is omitted. The demo has no SMTP, seeded accounts are trusted, and the PRD doesn't ask for it. This limitation is documented in the README.
+- ~~Email verification is omitted. The demo has no SMTP, seeded accounts are trusted, and the PRD doesn't ask for it. This limitation is documented in the README.~~ Superseded by TD-006: self-registered customers now verify their email.
 - Roles are fixed (`Admin`, `Agent`, `Customer`). Admins change a user's role through one Action. Permissions are defined in code (`Permission` enum + `RolesAndPermissionsSeeder`).
 - **Roles are fixed; the role → permission matrix is admin-editable (amended 2026-10-30, owner decision; see TD-010).** Internal notes stay out of reach for the customer role through a hard guard, so an editable matrix cannot leak them.
 
@@ -176,6 +176,66 @@ Guiding principle (from the PRD): *use Laravel features where they are appropria
 **Trade-offs.**
 - Real email delivery isn't visible; `log` mail writes to `storage/logs`.
 - Someone without a local MySQL waits for the final Docker task, or sets up the same two services by hand.
+
+---
+
+### TD-006 — Email verification for self-registered customers
+**Status:** Accepted (2026-11-01, owner decision; supersedes the "no email verification" part of TD-002)
+
+**Context.** Anyone can register a customer account. Without verification, an account can be opened with an address the person doesn't own, and every ticket notification for it goes to a stranger.
+
+**Decision.**
+- `User` implements Laravel's `MustVerifyEmail`, backed by a nullable `email_verified_at` column added to the users create migration (development rule TD-140, no new migration).
+- `RegisterCustomer` dispatches the framework's `Registered` event after its transaction commits. The framework's own `SendEmailVerificationNotification` listener sends the signed link, so the side effect stays in a listener (TD-070).
+- Every authenticated web route group carries the `verified` middleware next to `auth`, and so does the broadcasting handshake. Logout and the three verification routes (`verification.notice`, `verification.verify` signed and throttled, `verification.send` throttled 6/min) stay reachable while unverified. They live in `routes/web.php` behind one thin `EmailVerificationController`; state changes go through the `VerifyEmailAddress` and `ResendEmailVerification` Actions.
+- Users an admin creates (`CreateUser`), seeded demo users and factory users are verified on creation. The factory has an `unverified()` state for tests.
+- The API refuses a token to an unverified user: `IssueApiToken` throws `EmailUnverified` (403, code `email_unverified`) after the credentials check, inside the existing timebox, so the refusal reveals nothing to someone without the password.
+- Mail stays on the `log` mailer locally (TD-005). When the environment is `local` and the mailer is `log`, the notice page and the "link sent" message tell the user to copy the link from `storage/logs/laravel.log`.
+
+**Why.**
+- Verification is Laravel's built-in mechanism: one contract, one middleware alias, one notification. No Fortify is needed (TD-002 still stands for that).
+- Gating at the route-group level keeps every page, form post and download behind one check, so no new page can forget it.
+
+**Alternatives rejected.**
+- *Re-adding Fortify for its verification feature.* Brings back the provider and action classes TD-002 removed, for three routes.
+- *Blocking login for unverified users.* Leaves them nowhere to resend the link; signing them in and gating the app keeps the flow on one page.
+- *Verifying admin-created accounts too.* An admin already vouches for those addresses.
+
+**Trade-offs.**
+- A customer cannot open a ticket until they click the link, which adds a step to the demo; seeded accounts are already verified so demos are unaffected.
+- Locally the link has to be copied from the log file.
+
+---
+
+### TD-007 — Controllers grouped by front end; one route file per front end
+**Status:** Accepted (2026-11-01, owner decision; supersedes the per-feature route files that the file-ownership rule of TD-140 relied on)
+
+**Context.** Controllers had drifted into four homes: some web controllers at the root of `Http/Controllers`, web auth in `Auth/`, web pages in `Web/` with the admin area nested in `Web/Admin/`, and the API in `Api/V1/`. Routes were spread over 29 files (`routes/web.php`, 14 in `routes/web/`, 14 in `routes/api/v1/`) loaded by a glob in `bootstrap/app.php`, so seeing every route behind one middleware group meant opening many files.
+
+**Decision.**
+- Controllers live in one folder per front end:
+  - `Http/Controllers/Web/`: every non-admin web controller (Inertia pages, file downloads and previews, the home redirect, avatars).
+  - `Http/Controllers/Web/Auth/`: login, registration, password reset, email verification.
+  - `Http/Controllers/Admin/`: the web admin area (users, roles, categories, holidays, SLA settings, imports).
+  - `Http/Controllers/Api/V1/` and `Http/Controllers/Api/V1/Admin/`: the JSON API.
+- Two controllers are reached from more than one place and sit in `Web/`. `AttachmentDownloadController` is also mounted on `GET /api/v1/attachments/{attachment}`; it returns a file stream, not an API Resource, and the response is identical for both front ends (TD-061), so it is written once. `AvatarController` is a web route guarded by `auth:sanctum` so that both a session and a token can load an avatar image; it has no API route of its own.
+- `routes/web.php` holds every web route, structured by nested groups: guest auth; signed-in but possibly unverified (logout, email verification); the avatar image; the verified app; and an `admin` prefix and name group for the admin pages.
+- `routes/api.php` holds every API route inside one `api.v1.` name group: the public token route, then an `auth:sanctum` group with an `admin` prefix and name group inside it.
+- `bootstrap/app.php` registers them with Laravel's `web:` and `api:` routing options and `apiPrefix: 'api/v1'`, so the `api` middleware group and the `/api/v1` prefix are applied by the framework.
+- The move changed no URI, HTTP method, route name, middleware list or parameter constraint. It was checked by comparing `route:list --json` before and after: the only difference is the controller namespace.
+
+**Why.**
+- The folder a controller sits in tells you which front end it serves, and admin pages are easy to find without knowing they used to be nested under `Web/`.
+- One file per front end shows each route next to the middleware groups that wrap it, which is where authorization mistakes would show.
+- The framework's own `api:` option replaces a hand-written loop in `bootstrap/app.php`.
+
+**Alternatives rejected.**
+- *Keep one route file per feature.* It kept parallel subagents from editing the same file, but at this size a single file per front end is easier to review, and plans can still give each subtask its own group within a file.
+- *A separate folder for shared controllers.* Only one controller is shared, and its response is a browser download, so `Web/` is the natural home.
+
+**Trade-offs.**
+- Two parallel subtasks that both add routes now touch the same file; a plan must give those changes to one subtask or run them in different waves.
+- Wayfinder's generated `@/actions/App/Http/Controllers/...` paths changed for the moved controllers, so front-end imports of them were updated.
 
 ---
 
@@ -1403,7 +1463,7 @@ UPDATE tickets
 ## Development process
 
 ### TD-140 — Plan-driven development on `main` with parallel subagents and one review per plan
-**Status:** Accepted (rewritten 2026-10-29 by owner decision; the worktree flow used for T00–T05 is retired)
+**Status:** Accepted (rewritten 2026-10-29 by owner decision; the worktree flow used for T00–T05 is retired). Amended 2026-11-01: the per-feature route files (`routes/web/<feature>.php`, `routes/api/v1/<feature>.php`) that the file-ownership rule relied on are superseded by TD-007.
 
 **Decision.**
 - The remaining work is six plans (`docs/plans/P1…P6`, now archived in `docs/archive/plans/`), executed in order on `main` in the main checkout, following `ROADMAP.md`. There are no worktrees and no task branches.

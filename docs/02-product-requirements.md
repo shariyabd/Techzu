@@ -86,7 +86,7 @@ These were added to make the desk usable day to day. They follow the same rules 
 
 - Multiple companies (multi-tenancy) and per-team calendars: one business calendar and timezone.
 - A first-response SLA: only a resolution SLA.
-- Email verification, two-factor authentication, passkeys.
+- Two-factor authentication, passkeys. (Email verification for self-registered customers was added later: TD-006.)
 - Ticket merging, customer satisfaction surveys, a knowledge base.
 - Creating or deleting roles, or inventing new permission names at runtime.
 - Deleting users.

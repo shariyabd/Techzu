@@ -14,6 +14,7 @@ use App\Notifications\TicketAssignedNotification;
 use Illuminate\Auth\Access\Response;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Tests\Support\AuthorizationMatrix;
 use Tests\Support\Imports\ImportCsvFixture;
@@ -266,4 +267,37 @@ it('refuses the category override to an agent handing off their own ticket', fun
 })->with([
     'web' => ['/tickets/{ticket}/assign'],
     'api' => ['/api/v1/tickets/{ticket}/assign'],
+]);
+
+it('keeps the email verification routes to the signed-in owner of the link', function (string $who, string $route, int $status, ?string $redirect): void {
+    $this->withoutVite();
+    $matrix = AuthorizationMatrix::for($this);
+    $user = match ($who) {
+        'guest' => null,
+        'verified' => $matrix->actingAsRole(Role::Customer),
+        default => $matrix->actingAsRole(Role::Customer, ['email_verified_at' => null]),
+    };
+    if ($user === null) {
+        $matrix->asGuest();
+    }
+    $linkOwner = $who === 'other user' ? User::factory()->unverified()->create() : ($user ?? User::factory()->unverified()->create());
+    $uri = match ($route) {
+        'notice' => route('verification.notice'),
+        'send' => route('verification.send'),
+        default => URL::temporarySignedRoute('verification.verify', now()->addHour(), ['id' => $linkOwner->id, 'hash' => sha1($linkOwner->email)]),
+    };
+
+    $response = $matrix->expectAccess($route === 'send' ? 'POST' : 'GET', $uri, $status);
+    if ($redirect !== null) {
+        $response->assertRedirect(route($redirect));
+    }
+})->with([
+    'guest · notice' => ['guest', 'notice', 302, 'login'],
+    'guest · verify' => ['guest', 'verify', 302, 'login'],
+    'guest · send' => ['guest', 'send', 302, 'login'],
+    'verified · notice' => ['verified', 'notice', 302, 'home'],
+    'verified · send' => ['verified', 'send', 302, 'home'],
+    'unverified · notice' => ['unverified', 'notice', 200, null],
+    'unverified · verify own link' => ['unverified', 'verify', 302, 'home'],
+    'other user · verify someone else\'s link' => ['other user', 'verify', 403, null],
 ]);

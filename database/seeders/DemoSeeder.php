@@ -169,6 +169,7 @@ final class DemoSeeder extends Seeder
         foreach (DemoPeople::all() as $key => $person) {
             if ($person['role'] === Role::Admin) {
                 $user = User::query()->create(['name' => $person['name'], 'email' => $person['email'], 'password' => $password]);
+                $user->markEmailAsVerified();
                 $user->assignRole(Role::Admin);
                 $admin = $user;
             } else {

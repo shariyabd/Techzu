@@ -36,6 +36,9 @@ final class RouteAudit
 
     public const AUTHENTICATED_ONLY = [
         'POST logout',
+        'GET email/verify',
+        'GET email/verify/{id}/{hash}',
+        'POST email/verification-notification',
         'GET api/v1/me',
         'DELETE api/v1/auth/tokens/current',
         'GET profile',
@@ -62,6 +65,8 @@ final class RouteAudit
             'holiday' => static fn (): string => (string) Holiday::factory()->create()->id,
             'role' => static fn (): string => Role::Agent->value,
             'savedReply' => static fn (): string => (string) SavedReply::factory()->create()->id,
+            'id' => static fn (): string => (string) User::factory()->unverified()->create()->id,
+            'hash' => static fn (): string => sha1('unverified@example.com'),
         ];
     }
 

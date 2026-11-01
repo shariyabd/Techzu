@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { Form, Head, usePage } from '@inertiajs/vue3';
-import { computed } from 'vue';
-import { store } from '@/actions/App/Http/Controllers/Auth/LoginController';
+import { store } from '@/actions/App/Http/Controllers/Web/Auth/LoginController';
 import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
 import TextLink from '@/components/TextLink.vue';
@@ -23,7 +22,6 @@ defineOptions({
 });
 
 const page = usePage();
-const status = computed(() => page.props.flash.success);
 
 const { onBefore, onInput, onFocusOut } = useClientValidation(() => ({
     email: [
@@ -52,14 +50,6 @@ const { onBefore, onInput, onFocusOut } = useClientValidation(() => ({
         v-slot="{ errors, processing }"
         class="flex flex-col gap-6"
     >
-        <div
-            v-if="status"
-            role="status"
-            class="text-center text-sm font-medium text-green-600 dark:text-green-400"
-        >
-            {{ status }}
-        </div>
-
         <div class="grid gap-6">
             <div class="grid gap-2">
                 <Label for="email">Email address</Label>
