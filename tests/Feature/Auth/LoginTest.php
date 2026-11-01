@@ -51,3 +51,14 @@ it('logs the user out and wipes the browser history so Back cannot replay privat
     $this->get(route('login'))->assertInertia(fn (AssertableInertia $page) => expect($page->toArray())
         ->toMatchArray(['clearHistory' => true, 'encryptHistory' => true]));
 });
+
+it('shows the demo accounts on the login page only while they are enabled', function (bool $enabled, array $roles): void {
+    config(['demo.login_accounts.enabled' => $enabled]);
+
+    $this->get(route('login'))->assertInertia(fn (AssertableInertia $page) => $page
+        ->component('auth/Login')
+        ->where('demoAccounts', fn ($accounts): bool => collect($accounts)->pluck('role')->all() === $roles));
+})->with([
+    'enabled' => [true, ['admin', 'agent', 'customer']],
+    'disabled' => [false, []],
+]);

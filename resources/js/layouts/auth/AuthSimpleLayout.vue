@@ -16,7 +16,7 @@ defineProps<{
     <div
         class="flex min-h-svh flex-col items-center justify-center gap-6 bg-background p-4 md:p-10"
     >
-        <div class="flex w-full max-w-sm flex-col gap-6">
+        <div class="flex w-full max-w-lg flex-col gap-6">
             <Link
                 :href="home()"
                 class="flex items-center gap-2 self-center rounded-md font-semibold focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"

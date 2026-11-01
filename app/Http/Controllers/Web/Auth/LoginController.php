@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Web\Auth;
 
+use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use Illuminate\Http\RedirectResponse;
@@ -17,7 +18,31 @@ final class LoginController extends Controller
 {
     public function create(): Response
     {
-        return Inertia::render('auth/Login');
+        return Inertia::render('auth/Login', [
+            'demoAccounts' => $this->demoAccounts(),
+        ]);
+    }
+
+    /** @return list<array{role: string, label: string, email: string, password: string}> */
+    private function demoAccounts(): array
+    {
+        if (! config()->boolean('demo.login_accounts.enabled')) {
+            return [];
+        }
+
+        $password = config()->string('demo.login_accounts.password');
+        $accounts = [];
+
+        foreach (config()->array('demo.login_accounts.emails') as $role => $email) {
+            $accounts[] = [
+                'role' => (string) $role,
+                'label' => Role::from((string) $role)->label(),
+                'email' => (string) $email,
+                'password' => $password,
+            ];
+        }
+
+        return $accounts;
     }
 
     public function store(LoginRequest $request): RedirectResponse

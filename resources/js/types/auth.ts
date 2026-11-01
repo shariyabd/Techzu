@@ -18,6 +18,13 @@ export type AuthCan = {
     useSavedReplies: boolean;
 };
 
+export type DemoAccount = {
+    role: string;
+    label: string;
+    email: string;
+    password: string;
+};
+
 export type Auth = {
     user: User;
     can: AuthCan;
