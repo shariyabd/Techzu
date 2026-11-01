@@ -14,7 +14,9 @@
 
 ## 2. Accounts
 
-Every account uses the password **`password`**.
+Every account uses the password **`password`**. All demo accounts are created already verified, so they sign in straight to the app.
+
+A customer who signs up through the registration page must confirm their email address before they can use the app; until then every page leads to the "Verify your email" page. Locally (the `log` mailer) the verification link is written to `storage/logs/laravel.log`; with Docker it lands in the Mailpit inbox at http://localhost:8025.
 
 | Role | Email | Name | Categories and notes |
 |---|---|---|---|
@@ -88,4 +90,4 @@ php artisan migrate:fresh --seed
 
 SLA states are computed from the current time. As hours pass, "approaching" tickets become "breached" and the scheduler escalates them, and over a weekend (Friday and Saturday are closed days) nothing moves at all. A fresh seed puts the desk back in its intended mix. It takes about ten seconds, a little longer while photos download.
 
-Then start the app with `composer run dev` so the scheduler, queue worker and live updates run during the demo.
+Then start the app with `composer run dev` so the scheduler, queue worker and live updates run during the demo. With Docker, the `queue`, `scheduler` and `reverb` services already run; reseed with `docker compose exec app php artisan migrate:fresh --seed`.

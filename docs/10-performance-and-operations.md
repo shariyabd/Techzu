@@ -88,7 +88,9 @@ php artisan queue:restart
 - Domain errors are not reported to the log; real exceptions are. Failed jobs log a line and land in `failed_jobs`.
 
 **Docker**
-- Not available yet. See the README.
+- A local Docker Compose stack ships with the repository (`compose.yaml`, a multi-stage `Dockerfile`, `docker/entrypoint.sh`, `docker/nginx`, `docker/php`, `docker/mysql/init`, and `.env.docker.example` to copy to `.env`). It is meant for running the app locally, not as a production setup.
+- Services: `web` (Nginx, port 8000), `app` (PHP-FPM 8.3), `init` (runs once per start: generates the app key, migrates, and seeds the demo data on the first run only), `queue` (`queue:work` on `default,broadcasts,notifications,imports`), `scheduler` (`schedule:work`), `reverb` (port 8080), `mysql` (8.4, also creates the testing database) and `mailpit` (catches all mail; inbox at http://localhost:8025).
+- Data lives in named volumes (`mysql-data`, `storage`), so restarts keep it. Commands and troubleshooting: README → Docker setup.
 
 ## 6. Monitoring checklist
 

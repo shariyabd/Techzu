@@ -127,6 +127,8 @@ Customers (anyone without `tickets.notes.internal`) never receive internal conte
 | Role change | revokes all API tokens (abilities were captured at issue time) |
 | Login, logout | session regenerated; logout also rotates the CSRF token and discards the encrypted Inertia history key |
 
+**Email verification.** Every account must have a verified email address before it can use the app. On the web, every app page (dashboard, tickets, profile, admin, notifications) sits behind `auth` + `verified`, so a signed-in but unverified user is redirected to the verification notice page, from which they can resend the link; only logout, the notice, the signed verification link and the resend route are reachable without it. On the API, `POST /api/v1/auth/tokens` refuses an unverified account with `403` and the code `email_unverified` (after the password check, so it reveals nothing about unknown emails). The API's `auth:sanctum` routes therefore don't add `verified`: an unverified user can never obtain a token. Seeded demo accounts and users created by an admin are already verified; self-registered customers are not.
+
 Session ending uses the database session table, so it applies when `SESSION_DRIVER=database` (the default). Passwords: 8–72 characters outside production; in production at least 12 with mixed case, numbers, symbols and an uncompromised check.
 
 ## 9. Rate limits
@@ -137,12 +139,12 @@ Session ending uses the database session table, so it applies when `SESSION_DRIV
 | `uploads` | 20/min per user | ticket creation, replies, import upload, avatar upload (web and API) |
 | `api-tokens` | 5/min per email + IP | `POST /api/v1/auth/tokens` |
 | `throttle:5,1` | 5/min | login, register, forgot password, reset password |
-| `throttle:6,1` | 6/min | profile password change (web and API) |
+| `throttle:6,1` | 6/min | profile password change (web and API); email verification link (`GET /email/verify/{id}/{hash}`, also `signed`) and resend (`POST /email/verification-notification`) |
 | `throttle:60,1` | 60/min | customer lookup, saved-reply picker |
 
 ## 10. Realtime channel authorization
 
-Channels are authorized in `routes/channels.php` through the same policies as the pages, behind the `web` + `auth` middleware:
+Channels are authorized in `routes/channels.php` through the same policies as the pages, behind the `web` + `auth` + `verified` middleware (`bootstrap/app.php`), so an unverified user cannot join any channel:
 
 | Channel | Rule |
 |---|---|
@@ -187,3 +189,4 @@ SLA escalation events (`sla_approaching`, `sla_breached`) are broadcast only on 
 - Leakage: `tests/Feature/Security/InternalNoteLeakageTest.php`, `tests/Feature/Notifications/InternalNoteEndToEndTest.php`, `tests/Feature/Security/PermissionScopedVisibilityTest.php`.
 - Checklist (auth on every route, uploads throttled, no `v-html`, disguised PHP rejected): `tests/Feature/Security/SecurityChecklistTest.php`.
 - Channels: `tests/Feature/Realtime/ChannelAuthorizationTest.php`, `PresenceChannelTest.php`.
+- Email verification (app pages, broadcasting handshake, signed links, resend throttle, API token refusal): `tests/Feature/Auth/EmailVerificationTest.php`.

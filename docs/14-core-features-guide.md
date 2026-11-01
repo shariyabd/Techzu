@@ -693,7 +693,7 @@ The ticket list (`app/Services/Tickets/TicketFilter.php`) supports:
 |---|---|
 | Scope | Active / Resolved & closed / All |
 | Ticket number | Prefix match, e.g. `TKT-2026-0001` |
-| Keyword | Full-text search over subject and description (MySQL FULLTEXT) |
+| Keyword | Full-text search over subject and description (MySQL FULLTEXT); a keyword shaped like a ticket number searches the number instead |
 | Status, Priority | Multi-select |
 | Category, Assigned agent, Customer | Single value |
 | Unassigned only | Yes/no |
@@ -703,7 +703,7 @@ The ticket list (`app/Services/Tickets/TicketFilter.php`) supports:
 | Sort | Newest, Oldest, Recently updated, Least recently updated, Due soonest, Due latest, Highest priority, Lowest priority |
 | Pagination | 20 per page by default, max 100 |
 
-A global **search box** in the header (shortcut **Ctrl K**, **⌘ K** or **/**) opens the ticket list with what you typed as the **keyword** search. That search covers subject and description only. To find a ticket by its number, use the list's **Number** filter. All filters respect visibility: a customer can never filter their way into someone else's tickets.
+A global **search box** in the header (shortcut **Ctrl K**, **⌘ K** or **/**) opens the ticket list across **all statuses** with what you typed as the **keyword** search. A keyword that looks like a ticket number (`TKT-2026-000042`, `tkt-2026-0000`, or `2026-000042` without the prefix) is treated as a ticket-number lookup; any other text searches subject and description. The list's **Number** filter does the same prefix match. All filters respect visibility: a customer can never filter their way into someone else's tickets.
 
 ---
 
@@ -840,6 +840,7 @@ On the ticket page you see who else is viewing it, and "… is typing". Staff ty
 ## 24. Accounts, profile and avatars
 
 - Sign up (customers only), sign in, sign out, "forgot password" email link and reset. Sign-in and reset are rate-limited (5 attempts per minute).
+- **Email verification:** a new sign-up must click the link emailed to them (valid 60 minutes) before any app page opens; until then they see a "Verify your email" page with a resend button (6 per minute). The API refuses to issue a token to an unverified account (`403`, `email_unverified`). Accounts created by an admin and the seeded demo accounts are already verified. Locally the link is in `storage/logs/laravel.log`; with Docker it is in Mailpit at http://localhost:8025.
 - **Profile:** change your name, password (which ends your other sessions and API tokens) and avatar image.
 - "Last seen" is tracked for the agent directory and presence.
 
@@ -847,7 +848,7 @@ On the ticket page you see who else is viewing it, and "… is typing". Staff ty
 
 ## 25. REST API
 
-Everything a user can do in the web app is also available through a versioned REST API at `/api/v1`, authenticated with **Sanctum** bearer tokens (`routes/api/v1/`). The API calls the **same Actions** as the web pages, so the business rules (SLA, assignment, visibility, notifications) are identical. Documentation is generated automatically as OpenAPI ([api/openapi.json](api/openapi.json), or `/docs/api` in the running app). See [07 · API](07-api.md).
+Everything a user can do in the web app is also available through a versioned REST API at `/api/v1`, authenticated with **Sanctum** bearer tokens (`routes/api.php`). The API calls the **same Actions** as the web pages, so the business rules (SLA, assignment, visibility, notifications) are identical. Documentation is generated automatically as OpenAPI ([api/openapi.json](api/openapi.json), or `/docs/api` in the running app). See [07 · API](07-api.md).
 
 ---
 
@@ -958,7 +959,8 @@ If at step 2 **no Billing agent were available**, the ticket would stay **Open**
 - **Queues**: All active, Assigned to me, Unassigned, Resolved & closed, per category, with live counts.
 - Replies, **internal notes** (never leaked to customers), attachments, saved replies with placeholders.
 - Email + in-app **notifications**, **activity history**, realtime updates with presence and typing.
-- Search, filters (including SLA state, Unresponded, Awaiting reply), sorting, pagination; dashboard; agent directory.
+- Search (the global search box also accepts ticket numbers), filters (including SLA state, Unresponded, Awaiting reply), sorting, pagination; dashboard; agent directory.
+- Customer sign-up with **email verification** (app pages and API tokens require a verified address).
 - Large **CSV import** with chunking, validation, duplicate detection, error CSV, live progress and optional auto-assignment.
 - Editable **permission matrix**, REST API with OpenAPI docs.
 

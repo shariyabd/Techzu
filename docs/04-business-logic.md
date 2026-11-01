@@ -78,18 +78,27 @@ Authentication is plain email-and-password sign-in with a server-side session. T
 - Anyone can register with a name, an email and a password typed twice. The name and email may be up to 255 characters. The email must be entered in lower case: an address with capital letters is rejected, not converted.
 - The email must be unique.
 - The password rule depends on the environment. In production it needs at least 12 characters with upper and lower case letters, numbers and symbols, and it must not appear in known data breaches. Outside production the default minimum of 8 characters applies. In every environment a password may be at most 72 characters.
-- The new account is signed in straight away and sent to the home page.
+- The new account is signed in straight away, but it must confirm its email address before it can use the app (see Email verification below).
 - Self-registration gives the new account the customer role.
 - Registration is limited to 5 attempts per minute from the same address.
 
+**Email verification**
+- Registering sends an email with a personal, signed confirmation link that is valid for 60 minutes. The new customer then lands on a "Verify your email" page that names the address the link was sent to.
+- Until the address is confirmed, every page of the app (tickets, dashboard, notifications, profile, agents, saved replies, administration and so on) and the live-update connection are closed to the account. Opening any of them leads back to the "Verify your email" page. Logging out still works.
+- An unconfirmed user can still sign in; they simply arrive on the "Verify your email" page.
+- From that page the user can ask for a new link. Requests are limited to 6 per minute. Already-confirmed users who open the page or ask for a link are sent to the home page instead.
+- Opening the link while signed in as the same account confirms the address and sends the user to the home page with a welcome message. A link that has been altered, has expired, or belongs to another account is refused.
+- Accounts created by an administrator and the demo accounts are confirmed from the start, so they never see this step.
+- When the app runs on a developer's machine and mail is only written to the log file, the "Verify your email" page and the "link sent" message say so, and point to the application log where the link can be copied.
+
 **What is not included**
-- No two-factor authentication, passkeys, email verification or password confirmation step. Account settings are limited to the profile page (see Profile and avatars).
-- The colour scheme simply follows the operating system's light or dark preference. There is no appearance setting.
+- No two-factor authentication, passkeys or password confirmation step. Account settings are limited to the profile page (see Profile and avatars).
+- The app opens in the operating system's light or dark preference. A light/dark switch in the header overrides it; the choice is remembered in that browser and applied before the page is drawn, so the page never flashes in the wrong colours.
 
 **API tokens**
 - API clients get a token by posting an email, a password and a device name. The same generic error is returned for bad credentials.
 - Token requests are limited to 5 per minute for each email and address combination.
-- A verified email is not required to obtain a token. The token carries the user's current permissions.
+- A token is refused to an account whose email address is not yet confirmed. The refusal comes only after a correct password, so it says nothing to someone who doesn't know the password. The token carries the user's current permissions.
 - A client can revoke the token it is using.
 - A client holding a token can fetch the details of the user the token belongs to.
 
@@ -153,7 +162,7 @@ The data model is the shared vocabulary every other feature builds on.
 **Deleting records**
 - Nothing is soft-deleted; deletion is permanent.
 - Deleting a ticket deletes its replies and attachments. Deleting a reply deletes its attachments.
-- A user who is a ticket's customer or creator, a reply author, an attachment uploader or an importer, and a category that tickets use, cannot be deleted.
+- A user who is a ticket's customer or creator, a reply author, an attachment uploader or an importer cannot be deleted. A category that tickets use cannot be removed either: asking to delete it deactivates it instead (see Categories and holidays administration).
 - Deleting an agent leaves their tickets unassigned. Deleting a user deletes their personal saved replies.
 - Deleting an agent or category removes the agent-category links. Deleting a category keeps saved replies tied to it, without a category.
 
@@ -516,8 +525,8 @@ The ticket list can be narrowed and sorted. It always shows only tickets the vie
 - Lists are paginated: 20 per page by default, never more than 100 per page. Filters stay in the page links.
 
 **Filters** (all optional and combinable)
-- Ticket number: matches numbers that start with what was typed, in any letter case.
-- Keyword: searches the subject and the description. Each word matches words that start with it (for example "print" finds "printer"). Words shorter than three characters are ignored by the search, because the database does not index words that short. At most 10 words are used, up to 200 characters are accepted, and search operator characters such as quotes, plus, minus and asterisks are stripped so typing them cannot change how the search behaves. Where full-text search is not available, a plain "contains" match is used instead.
+- Ticket number: matches numbers that start with what was typed, in any letter case. The prefix may be left out, so `2026-000042` finds `TKT-2026-000042`. A ticket number identifies one ticket whatever its status, so a number search always looks across all statuses and the list switches to the All scope. For an agent, a number search also drops the "assigned to me" filter their list opens with, so a colleague's ticket is found too; other filters still apply.
+- Keyword: when the keyword looks like a ticket number (the prefix followed by digits and hyphens, or a year, a hyphen and digits, such as `TKT-2026-000042`, `tkt-2026-0000` or `2026-000042`), it is treated as a ticket number search exactly as above. Any other keyword searches the subject and the description. Each word matches words that start with it (for example "print" finds "printer"). Words shorter than three characters are ignored by the search, because the database does not index words that short. At most 10 words are used, up to 200 characters are accepted, and search operator characters such as quotes, plus, minus and asterisks are stripped so typing them cannot change how the search behaves. Where full-text search is not available, a plain "contains" match is used instead.
 - Status and priority: one or several values. The status choices offered depend on the scope.
 - Category, assigned agent: by id. A "no agent" option shows only unassigned tickets.
 - Customer: staff pick a customer from a search box (see Customer lookup). The choice shows as a removable chip, and a shared link with a customer filter shows the customer's name again.
@@ -530,6 +539,7 @@ The ticket list can be narrowed and sorted. It always shows only tickets the vie
 - Newest first (default), oldest first, recently updated, least recently updated, due soonest, due latest, highest priority, lowest priority. Priority sorts by importance (urgent first when highest), not alphabetically. Ties are broken by ticket id so paging is stable. Any other sort value is rejected.
 
 **What the page offers**
+- The search box in the header searches every ticket the viewer may see, in all statuses. Typing a full or partial ticket number there finds that ticket; typing words runs the keyword search. Customers only ever find their own tickets, so another customer's ticket number finds nothing.
 - The filter form offers the statuses for the current scope, priorities, SLA states, sorts and active categories. Staff also get the agent, customer and response filters; customers do not see those.
 
 ## Customer lookup
@@ -576,7 +586,8 @@ People are told about ticket events by email and in an in-app inbox. Every notif
 
 **Channels**
 - Ticket notifications go by email and into the inbox. Internal notes and import results go to the inbox only. Each notification has a title, a short text and a link to the ticket (or the import); a ticket notification carries the ticket number. Deadlines in messages are shown in the business time zone.
-- When the realtime server runs, a new inbox notification also updates the unread count live.
+- When the realtime server runs, a new inbox notification also updates the unread count live and is announced once with a pop-up message showing its own title and text (for example "New reply on TKT-2026-000026" with the start of the reply) and a View button, plus a short chime. Only a notification newer than the last one announced is shown, so reading notifications never re-announces older ones. Browsers may block the chime until the person has clicked somewhere on the page; the pop-up still appears.
+- Success and error messages from a person's own action (such as "Reply sent.") appear once, when that action finishes. Pages refreshing themselves in the background never repeat them.
 
 **The inbox**
 - Anyone who can view tickets has an inbox of their own notifications, newest first, 20 per page (up to 100). It can be limited to unread ones. The unread count is shown across the application.

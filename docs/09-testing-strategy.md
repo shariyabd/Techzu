@@ -27,6 +27,7 @@ What we test, why, and how to run it. Decisions: TD-030 to TD-032 in [11 · Tech
 | Realtime | leaking channels | channel authorization per role, presence member info, identifier-only payloads, internal notes only on the staff channel | `tests/Feature/Realtime/*.php` |
 | Files | disguised executables, leaks | content-sniffed types, private storage, compensation on failure, download headers, avatar processing and headers | `tests/Feature/Attachments/AttachmentStorerTest.php`, `tests/Feature/Conversation/AttachmentDownloadTest.php`, `tests/Feature/Profile/AvatarTest.php` |
 | Security checklist | regressions in cross-cutting rules | auth on every route, guest-only routes, uploads throttled, no `v-html`, privileged fields ignored | `tests/Feature/Security/SecurityChecklistTest.php` |
+| Email verification | unverified accounts reaching the app or the API | registration leaves the customer unverified; every app page and the broadcasting handshake send an unverified user to the notice; signed link and hash checks; resend throttling; admin-made users pre-verified; API token refused with `email_unverified` | `tests/Feature/Auth/EmailVerificationTest.php` |
 | Schema | missing indexes, wrong delete rules | every index and foreign-key rule against `information_schema` | `tests/Feature/Database/SchemaTest.php` |
 | Demo data | a broken presentation | the seeder runs, is idempotent and produces the advertised scenarios | `tests/Feature/Database/DemoSeederTest.php` |
 | Frontend logic | presence labels, typing routing and expiry, placeholder rendering, reply-mode safety, business-hours window rules, timezone formatting | Vitest unit tests with happy-dom | `resources/js/**/__tests__/*.test.ts` |
@@ -69,7 +70,7 @@ The MySQL user in `.env` must be allowed to create and drop tables in the test d
 
 ## 5. Current totals
 
-Full gate after the 2026-11-01 fix pass:
+Last recorded full gate (the 2026-11-01 fix pass). Tests added since then, such as email verification, are not reflected in these counts until the gate is run and recorded again:
 
 | Check | Result |
 |---|---|

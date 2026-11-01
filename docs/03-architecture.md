@@ -79,7 +79,8 @@ app/
     Admin/            CreateUser, UpdateUser, ChangeUserRole, SyncAgentProfile, UpdateRolePermissions,
                       Create/Update/DeleteCategory, Create/Update/DeleteHoliday, UpdateSlaSettings
     Assignment/       AssignTicket, ClaimTicket, AssignTicketAutomatically
-    Auth/             RegisterCustomer, IssueApiToken, RevokeCurrentApiToken, SendPasswordResetLink, ResetUserPassword
+    Auth/             RegisterCustomer, IssueApiToken, RevokeCurrentApiToken, SendPasswordResetLink, ResetUserPassword,
+                      VerifyEmailAddress, ResendEmailVerification
     Conversation/     AddReply
     Imports/          StartTicketImport, ImportTicketRow
     Notifications/    MarkNotificationRead, MarkAllNotificationsRead
@@ -88,20 +89,21 @@ app/
     Sla/              DeliverEscalation
     Tickets/          CreateTicket, UpdateTicket, ChangeTicketStatus, ChangeTicketPriority, RecalculateTicketSla
   Services/
-    Sla/              BusinessCalendar (pure), SlaCalculator, SlaQuery, SlaSettings, SlaSettingsRepository,
-                      SlaSettingsRules, HolidayRepository
+    Sla/              BusinessCalendar (pure), SlaCalculator, SlaClock, SlaDeadlines, SlaQuery, SlaSettings,
+                      SlaSettingsRepository, SlaSettingsRules, SlaRulesCache, HolidayRepository
     Tickets/          TicketNumberGenerator, TicketListQuery, TicketFilter, FulltextSearchTerm, ResponseQuery,
                       TicketVisibility, TicketPageData, TicketQueueCounts, TicketDataVersion, TicketDataCache
     Assignment/       AgentSelector, AgentEligibility, UnassignedTicketAssigner
     Attachments/      AttachmentStorer, StagedUpload
     Conversation/     ConversationQuery
-    Imports/          TicketCsvReader, ImportTicketRowRules, ImportDuplicateTracker, ImportErrorCsvWriter, TicketImportQuery
-    Agents/           AgentDirectory
+    Imports/          TicketCsvReader, ImportTicketRowRules, ImportDuplicateTracker, ImportErrorCsvWriter, TicketImportQuery,
+                      ImportFileAccess, ImportSampleCsvWriter
+    Agents/           AgentDirectory, AgentDirectoryVersion
     Dashboard/        DashboardStats
-    Notifications/    Recipients, NotificationFeed
+    Notifications/    Recipients, NotificationFeed, StaffOnlyNotifications
     SavedReplies/     SavedReplyQuery
     Users/            UserDirectory, AvatarRules, AvatarStorer
-    Auth/             PasswordLength, PasswordResetLinks, UserSessions
+    Auth/             PasswordLength, PasswordResetLinks, UserSessions, VerificationMailNotice
     Admin/            AdminCatalog
   Enums/              Role, Permission, TicketStatus, TicketPriority, SlaState, EscalationLevel, ActivityType,
                       AssignmentMethod, ImportStatus, SavedReplyScope, SavedReplyPlaceholder, TicketChangeKind
@@ -116,14 +118,17 @@ app/
   Console/Commands/   ScanSlaCommand (sla:scan), prune commands
   Exceptions/Domain/  DomainException and its subclasses
   Http/
-    Controllers/Web/        Inertia controllers (Admin/ for the admin area)
+    Controllers/Web/        web controllers: Inertia pages, attachment download and preview, avatars, home
+    Controllers/Web/Auth/   login, registration, password reset, email verification
+    Controllers/Admin/      web admin area (users, roles, categories, holidays, SLA, imports)
     Controllers/Api/V1/     JSON controllers (Admin/ for the admin area)
     Requests/<Feature>/     shared FormRequests, named <Verb>Request
     Resources/V1/           API Resources (also used to shape Inertia props)
     Middleware/             HandleInertiaRequests, ForceJsonResponse, TrackLastSeen, AuthorizeApiDocs
 config/               sla.php, business_hours.php, tickets.php, attachments.php, avatars.php, imports.php,
                       retention.php, broadcasting.php, reverb.php, ...
-routes/web/*.php, routes/api/v1/*.php   one file per feature, loaded automatically (bootstrap/app.php)
+routes/web.php        every web route, grouped: guest auth, signed-in (logout, verification), verified app, admin
+routes/api.php        every /api/v1 route (prefix and `api` middleware from bootstrap/app.php, names `api.v1.*`)
 routes/channels.php   broadcast channel authorization
 routes/console.php    the schedule
 ```
@@ -182,6 +187,7 @@ Listeners are discovered automatically from their `handle*` method signatures. R
 | Broadcast events | `broadcasts` | Identifier-only realtime messages |
 | Notifications | `notifications` | Mail and database notifications, after commit |
 | `PrepareTicketImport`, `ImportTicketsChunk`, `FinalizeTicketImport` | `imports` | Streamed, chunked, batched CSV import |
+| `AutoAssignImportedTickets` | `imports` | After an import that opted in, auto-assign the tickets it created that are still unassigned |
 | `sla:scan` | scheduler, every minute | Escalate and (re)deliver escalation announcements |
 | prune commands | scheduler, nightly | Retention for activity, notifications, batches, failed jobs |
 

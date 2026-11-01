@@ -7,7 +7,7 @@
     },
     "servers": [
         {
-            "url": "http://127.0.0.1:8020/api/v1"
+            "url": "http://127.0.0.1:8000/api/v1"
         }
     ],
     "security": [
@@ -109,6 +109,14 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "list_pages",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
                         }
                     }
                 ],
@@ -2273,7 +2281,8 @@
                             "type": "string",
                             "enum": [
                                 "active",
-                                "resolved"
+                                "resolved",
+                                "all"
                             ]
                         }
                     },
@@ -4118,6 +4127,9 @@
                         "format": "binary",
                         "contentMediaType": "application/octet-stream",
                         "description": "Maximum file size: 51200 kilobytes."
+                    },
+                    "auto_assign": {
+                        "type": "boolean"
                     }
                 },
                 "required": [
@@ -4240,11 +4252,11 @@
                                 "properties": {
                                     "start": {
                                         "type": "string",
-                                        "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                                        "pattern": "^(([01]\\d|2[0-3]):[0-5]\\d|24:00)$"
                                     },
                                     "end": {
                                         "type": "string",
-                                        "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                                        "pattern": "^(([01]\\d|2[0-3]):[0-5]\\d|24:00)$"
                                     }
                                 },
                                 "required": [
@@ -4611,8 +4623,32 @@
                         "type": "string"
                     },
                     "ticket_number": {},
-                    "title": {},
-                    "body": {},
+                    "title": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "string",
+                                "enum": [
+                                    ""
+                                ]
+                            }
+                        ]
+                    },
+                    "body": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "string",
+                                "enum": [
+                                    ""
+                                ]
+                            }
+                        ]
+                    },
                     "url": {},
                     "read_at": {
                         "type": [
@@ -4923,6 +4959,9 @@
                     "is_finished": {
                         "type": "boolean"
                     },
+                    "auto_assign": {
+                        "type": "boolean"
+                    },
                     "total_rows": {
                         "type": "integer"
                     },
@@ -4963,6 +5002,7 @@
                     "original_name",
                     "status",
                     "is_finished",
+                    "auto_assign",
                     "total_rows",
                     "processed_rows",
                     "succeeded_rows",
@@ -5085,11 +5125,15 @@
                             },
                             "due_at": {
                                 "type": "string"
+                            },
+                            "clock": {
+                                "type": "string"
                             }
                         },
                         "required": [
                             "state",
-                            "due_at"
+                            "due_at",
+                            "clock"
                         ]
                     },
                     "escalation_level": {
@@ -5105,6 +5149,12 @@
                     },
                     "has_agent_response": {
                         "type": "boolean"
+                    },
+                    "latest_message": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "created_at": {
                         "type": "string"
@@ -5296,13 +5346,17 @@
                                     "string",
                                     "null"
                                 ]
+                            },
+                            "clock": {
+                                "type": "string"
                             }
                         },
                         "required": [
                             "state",
                             "due_at",
                             "warning_at",
-                            "paused_at"
+                            "paused_at",
+                            "clock"
                         ]
                     },
                     "escalation_level": {
@@ -5514,44 +5568,6 @@
             }
         },
         "responses": {
-            "AuthorizationException": {
-                "description": "Authorization error",
-                "content": {
-                    "application/json": {
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "message": {
-                                    "type": "string",
-                                    "description": "Error overview."
-                                }
-                            },
-                            "required": [
-                                "message"
-                            ]
-                        }
-                    }
-                }
-            },
-            "AuthenticationException": {
-                "description": "Unauthenticated",
-                "content": {
-                    "application/json": {
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "message": {
-                                    "type": "string",
-                                    "description": "Error overview."
-                                }
-                            },
-                            "required": [
-                                "message"
-                            ]
-                        }
-                    }
-                }
-            },
             "ValidationException": {
                 "description": "Validation error",
                 "content": {
@@ -5577,6 +5593,44 @@
                             "required": [
                                 "message",
                                 "errors"
+                            ]
+                        }
+                    }
+                }
+            },
+            "AuthenticationException": {
+                "description": "Unauthenticated",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "message": {
+                                    "type": "string",
+                                    "description": "Error overview."
+                                }
+                            },
+                            "required": [
+                                "message"
+                            ]
+                        }
+                    }
+                }
+            },
+            "AuthorizationException": {
+                "description": "Authorization error",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "message": {
+                                    "type": "string",
+                                    "description": "Error overview."
+                                }
+                            },
+                            "required": [
+                                "message"
                             ]
                         }
                     }
