@@ -62,6 +62,24 @@ it('renders the inbox props and shares my unread count', function (): void {
             ->where('notifications.unread_count', 2));
 });
 
+it('shares my newest unread notification so the bell can announce what just arrived', function (): void {
+    ($this->store)($this->me, title: 'older unread');
+    $this->travel(1)->minutes();
+    $newest = ($this->store)($this->me, title: 'New reply on TKT-2026-000001');
+    $this->travel(1)->minutes();
+    ($this->store)($this->me, read: true, title: 'newer but read');
+    ($this->store)($this->someoneElse, title: 'not mine');
+
+    $this->actingAs($this->me)
+        ->get(route('notifications.index'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('notifications.latest_unread.id', $newest->id)
+            ->where('notifications.latest_unread.title', 'New reply on TKT-2026-000001')
+            ->where('notifications.latest_unread.body', 'You have a new ticket.')
+            ->where('notifications.latest_unread.url', url('/tickets/TKT-2026-000001'))
+            ->has('notifications.latest_unread.created_at'));
+});
+
 it('marks my notification as read on web and API', function (): void {
     $apiOne = ($this->store)($this->me);
     $webOne = ($this->store)($this->me);
@@ -116,7 +134,10 @@ it('hides internal-note notifications from a viewer whose role lost internal not
         ->assertJsonPath('data.0.title', 'assigned')
         ->assertDontSee('SECRET-EXCERPT');
     $this->actingAs($viewer)->get(route('notifications.index'))
-        ->assertInertia(fn (Assert $page) => $page->has('items.data', 1)->where('notifications.unread_count', 1));
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('items.data', 1)
+            ->where('notifications.unread_count', 1)
+            ->where('notifications.latest_unread.title', 'assigned'));
 
     $request = Request::create('/');
     $request->setUserResolver(fn (): User => $viewer);

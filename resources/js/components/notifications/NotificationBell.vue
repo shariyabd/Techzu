@@ -1,17 +1,39 @@
 <script setup lang="ts">
-import { Link, usePage } from '@inertiajs/vue3';
+import { Link, router, usePage } from '@inertiajs/vue3';
 import { Bell } from '@lucide/vue';
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 import { Button } from '@/components/ui/button';
-import {
-    realtimeChannels,
-    useRealtime,
-    useRealtimeReload,
-} from '@/composables/useRealtime';
+import { realtimeChannels, useRealtimeReload } from '@/composables/useRealtime';
+import { showToast } from '@/lib/flashToast';
+import { isNewerNotification } from '@/lib/notificationAnnouncer';
 import { playNotificationSound } from '@/lib/notificationSound';
 import { index } from '@/routes/notifications';
 
 const page = usePage();
+
+let lastAnnouncedAt: string | null =
+    page.props.notifications.latest_unread?.created_at ?? null;
+
+watch(
+    () => page.props.notifications.latest_unread,
+    (latest) => {
+        if (!isNewerNotification(latest, lastAnnouncedAt)) {
+            return;
+        }
+
+        lastAnnouncedAt = latest.created_at;
+        const url = latest.url;
+        showToast(
+            'info',
+            latest.title,
+            latest.body,
+            url
+                ? { label: 'View', onClick: () => router.visit(url) }
+                : undefined,
+        );
+        playNotificationSound();
+    },
+);
 
 const userChannels = (): string[] =>
     page.props.auth.user
@@ -23,9 +45,6 @@ useRealtimeReload(
     ['notification.received'],
     () => ({ only: ['notifications'] }),
     300,
-);
-useRealtime(userChannels, ['notification.received'], () =>
-    playNotificationSound(),
 );
 const unread = computed(() => page.props.notifications.unread_count);
 const badge = computed(() =>

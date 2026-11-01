@@ -43,5 +43,6 @@ it('shares only whitelisted user fields, role names, placeholder abilities, flas
                 ->where('success', 'Saved.')
                 ->where('error', null))
             ->where('notifications.unread_count', 0)
+            ->where('notifications.latest_unread', null)
             ->where('businessTimezone', 'Asia/Dhaka'));
 });

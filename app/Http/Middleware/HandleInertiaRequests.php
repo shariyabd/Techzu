@@ -52,6 +52,7 @@ class HandleInertiaRequests extends Middleware
             ],
             'notifications' => [
                 'unread_count' => fn (): int => $user === null ? 0 : app(NotificationFeed::class)->unreadCount($user),
+                'latest_unread' => fn (): ?array => $user === null ? null : app(NotificationFeed::class)->latestUnread($user),
             ],
             'passwordRules' => fn (): array => app(PasswordLength::class)->toArray(),
             'businessTimezone' => fn (): string => app(SlaSettingsRepository::class)->timezone(),
