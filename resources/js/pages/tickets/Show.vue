@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Head, router, usePage } from '@inertiajs/vue3';
 import { Check, Copy, Pencil } from '@lucide/vue';
-import { computed, ref } from 'vue';
+import { useEventListener } from '@vueuse/core';
+import { computed, onMounted, ref } from 'vue';
 import ActivityTimeline from '@/components/tickets/ActivityTimeline.vue';
 import AssignmentPanel from '@/components/tickets/AssignmentPanel.vue';
 import AttachmentList from '@/components/tickets/AttachmentList.vue';
@@ -15,7 +16,14 @@ import TicketStateControls from '@/components/tickets/TicketStateControls.vue';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import PresenceAvatar from '@/components/chat/PresenceAvatar.vue';
 import UserAvatar from '@/components/UserAvatar.vue';
+import {
+    latestSeen,
+    presenceStatus,
+    usePresenceClock,
+} from '@/composables/usePresence';
+import { realtimeChannels, useRealtimeReload } from '@/composables/useRealtime';
 import { formatDateTime, formatRelative } from '@/lib/format';
 import { index, show } from '@/routes/tickets';
 import type { BreadcrumbItem } from '@/types';
@@ -28,6 +36,7 @@ import type {
     TicketCan,
     TicketDetail,
     TicketFormOptions,
+    UserSummary,
 } from '@/types/tickets';
 
 defineOptions({
@@ -59,7 +68,7 @@ const props = defineProps<{
 
 const repliesPages = ref(props.repliesPages);
 const activitiesPages = ref(props.activitiesPages);
-const loadingMore = ref(false);
+const loadingMore = ref<'replies' | 'activities' | null>(null);
 
 function loadMore(kind: 'replies' | 'activities'): void {
     const pages = kind === 'replies' ? repliesPages : activitiesPages;
@@ -70,10 +79,37 @@ function loadMore(kind: 'replies' | 'activities'): void {
             kind === 'replies'
                 ? ['replies', 'repliesHasMore']
                 : ['activities', 'activitiesHasMore'],
-        onStart: () => (loadingMore.value = true),
-        onFinish: () => (loadingMore.value = false),
+        onStart: () => (loadingMore.value = kind),
+        onFinish: () => (loadingMore.value = null),
     });
 }
+
+useRealtimeReload(
+    () =>
+        props.can.addInternalNote
+            ? [
+                  realtimeChannels.ticket(props.ticket.number),
+                  realtimeChannels.ticketStaff(props.ticket.number),
+              ]
+            : [realtimeChannels.ticket(props.ticket.number)],
+    ['ticket.changed', 'ticket.internal-note'],
+    () => ({
+        data: {
+            replies_pages: repliesPages.value,
+            activities_pages: activitiesPages.value,
+        },
+        only: [
+            'ticket',
+            'replies',
+            'repliesHasMore',
+            'attachments',
+            'activities',
+            'activitiesHasMore',
+            'agents',
+            'can',
+        ],
+    }),
+);
 
 const editing = ref(false);
 const editingDetails = ref(false);
@@ -83,6 +119,26 @@ const page = usePage();
 const introIsOwn = computed(
     () => page.props.auth.user.id === props.ticket.customer?.id,
 );
+const customer = computed<UserSummary | null>(() => props.ticket.customer);
+const now = usePresenceClock();
+const customerStatus = computed(() =>
+    presenceStatus(latestSeen(customer.value?.last_seen_at), false, now.value),
+);
+
+const workspace = ref<HTMLElement | null>(null);
+const workspaceTop = ref<string | undefined>(undefined);
+
+function measureWorkspace(): void {
+    if (!workspace.value) {
+        return;
+    }
+
+    const top = workspace.value.getBoundingClientRect().top + window.scrollY;
+    workspaceTop.value = `${Math.max(0, Math.round(top))}px`;
+}
+
+onMounted(measureWorkspace);
+useEventListener('resize', measureWorkspace, { passive: true });
 
 async function copyNumber(): Promise<void> {
     try {
@@ -99,9 +155,14 @@ async function copyNumber(): Promise<void> {
     <Head :title="`${ticket.number} · ${ticket.subject}`" />
 
     <div
-        class="grid gap-4 p-4 lg:grid-cols-[340px_minmax(0,1fr)] lg:items-start"
+        ref="workspace"
+        class="grid gap-4 p-4 lg:h-[calc(100svh-var(--workspace-top,6.5rem))] lg:min-h-[30rem] lg:grid-cols-[340px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:overflow-hidden"
+        :style="workspaceTop ? { '--workspace-top': workspaceTop } : undefined"
     >
-        <aside class="flex min-w-0 flex-col gap-4">
+        <aside
+            class="flex min-w-0 flex-col gap-4 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:pr-1 lg:pb-1"
+            aria-label="Ticket details"
+        >
             <Card class="gap-3 bg-surface py-4">
                 <CardContent class="flex flex-col gap-3">
                     <div class="flex items-center gap-2">
@@ -159,11 +220,22 @@ async function copyNumber(): Promise<void> {
 
             <Card v-if="ticket.customer" class="bg-surface py-4">
                 <CardContent class="flex items-center gap-3">
-                    <UserAvatar :name="ticket.customer.name" class="size-10" />
+                    <PresenceAvatar
+                        :name="ticket.customer.name"
+                        :src="customer?.avatar_url"
+                        :active="!introIsOwn && customerStatus.active"
+                        class="size-10"
+                    />
                     <div class="min-w-0">
                         <p class="text-xs text-muted-foreground">Requester</p>
                         <p class="truncate text-sm font-semibold">
                             {{ ticket.customer.name }}
+                        </p>
+                        <p
+                            v-if="!introIsOwn"
+                            class="truncate text-xs text-muted-foreground"
+                        >
+                            {{ customerStatus.label }}
                         </p>
                     </div>
                 </CardContent>
@@ -205,7 +277,7 @@ async function copyNumber(): Promise<void> {
                             <ActivityTimeline
                                 :activities="activities"
                                 :has-more="activitiesHasMore"
-                                :loading="loadingMore"
+                                :loading="loadingMore === 'activities'"
                                 @load-more="loadMore('activities')"
                             />
                         </TabsContent>
@@ -224,16 +296,15 @@ async function copyNumber(): Promise<void> {
         </aside>
 
         <Card
-            class="min-w-0 gap-0 overflow-hidden bg-surface py-0 lg:h-[calc(100svh-9rem)] lg:min-h-[32rem]"
+            class="h-[75svh] min-h-[28rem] min-w-0 gap-0 overflow-hidden bg-surface py-0 lg:h-auto lg:min-h-0"
         >
             <ConversationPanel
                 :ticket="ticket"
                 :replies="replies"
                 :has-more="repliesHasMore"
-                :loading="loadingMore"
+                :loading="loadingMore === 'replies'"
                 :can="can"
                 :attachment-rules="attachmentRules"
-                class="max-h-[80svh] lg:max-h-none"
                 @load-more="loadMore('replies')"
             >
                 <template #intro>
@@ -245,6 +316,7 @@ async function copyNumber(): Promise<void> {
                     >
                         <UserAvatar
                             :name="ticket.customer?.name ?? 'Customer'"
+                            :src="customer?.avatar_url"
                         />
                         <div
                             :class="[

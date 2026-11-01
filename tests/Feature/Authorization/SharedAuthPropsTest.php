@@ -25,15 +25,18 @@ it('shares only the capabilities each role holds so the UI hides forbidden contr
 })->with([
     'admin' => [Role::Admin, [
         'viewDashboard' => true, 'manageImports' => true, 'manageUsers' => true,
-        'manageCategories' => true, 'manageHolidays' => true, 'createOnBehalf' => true,
+        'manageCategories' => true, 'manageHolidays' => true, 'createOnBehalf' => true, 'manageSla' => true,
+        'viewAgents' => true, 'useSavedReplies' => true,
     ]],
     'agent' => [Role::Agent, [
         'viewDashboard' => true, 'manageImports' => false, 'manageUsers' => false,
-        'manageCategories' => false, 'manageHolidays' => false, 'createOnBehalf' => true,
+        'manageCategories' => false, 'manageHolidays' => false, 'createOnBehalf' => true, 'manageSla' => false,
+        'viewAgents' => true, 'useSavedReplies' => true,
     ]],
     'customer' => [Role::Customer, [
         'viewDashboard' => false, 'manageImports' => false, 'manageUsers' => false,
-        'manageCategories' => false, 'manageHolidays' => false, 'createOnBehalf' => false,
+        'manageCategories' => false, 'manageHolidays' => false, 'createOnBehalf' => false, 'manageSla' => false,
+        'viewAgents' => false, 'useSavedReplies' => false,
     ]],
 ]);
 
@@ -45,6 +48,7 @@ it('shares no abilities and no user with guests', function (): void {
     expect($shared['auth']['user'])->toBeNull()
         ->and($shared['auth']['can'])->toBe([
             'viewDashboard' => false, 'manageImports' => false, 'manageUsers' => false,
-            'manageCategories' => false, 'manageHolidays' => false, 'createOnBehalf' => false,
+            'manageCategories' => false, 'manageHolidays' => false, 'createOnBehalf' => false, 'manageSla' => false,
+            'viewAgents' => false, 'useSavedReplies' => false,
         ]);
 });

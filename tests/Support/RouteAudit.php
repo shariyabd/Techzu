@@ -8,6 +8,7 @@ use App\Enums\Role;
 use App\Models\Attachment;
 use App\Models\Category;
 use App\Models\Holiday;
+use App\Models\SavedReply;
 use App\Models\Ticket;
 use App\Models\User;
 use Closure;
@@ -37,6 +38,15 @@ final class RouteAudit
         'POST logout',
         'GET api/v1/me',
         'DELETE api/v1/auth/tokens/current',
+        'GET profile',
+        'PATCH profile',
+        'PUT profile/password',
+        'POST profile/avatar',
+        'DELETE profile/avatar',
+        'PATCH api/v1/me/profile',
+        'PUT api/v1/me/password',
+        'POST api/v1/me/avatar',
+        'DELETE api/v1/me/avatar',
     ];
 
     /** @return array<string, Closure(): string> */
@@ -45,12 +55,13 @@ final class RouteAudit
         return [
             'attachment' => static fn (): string => (string) Attachment::factory()->create()->id,
             'ticket' => static fn (): string => Ticket::factory()->create()->number,
-            'user' => static fn (): string => (string) User::factory()->customer()->create()->id,
+            'user' => static fn (): string => (string) User::factory()->agent()->create()->id,
             'notification' => static fn (): string => (string) Str::uuid(),
             'import' => static fn (): string => (string) ImportCsvFixture::pendingImport(User::factory()->admin()->create())->id,
             'category' => static fn (): string => (string) Category::factory()->create()->id,
             'holiday' => static fn (): string => (string) Holiday::factory()->create()->id,
             'role' => static fn (): string => Role::Agent->value,
+            'savedReply' => static fn (): string => (string) SavedReply::factory()->create()->id,
         ];
     }
 

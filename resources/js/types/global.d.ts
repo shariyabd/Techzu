@@ -4,6 +4,10 @@ import type { SharedProps } from '@/types/shared';
 declare module 'vite/client' {
     interface ImportMetaEnv {
         readonly VITE_APP_NAME: string;
+        readonly VITE_REVERB_APP_KEY?: string;
+        readonly VITE_REVERB_HOST?: string;
+        readonly VITE_REVERB_PORT?: string;
+        readonly VITE_REVERB_SCHEME?: string;
         [key: string]: string | boolean | undefined;
     }
 

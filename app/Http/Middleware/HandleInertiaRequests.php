@@ -6,10 +6,14 @@ namespace App\Http\Middleware;
 
 use App\Models\Category;
 use App\Models\Holiday;
+use App\Models\SavedReply;
+use App\Models\SlaSetting;
 use App\Models\Ticket;
 use App\Models\TicketImport;
 use App\Models\User;
 use App\Services\Auth\PasswordLength;
+use App\Services\Notifications\NotificationFeed;
+use App\Services\Sla\SlaSettingsRepository;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -37,6 +41,7 @@ class HandleInertiaRequests extends Middleware
                     'id' => $user->id,
                     'name' => $user->name,
                     'email' => $user->email,
+                    'avatar_url' => $user->avatarUrl(),
                     'roles' => $user->getRoleNames()->values()->all(),
                 ],
                 'can' => $this->abilities($user),
@@ -46,9 +51,10 @@ class HandleInertiaRequests extends Middleware
                 'error' => $request->session()->get('error'),
             ],
             'notifications' => [
-                'unread_count' => fn (): int => $user?->unreadNotifications()->count() ?? 0,
+                'unread_count' => fn (): int => $user === null ? 0 : app(NotificationFeed::class)->unreadCount($user),
             ],
             'passwordRules' => fn (): array => app(PasswordLength::class)->toArray(),
+            'businessTimezone' => fn (): string => app(SlaSettingsRepository::class)->timezone(),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }
@@ -63,6 +69,9 @@ class HandleInertiaRequests extends Middleware
             'manageCategories' => $user?->can('viewAny', Category::class) ?? false,
             'manageHolidays' => $user?->can('viewAny', Holiday::class) ?? false,
             'createOnBehalf' => $user?->can('createOnBehalf', Ticket::class) ?? false,
+            'manageSla' => $user?->can('view', SlaSetting::class) ?? false,
+            'viewAgents' => $user?->can('viewAgentDirectory', User::class) ?? false,
+            'useSavedReplies' => $user?->can('viewAny', SavedReply::class) ?? false,
         ];
     }
 }

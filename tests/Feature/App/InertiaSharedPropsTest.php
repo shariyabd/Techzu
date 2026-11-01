@@ -3,15 +3,18 @@
 declare(strict_types=1);
 
 use App\Models\User;
+use App\Services\Sla\SlaSettingsRepository;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Inertia\Response;
 use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Role as RoleModel;
 
-it('shares only whitelisted user fields, role names, placeholder abilities, flash and the unread count', function (): void {
+it('shares only whitelisted user fields, role names, placeholder abilities, flash, the unread count and the business timezone', function (): void {
+    config(['business_hours.timezone' => 'Asia/Dhaka']);
+    app(SlaSettingsRepository::class)->flush();
     Route::middleware(['web', 'auth'])->get('/_shared-props-probe', fn (): Response => Inertia::render('SharedPropsProbe'));
-    $user = User::factory()->create();
+    $user = User::factory()->withAvatar()->create();
     $user->assignRole(RoleModel::findOrCreate('example-role'));
     $this->withoutVite()->actingAs($user)
         ->withSession(['success' => 'Saved.'])
@@ -23,6 +26,7 @@ it('shares only whitelisted user fields, role names, placeholder abilities, flas
                 ->where('id', $user->id)
                 ->where('name', $user->name)
                 ->where('email', $user->email)
+                ->where('avatar_url', $user->avatarUrl())
                 ->where('roles', ['example-role']))
             ->where('auth.can', [
                 'viewDashboard' => false,
@@ -31,9 +35,13 @@ it('shares only whitelisted user fields, role names, placeholder abilities, flas
                 'manageCategories' => false,
                 'manageHolidays' => false,
                 'createOnBehalf' => false,
+                'manageSla' => false,
+                'viewAgents' => false,
+                'useSavedReplies' => false,
             ])
             ->has('flash', fn (Assert $flash) => $flash
                 ->where('success', 'Saved.')
                 ->where('error', null))
-            ->where('notifications.unread_count', 0));
+            ->where('notifications.unread_count', 0)
+            ->where('businessTimezone', 'Asia/Dhaka'));
 });

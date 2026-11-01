@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Exceptions\Domain\DomainException;
 use App\Http\Middleware\ForceJsonResponse;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\TrackLastSeen;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -32,6 +33,7 @@ return Application::configure(basePath: dirname(__DIR__))
             }
         },
     )
+    ->withBroadcasting(__DIR__.'/../routes/channels.php', ['middleware' => ['web', 'auth']])
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->encryptCookies(except: ['sidebar_state']);
         $middleware->redirectUsersTo(fn (): string => route('home'));
@@ -40,10 +42,13 @@ return Application::configure(basePath: dirname(__DIR__))
             EncryptHistory::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
+            TrackLastSeen::class,
         ]);
 
         $middleware->api(prepend: [
             ForceJsonResponse::class,
+        ], append: [
+            TrackLastSeen::class,
         ]);
 
         $middleware->throttleApi();

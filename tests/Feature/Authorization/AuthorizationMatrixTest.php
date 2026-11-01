@@ -7,6 +7,7 @@ use App\Enums\Role;
 use App\Enums\TicketStatus;
 use App\Models\Category;
 use App\Models\Holiday;
+use App\Models\SavedReply;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Notifications\TicketAssignedNotification;
@@ -154,7 +155,7 @@ it('sends signed-in users away from the password reset screens', function (strin
     'reset' => ['POST', '/reset-password'],
 ])->with([Role::Admin, Role::Customer]);
 
-dataset('p4 routes', function (): array {
+dataset('role routes', function (): array {
     $everyone = fn (int $status, int $guest): array => ['admin' => $status, 'agent' => $status, 'customer' => $status, 'guest' => $guest];
     $staff = fn (int $status, int $guest): array => ['admin' => $status, 'agent' => $status, 'customer' => 403, 'guest' => $guest];
     $admin = fn (int $status, int $guest): array => ['admin' => $status, 'agent' => 403, 'customer' => 403, 'guest' => $guest];
@@ -196,6 +197,25 @@ dataset('p4 routes', function (): array {
         ['POST', '/api/v1/admin/holidays', $admin(422, 401)],
         ['PATCH', '/api/v1/admin/holidays/{holiday}', $admin(422, 401)],
         ['DELETE', '/api/v1/admin/holidays/{holiday}', $admin(204, 401)],
+        ['GET', '/customers/lookup', $staff(200, 302)],
+        ['GET', '/api/v1/customers/lookup', $staff(200, 401)],
+        ['GET', '/admin/sla', $admin(200, 302)],
+        ['PUT', '/admin/sla', $admin(302, 302)],
+        ['GET', '/api/v1/admin/sla', $admin(200, 401)],
+        ['PUT', '/api/v1/admin/sla', $admin(422, 401)],
+        ['GET', '/saved-replies', $staff(200, 302)],
+        ['GET', '/saved-replies/picker', $staff(200, 302)],
+        ['POST', '/saved-replies', $staff(302, 302)],
+        ['PATCH', '/saved-replies/{savedReply}', $admin(302, 302)],
+        ['DELETE', '/saved-replies/{savedReply}', $admin(302, 302)],
+        ['GET', '/api/v1/saved-replies', $staff(200, 401)],
+        ['POST', '/api/v1/saved-replies', $staff(422, 401)],
+        ['PATCH', '/api/v1/saved-replies/{savedReply}', $admin(422, 401)],
+        ['DELETE', '/api/v1/saved-replies/{savedReply}', $admin(204, 401)],
+        ['GET', '/agents', $staff(200, 302)],
+        ['GET', '/agents/{user}', $staff(200, 302)],
+        ['GET', '/api/v1/agents', $staff(200, 401)],
+        ['GET', '/api/v1/agents/{user}', $staff(200, 401)],
     ];
     $cases = [];
     foreach ($routes as [$method, $uri, $statuses]) {
@@ -207,7 +227,7 @@ dataset('p4 routes', function (): array {
     return $cases;
 });
 
-it('authorizes every P4 route', function (string $who, string $method, string $uri, int $status): void {
+it('authorizes every role-scoped route', function (string $who, string $method, string $uri, int $status): void {
     $this->withoutVite();
     $matrix = AuthorizationMatrix::for($this);
     $user = $who === 'guest' ? null : $matrix->actingAsRole(Role::from($who));
@@ -224,9 +244,25 @@ it('authorizes every P4 route', function (string $who, string $method, string $u
         '{import}' => (string) ImportCsvFixture::pendingImport(User::factory()->admin()->create())->id,
         '{category}' => (string) Category::factory()->create()->id,
         '{holiday}' => (string) Holiday::factory()->create()->id,
+        '{savedReply}' => (string) SavedReply::factory()->shared()->create()->id,
+        '{user}' => (string) User::factory()->agent()->create()->id,
     ];
     $response = $matrix->expectAccess($method, strtr($uri, $placeholders), $status);
     if ($who === 'guest' && $status === 302) {
         $response->assertRedirect(route('login'));
     }
-})->with('p4 routes');
+})->with('role routes');
+
+it('refuses the category override to an agent handing off their own ticket', function (string $uri): void {
+    $matrix = AuthorizationMatrix::for($this);
+    $agent = $matrix->actingAsRole(Role::Agent);
+    $ticket = Ticket::factory()->status(TicketStatus::Open)->assignedTo($agent)->create();
+    $colleague = User::factory()->agent()->create();
+
+    $matrix->expectAccess('POST', strtr($uri, ['{ticket}' => $ticket->number]), 403, ['agent_id' => $colleague->id, 'outside_category' => true]);
+
+    expect($ticket->fresh()?->assigned_agent_id)->toBe($agent->id);
+})->with([
+    'web' => ['/tickets/{ticket}/assign'],
+    'api' => ['/api/v1/tickets/{ticket}/assign'],
+]);
