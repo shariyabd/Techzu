@@ -71,6 +71,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Frontend tests (Vitest)
+        run: npm run test:js
+
       - name: Lint and format (vp check)
         run: npm run check
 

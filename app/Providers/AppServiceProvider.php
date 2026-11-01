@@ -10,6 +10,7 @@ use App\Services\Auth\PasswordLength;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Foundation\DevCommands;
 use Illuminate\Http\Request;
 use Illuminate\Mail\Markdown;
 use Illuminate\Notifications\DatabaseNotification;
@@ -36,6 +37,8 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('viewDashboard', [DashboardPolicy::class, 'view']);
 
         Gate::policy(DatabaseNotification::class, NotificationPolicy::class);
+
+        $this->configureDevProcesses();
     }
 
     protected function configureDefaults(): void
@@ -54,6 +57,19 @@ class AppServiceProvider extends ServiceProvider
                 ? $rule->mixedCase()->letters()->numbers()->symbols()->uncompromised()
                 : $rule;
         });
+    }
+
+    private function configureDevProcesses(): void
+    {
+        if (! $this->app->runningInConsole()) {
+            return;
+        }
+
+        $queues = implode(',', (array) config('queue.worker_queues'));
+
+        DevCommands::artisan("queue:listen --queue={$queues} --tries=1 --timeout=0", 'queue');
+        DevCommands::artisan('schedule:work', 'scheduler');
+        DevCommands::order(['server', 'queue', 'scheduler', 'reverb', 'logs', 'vite']);
     }
 
     private function configureRateLimiting(): void
