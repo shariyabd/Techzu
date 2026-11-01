@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\Sla\SlaQuery;
 use App\Services\Sla\SlaSettingsRepository;
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Config\Repository as Config;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
 
@@ -33,7 +34,16 @@ final class TicketFilter
 
     public function __construct(
         private readonly SlaSettingsRepository $settings,
+        private readonly Config $config,
     ) {}
+
+    /** @param  array<string, mixed>  $input */
+    public function isNumberLookup(array $input): bool
+    {
+        $number = $input['number'] ?? null;
+
+        return (is_string($number) && trim($number) !== '') || $this->numberTypedAsKeyword($input['q'] ?? null) !== null;
+    }
 
     /**
      * @param  Builder<Ticket>  $query
@@ -87,13 +97,54 @@ final class TicketFilter
             return;
         }
 
-        $query->where('tickets.number', 'like', $this->escapeLike(Str::upper(trim($number))).'%');
+        $value = Str::upper(trim($number));
+
+        $this->whereNumberStartsWith($query, preg_match('/^\d/', $value) === 1 ? $this->numberPrefix().'-'.$value : $value);
+    }
+
+    private function numberTypedAsKeyword(mixed $input): ?string
+    {
+        if (! is_string($input)) {
+            return null;
+        }
+
+        $value = Str::upper(trim($input));
+        $prefix = $this->numberPrefix();
+
+        if (preg_match('/^'.preg_quote($prefix, '/').'-\d[\d-]*$/', $value) === 1) {
+            return $value;
+        }
+
+        if (preg_match('/^\d{4}-\d+$/', $value) === 1) {
+            return $prefix.'-'.$value;
+        }
+
+        return null;
+    }
+
+    private function numberPrefix(): string
+    {
+        return Str::upper($this->config->string('tickets.number_prefix'));
+    }
+
+    /** @param  Builder<Ticket>  $query */
+    private function whereNumberStartsWith(Builder $query, string $value): void
+    {
+        $query->where('tickets.number', 'like', $this->escapeLike($value).'%');
     }
 
     /** @param  Builder<Ticket>  $query */
     private function keyword(Builder $query, mixed $input): void
     {
         if (! is_string($input) || trim($input) === '') {
+            return;
+        }
+
+        $number = $this->numberTypedAsKeyword($input);
+
+        if ($number !== null) {
+            $this->whereNumberStartsWith($query, $number);
+
             return;
         }
 

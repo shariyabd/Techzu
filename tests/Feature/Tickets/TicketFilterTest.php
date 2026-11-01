@@ -58,6 +58,7 @@ it('applies each filter on its own and in combination', function (array $filters
     'number prefix' => [fn (): array => ['number' => 'TKT-2026-00010'], ['t1', 't2', 't3', 't4']],
     'number is case-insensitive' => [fn (): array => ['number' => 'tkt-2026-000103'], ['t3']],
     'number LIKE metacharacters are literal' => [fn (): array => ['number' => 'TKT-2026-0001_1'], []],
+    'number without the prefix' => [fn (): array => ['number' => '2026-000104'], ['t4']],
     'status (multiple)' => [fn (): array => ['status' => ['open', 'in_progress']], ['t1', 't2']],
     'priority' => [fn (): array => ['priority' => ['critical']], ['t3']],
     'category id as a query-string string' => [fn (): array => ['category_id' => (string) $this->categories['cat1']->id], ['t1', 't3']],
@@ -72,6 +73,16 @@ it('applies each filter on its own and in combination', function (array $filters
     'customer + status + date' => [fn (): array => ['customer_id' => $this->people['c1']->id, 'status' => ['in_progress'], 'created_from' => '2026-10-05'], ['t2']],
     'unassigned + agent never matches' => [fn (): array => ['unassigned' => '1', 'assigned_agent_id' => $this->people['a1']->id], []],
     'keyword of only operators is ignored' => [fn (): array => ['q' => '+-()"'], ['t1', 't2', 't3', 't4']],
+]);
+
+it('finds tickets by a full or partial number typed into the keyword search', function (string $q, array $expected): void {
+    expect(($this->run)(['q' => $q])->pluck('number')->sort()->values()->all())->toBe(($this->numbers)($expected));
+})->with([
+    'full number' => ['TKT-2026-000102', ['t2']],
+    'lower case' => ['tkt-2026-000103', ['t3']],
+    'surrounding spaces' => ['  TKT-2026-000101 ', ['t1']],
+    'without the prefix' => ['2026-000104', ['t4']],
+    'leading part of the number' => ['TKT-2026-00010', ['t1', 't2', 't3', 't4']],
 ]);
 
 it('sorts by whitelisted columns with id as the tie-breaker', function (string $sort, array $expected): void {

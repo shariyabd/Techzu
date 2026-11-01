@@ -157,7 +157,7 @@ function toggle(role: RoleValue, permission: string, checked: boolean): void {
                         >
                             <Checkbox
                                 class="mx-auto"
-                                :checked="
+                                :model-value="
                                     grants[role.value].includes(
                                         permission.value,
                                     )
@@ -168,7 +168,7 @@ function toggle(role: RoleValue, permission: string, checked: boolean): void {
                                     isLocked(role.value, permission.value)
                                 "
                                 :aria-label="`${permission.label} — ${role.label}`"
-                                @update:checked="
+                                @update:model-value="
                                     (checked: boolean | 'indeterminate') =>
                                         toggle(
                                             role.value,

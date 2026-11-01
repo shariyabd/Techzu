@@ -22,6 +22,19 @@ final class ListRequest extends FormRequest
         return Gate::forUser($this->user())->inspect('viewAny', Ticket::class);
     }
 
+    protected function prepareForValidation(): void
+    {
+        if (! $this->container->make(TicketFilter::class)->isNumberLookup($this->all())) {
+            return;
+        }
+
+        $this->merge(['scope' => 'all']);
+
+        if ((string) $this->input('assigned_agent_id') === (string) $this->user()?->getAuthIdentifier()) {
+            $this->getInputSource()->remove('assigned_agent_id');
+        }
+    }
+
     /** @return array<string, mixed> */
     public function rules(): array
     {

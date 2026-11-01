@@ -27,6 +27,63 @@ it('never lets a customer widen visibility through customer_id', function (): vo
         ->assertInertia(fn (Assert $page) => $page->component('tickets/Index')->has('tickets.data', 0));
 });
 
+it('finds a ticket by number in any status from the list and the global search', function (string $role, array $query): void {
+    $closed = Ticket::factory()->status(TicketStatus::Closed)->create([
+        'number' => 'TKT-2026-000777',
+        'customer_id' => $this->customer->id,
+        'created_by_id' => $this->customer->id,
+    ]);
+    $actor = match ($role) {
+        'admin' => $this->admin,
+        'agent' => User::factory()->agent()->create(),
+        default => $this->customer,
+    };
+
+    $this->actingAs($actor)
+        ->get(route('tickets.index', $query))
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('tickets.data', 1)
+            ->where('tickets.data.0.number', $closed->number)
+            ->where('scope', 'all'));
+    Sanctum::actingAs($actor, ['*']);
+    $this->getJson(route('api.v1.tickets.index', $query))
+        ->assertOk()
+        ->assertJsonPath('data.0.number', $closed->number)
+        ->assertJsonCount(1, 'data');
+})->with(['admin', 'agent', 'owning customer'])->with([
+    'number filter on the active list' => [['scope' => 'active', 'number' => 'tkt-2026-000777']],
+    'global search' => [['q' => 'TKT-2026-000777']],
+    'global search without the prefix' => [['q' => '2026-000777']],
+]);
+
+it('drops an agent\'s own-queue default when they look up a colleague\'s ticket by number', function (): void {
+    $agent = User::factory()->agent()->create();
+    $colleague = User::factory()->agent()->create();
+    $ticket = Ticket::factory()->status(TicketStatus::InProgress)->create(['number' => 'TKT-2026-000888', 'assigned_agent_id' => $colleague->id]);
+
+    $this->actingAs($agent)
+        ->get(route('tickets.index', ['scope' => 'active', 'assigned_agent_id' => $agent->id, 'number' => '2026-000888']))
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('tickets.data', 1)
+            ->where('tickets.data.0.number', $ticket->number)
+            ->missing('filters.assigned_agent_id'));
+});
+
+it('never lets a customer find another customer\'s ticket by its number', function (array $query): void {
+    $query = array_map(fn (string $value): string => str_replace('{number}', $this->foreign->number, $value), $query);
+
+    $this->actingAs($this->customer)
+        ->get(route('tickets.index', $query))
+        ->assertInertia(fn (Assert $page) => $page->has('tickets.data', 0));
+    Sanctum::actingAs($this->customer, ['*']);
+    $this->getJson(route('api.v1.tickets.index', $query))
+        ->assertOk()
+        ->assertJsonCount(0, 'data');
+})->with([
+    'number filter' => [['scope' => 'all', 'number' => '{number}']],
+    'global search' => [['q' => '{number}']],
+]);
+
 it('rejects a sort column outside the whitelist', function (string $sort): void {
     Sanctum::actingAs($this->admin, ['*']);
     $this->getJson(route('api.v1.tickets.index', ['sort' => $sort]))

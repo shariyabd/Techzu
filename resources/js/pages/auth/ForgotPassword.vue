@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { Form, Head, usePage } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { Form, Head } from '@inertiajs/vue3';
 import InputError from '@/components/InputError.vue';
 import TextLink from '@/components/TextLink.vue';
 import { Button } from '@/components/ui/button';
@@ -24,10 +23,6 @@ defineOptions({
     },
 });
 
-const page = usePage();
-const status = computed(() => page.props.flash.success);
-const linkError = computed(() => page.props.flash.error);
-
 const { onBefore, onInput, onFocusOut } = useClientValidation(() => ({
     email: [
         required('Email address'),
@@ -39,22 +34,6 @@ const { onBefore, onInput, onFocusOut } = useClientValidation(() => ({
 
 <template>
     <Head title="Forgot password" />
-
-    <div
-        v-if="status"
-        role="status"
-        class="mb-4 text-center text-sm font-medium text-green-600 dark:text-green-400"
-    >
-        {{ status }}
-    </div>
-
-    <div
-        v-else-if="linkError"
-        role="alert"
-        class="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-center text-sm font-medium text-destructive"
-    >
-        {{ linkError }}
-    </div>
 
     <div class="space-y-6">
         <Form

@@ -4,8 +4,6 @@ import { Search } from '@lucide/vue';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { index } from '@/routes/tickets';
 
-const ticketNumberPattern = /^TKT-\d+$/i;
-
 const input = ref<HTMLInputElement | null>(null);
 const term = ref('');
 
@@ -46,9 +44,7 @@ function submit(): void {
         return;
     }
 
-    const query = ticketNumberPattern.test(value) ? value.toUpperCase() : value;
-
-    router.visit(index({ query: { q: query } }));
+    router.visit(index({ query: { scope: 'all', q: value } }));
     term.value = '';
     input.value?.blur();
 }

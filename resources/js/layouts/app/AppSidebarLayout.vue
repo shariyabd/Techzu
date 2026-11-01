@@ -29,6 +29,6 @@ withDefaults(
                 </AppContent>
             </div>
         </div>
-        <Toaster rich-colors close-button position="top-right" />
+        <Toaster />
     </AppShell>
 </template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { router } from '@inertiajs/vue3';
+import { router, usePage } from '@inertiajs/vue3';
 import {
     ChevronDown,
     RotateCcw,
@@ -129,6 +129,21 @@ function setCustomer(value: CustomerOption | null): void {
     customer.value = value;
     state.customer_id = value === null ? '' : String(value.id);
 }
+
+const page = usePage();
+
+watch(
+    () => state.number.trim() !== '',
+    (lookingUpNumber) => {
+        if (
+            lookingUpNumber &&
+            state.assigned_agent_id !== '' &&
+            state.assigned_agent_id === String(page.props.auth.user?.id ?? '')
+        ) {
+            state.assigned_agent_id = '';
+        }
+    },
+);
 
 watch(
     () => state.customer_id,

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3';
 import AppLogoIcon from '@/components/AppLogoIcon.vue';
+import { Toaster } from '@/components/ui/sonner';
 import { home } from '@/routes';
 
 const name = usePage().props.name;
@@ -41,5 +42,6 @@ defineProps<{
                 <slot />
             </div>
         </div>
+        <Toaster :offset="{ top: '1.25rem', right: '1.25rem' }" />
     </div>
 </template>
