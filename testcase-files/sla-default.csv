@@ -1,0 +1,15 @@
+external_reference,subject,description,priority,category,customer_email,status,created_at
+SLA-R1,R1 Critical Mon 26 Oct 10:00,SLA check,critical,billing,customer12@example.com,open,2026-10-26 10:00
+SLA-R2,R2 High Mon 26 Oct 10:00,SLA check,high,billing,customer12@example.com,open,2026-10-26 10:00
+SLA-R3,R3 Medium Mon 26 Oct 10:00,SLA check,medium,billing,customer12@example.com,open,2026-10-26 10:00
+SLA-R4,R4 Low Mon 26 Oct 10:00,SLA check,low,billing,customer12@example.com,open,2026-10-26 10:00
+SLA-B1,B1 Critical Thu 29 Oct 17:00,SLA check,critical,billing,customer12@example.com,open,2026-10-29 17:00
+SLA-B2,B2 Critical Fri 30 Oct 14:00,SLA check,critical,billing,customer12@example.com,open,2026-10-30 14:00
+SLA-B3,B3 Critical Sat 31 Oct 12:00,SLA check,critical,billing,customer12@example.com,open,2026-10-31 12:00
+SLA-B4,B4 Critical Mon 26 Oct 07:00,SLA check,critical,billing,customer12@example.com,open,2026-10-26 07:00
+SLA-B5,B5 Critical Mon 26 Oct 19:00,SLA check,critical,billing,customer12@example.com,open,2026-10-26 19:00
+SLA-B6,B6 Critical Thu 29 Oct 16:00,SLA check,critical,billing,customer12@example.com,open,2026-10-29 16:00
+SLA-B7,B7 High Thu 29 Oct 16:30,SLA check,high,billing,customer12@example.com,open,2026-10-29 16:30
+SLA-B8,B8 Critical Thu 29 Oct 23:00,SLA check,critical,billing,customer12@example.com,open,2026-10-29 23:00
+SLA-H0,H0 Critical Thu 22 Oct 17:00,SLA check,critical,billing,customer12@example.com,open,2026-10-22 17:00
+SLA-H5,H5 Low Tue 20 Oct 10:00,SLA check,low,billing,customer12@example.com,open,2026-10-20 10:00

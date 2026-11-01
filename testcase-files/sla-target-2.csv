@@ -1,0 +1,2 @@
+external_reference,subject,description,priority,category,customer_email,status,created_at
+SLA-T2,T2 Critical Mon 26 Oct 10:00 warning half,SLA check,critical,billing,customer12@example.com,open,2026-10-26 10:00

@@ -12,8 +12,10 @@ use App\Http\Resources\V1\TicketImportResource;
 use App\Models\TicketImport;
 use App\Models\User;
 use App\Services\Imports\ImportErrorCsvWriter;
+use App\Services\Imports\ImportSampleCsvWriter;
 use App\Services\Imports\TicketCsvReader;
 use App\Services\Imports\TicketImportQuery;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -59,6 +61,21 @@ final class TicketImportController extends Controller
             'ticketImport' => fn (): mixed => TicketImportResource::make($import->load('user:id,name,avatar_path,last_seen_at'))->toResponse($request)->getData(true)['data'],
             'importErrors' => fn (): AnonymousResourceCollection => TicketImportErrorResource::collection($this->imports->errors($import, 25)),
         ]);
+    }
+
+    public function downloadSample(ImportSampleCsvWriter $writer): StreamedResponse
+    {
+        $now = CarbonImmutable::now();
+
+        return response()->streamDownload(
+            static function () use ($writer, $now): void {
+                $stream = fopen('php://output', 'wb');
+                $writer->write($stream, $now);
+                fclose($stream);
+            },
+            'tickets-import-sample.csv',
+            ['Content-Type' => 'text/csv; charset=UTF-8', 'X-Content-Type-Options' => 'nosniff'],
+        );
     }
 
     public function downloadErrors(TicketImport $import, ImportErrorCsvWriter $writer): StreamedResponse

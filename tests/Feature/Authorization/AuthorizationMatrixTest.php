@@ -170,6 +170,7 @@ dataset('role routes', function (): array {
         ['GET', '/api/v1/dashboard', $staff(200, 401)],
         ['GET', '/admin/imports', $admin(200, 302)],
         ['GET', '/admin/imports/create', $admin(200, 302)],
+        ['GET', '/admin/imports/sample', $admin(200, 302)],
         ['POST', '/admin/imports', $admin(302, 302)],
         ['GET', '/admin/imports/{import}', $admin(200, 302)],
         ['GET', '/admin/imports/{import}/errors/download', $admin(200, 302)],

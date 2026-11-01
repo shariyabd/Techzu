@@ -1,0 +1,2 @@
+external_reference,subject,description,priority,category,customer_email,status,created_at
+SLA-T3,T3 High Mon 26 Oct 10:00 ten hours,SLA check,high,billing,customer12@example.com,open,2026-10-26 10:00

@@ -1,0 +1,8 @@
+external_reference,subject,description,priority,category,customer_email,status,created_at
+EXT-1001,Printer offline,Office printer is offline,high,technical-support,customer1@example.com,open,
+EXT-1002,Invoice question,Need a copy of the invoice,low,billing,customer2@example.com,,
+EXT-1003,Bad priority,This row has an invalid priority,urgent,billing,customer1@example.com,,
+EXT-1001,Duplicate reference,Same reference again,low,billing,customer1@example.com,,
+EXT-1005,Unknown customer,Customer does not exist,medium,general-inquiry,nobody@example.com,,
+,Password reset loop,Login keeps asking to reset,medium,account-access,customer3@example.com,,2026-10-01 10:00
+,Password reset loop,Login keeps asking to reset,medium,account-access,customer3@example.com,,2026-10-01 10:00

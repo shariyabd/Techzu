@@ -1,0 +1,2 @@
+external_reference,subject,description,priority,category,customer_email,status,created_at
+SLA-W4,W4 Critical Thu 29 Oct 23:00 until midnight,SLA check,critical,billing,customer12@example.com,open,2026-10-29 23:00

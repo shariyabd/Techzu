@@ -6,6 +6,7 @@ use App\Models\Category;
 use App\Models\Ticket;
 use App\Models\TicketImport;
 use App\Models\User;
+use App\Services\Imports\TicketCsvReader;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
@@ -101,6 +102,22 @@ it('shows an import and pages its errors over the API, capping per_page at 100',
     $this->getJson(route('api.v1.imports.errors.index', ['import' => $import, 'per_page' => 101]))
         ->assertUnprocessable()
         ->assertJsonValidationErrors('per_page');
+});
+
+it('offers a sample CSV with the real header that imports without a rejected row', function (): void {
+    $response = $this->actingAs($this->admin)->get(route('admin.imports.sample'));
+
+    $response->assertOk()
+        ->assertHeader('Content-Type', 'text/csv; charset=UTF-8')
+        ->assertHeader('X-Content-Type-Options', 'nosniff');
+    expect((string) $response->headers->get('Content-Disposition'))->toContain('attachment; filename=tickets-import-sample.csv');
+    $csv = $response->streamedContent();
+    expect(strtok($csv, "\n"))->toBe(implode(',', TicketCsvReader::COLUMNS));
+
+    $import = ImportCsvFixture::run($this->admin, $csv);
+
+    expect($import->failed_rows)->toBe(0)
+        ->and($import->succeeded_rows)->toBe(3);
 });
 
 it('streams the errors as a CSV that neutralises spreadsheet formulas', function (): void {

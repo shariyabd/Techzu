@@ -1,0 +1,4 @@
+external_reference,subject,description,priority,category,customer_email,status,created_at
+EXT-2001,Printer offline again,Office printer is offline again,high,technical-support,customer1@example.com,open,
+EXT-2002,Second invoice question,Need a copy of another invoice,low,billing,customer2@example.com,,
+,Two-factor code never arrives,The login code email never arrives,medium,account-access,customer3@example.com,,2026-10-02 10:00

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { FileSpreadsheet, UploadCloud } from '@lucide/vue';
+import { Download, FileSpreadsheet, UploadCloud } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import InputError from '@/components/InputError.vue';
 import PageHeader from '@/components/PageHeader.vue';
@@ -11,7 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { formatBytes } from '@/lib/format';
-import { create, index, store } from '@/routes/admin/imports';
+import { create, index, sample, store } from '@/routes/admin/imports';
 import type { ImportColumns } from '@/types/imports';
 
 defineOptions({
@@ -34,8 +34,14 @@ const form = useForm<{ file: File | null; auto_assign: boolean }>({
     auto_assign: false,
 });
 const dragging = ref(false);
+const uploadPercent = ref<number | null>(null);
 
 const maxSize = computed(() => formatBytes(props.maxUploadKb * 1024));
+const uploadLabel = computed(() =>
+    uploadPercent.value === 100
+        ? 'Uploaded. Preparing the import…'
+        : `Uploading… ${uploadPercent.value ?? 0}%`,
+);
 const headerExample = computed(() =>
     [...props.columns.required, ...props.columns.optional].join(','),
 );
@@ -50,7 +56,21 @@ function drop(event: DragEvent): void {
 }
 
 function submit(): void {
-    form.post(store.url(), { forceFormData: true });
+    form.post(store.url(), {
+        forceFormData: true,
+        onStart: () => {
+            uploadPercent.value = 0;
+        },
+        onProgress: (progress) => {
+            uploadPercent.value = Math.round(progress?.percentage ?? 0);
+        },
+        onSuccess: () => {
+            uploadPercent.value = 100;
+        },
+        onError: () => {
+            uploadPercent.value = null;
+        },
+    });
 }
 </script>
 
@@ -136,11 +156,28 @@ function submit(): void {
                         </p>
                         <InputError :message="form.errors.auto_assign" />
                     </div>
-                    <Progress
-                        v-if="form.progress"
-                        :model-value="form.progress.percentage ?? 0"
-                        aria-label="Upload progress"
-                    />
+                    <div
+                        v-if="uploadPercent !== null"
+                        class="flex flex-col gap-1.5"
+                        data-testid="upload-progress"
+                    >
+                        <div
+                            class="flex items-center justify-between text-sm"
+                            aria-live="polite"
+                        >
+                            <span class="text-muted-foreground">{{
+                                uploadLabel
+                            }}</span>
+                            <span class="font-medium tabular-nums"
+                                >{{ uploadPercent }}%</span
+                            >
+                        </div>
+                        <Progress
+                            :model-value="uploadPercent"
+                            :aria-label="`Upload ${uploadPercent}% complete`"
+                            class="[&_[data-slot=progress-indicator]]:duration-500"
+                        />
+                    </div>
                     <div class="flex flex-wrap items-center gap-2">
                         <SubmitButton
                             :processing="form.processing"
@@ -157,10 +194,16 @@ function submit(): void {
 
         <Card>
             <CardHeader
-                ><CardTitle class="text-base"
-                    >File format</CardTitle
-                ></CardHeader
+                class="flex flex-row flex-wrap items-center justify-between gap-2"
             >
+                <CardTitle class="text-base">File format</CardTitle>
+                <Button variant="outline" size="sm" as-child>
+                    <a :href="sample.url()" download data-testid="sample-csv">
+                        <Download aria-hidden="true" />
+                        Download sample CSV
+                    </a>
+                </Button>
+            </CardHeader>
             <CardContent class="flex flex-col gap-3 text-sm">
                 <p>
                     The first row is a header. Columns may appear in any order.
